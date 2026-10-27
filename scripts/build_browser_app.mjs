@@ -11,7 +11,7 @@ import { renderBrowserIndex } from "./browser-index-template.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
-if (packageVersion !== "1.8.0-dev.12") throw new Error("Unexpected version: this source is IMPORT-002");
+if (packageVersion !== "1.8.0-dev.13") throw new Error("Unexpected version: this source is IMPORT-003");
 const readiness = evaluateBuildReadiness(root);
 if (!readiness.ready) {
   console.error(JSON.stringify({ status: "BLOCKED", reason: "dependency-readiness", blockers: readiness.blockers }, null, 2));
@@ -57,7 +57,7 @@ fs.writeFileSync(path.join(temp, "build-marker.json"), `${JSON.stringify({
   formatId: "yadilab.browser-build-marker",
   version: packageVersion,
   marker: `yadilab-v${packageVersion}`,
-  checkpoint: "IMPORT-002",
+  checkpoint: "IMPORT-003",
 }, null, 2)}\n`);
 const branding = JSON.parse(fs.readFileSync(path.join(root, "app-config/branding.json"), "utf8"));
 const cssExists = fs.existsSync(path.join(temp, "assets/app.css"));

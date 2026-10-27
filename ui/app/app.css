@@ -668,3 +668,10 @@ details[open] > summary::after { transform: translateY(-50%) rotate(90deg); }
 .network-import-preview { padding-top: 8px; }
 .network-import-preview h3 { font-size: 1rem; }
 .network-import-preview .validation-list { max-height: 240px; overflow-y: auto; }
+
+/* IMPORT-003: import review is a foreground dialog, not hidden below long header content. */
+.network-import-overlay { position: fixed; z-index: 10000; inset: 0; display: flex; justify-content: center; align-items: flex-start; overflow: auto; padding: min(6vh, 40px) 14px 22px; background: rgba(1, 8, 20, .86); }
+.network-import-overlay .network-import-panel { width: min(960px, 100%); max-height: calc(100dvh - 60px); overflow-y: auto; margin: 0; box-shadow: 0 25px 75px rgba(0, 0, 0, .75); background: #182632; }
+.network-import-overlay .network-import-panel:focus { outline: 2px solid #5ebfe7; outline-offset: -2px; }
+.network-import-overlay .network-import-heading > button { min-width: 5rem; }
+.main-actions-primary-import input[data-network-import-quick-file] { display: none; }

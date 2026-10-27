@@ -30,5 +30,5 @@ const ui = fs.readFileSync("ui/app/main.mjs", "utf8");
 assert.ok(ui.includes('"data-import-network-action": "true"'));
 assert.ok(ui.includes('"data-network-import-activate": "true"'));
 assert.ok(ui.includes('"data-network-import-panel": "ready"'));
-assert.ok(ui.includes('"data-development-checkpoint": "IMPORT-002"'));
-console.log("PASS IMPORT-001 browser integration: actual CSV/XLSX reader, source validation, compiler, blocked invalid references, discoverable menu and explicit activation.");
+assert.ok(ui.includes('"data-development-checkpoint": "IMPORT-003"'));
+console.log("PASS IMPORT-003 browser integration: actual CSV/XLSX reader, source validation, compiler, blocked invalid references, discoverable menu and explicit activation.");

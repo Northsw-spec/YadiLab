@@ -25,7 +25,7 @@ const checks = [
   [main.includes('e("summary", null, "Guidad felsökning")'), "guided troubleshooting localized"],
   [main.includes('e("summary", null, "Diagnostik / observationsmotor")'), "observation heading localized"],
   [main.includes('e("summary", null, "Modellerade aktiva prober")'), "active probes heading localized"],
-  [main.includes('"v1.8.0-dev.12"'), "visible v1.8.0-dev.12 build marker is rendered"],
+  [main.includes('"v1.8.0-dev.13"'), "visible v1.8.0-dev.13 build marker is rendered"],
   [!main.includes("e(MiniMap)") && !main.includes("MiniMap,"), "unthemed React Flow MiniMap overlay is absent"],
   [css.includes(".react-flow__controls-button { color: #dff4ff; background: #13243a;"), "React Flow controls use the dark theme"],
   [main.includes('"Spela om"') && main.includes('"Spela"') && main.includes('"Steg ▶"'), "packet journey controls remain rendered"],

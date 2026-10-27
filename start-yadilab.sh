@@ -4,10 +4,10 @@ set -uo pipefail
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 DIST="$ROOT/distribution/linux-x86_64"
 LAUNCHER="$DIST/app-launcher"
-PORT=${YADILAB_PORT:-18234}
+PORT=${YADILAB_PORT:-18235}
 URL="http://127.0.0.1:$PORT/"
-APP_VERSION=1.8.0-dev.12
-CHECKPOINT=IMPORT-002
+APP_VERSION=1.8.0-dev.13
+CHECKPOINT=IMPORT-003
 MARKER=yadilab-v${APP_VERSION}
 RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp}
 [[ -d "$RUNTIME_DIR" && -w "$RUNTIME_DIR" ]] || RUNTIME_DIR=/tmp
