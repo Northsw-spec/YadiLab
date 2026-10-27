@@ -655,3 +655,12 @@ details[open] > summary::after { transform: translateY(-50%) rotate(90deg); }
 .verified-delivery-explanation {
   margin-top: .45rem;
 }
+
+/* IMPORT-001: clearly accessible, explicit-preview network inventory import. */
+.network-import-panel { margin: 12px 18px; padding: 15px 18px; border: 1px solid var(--border-color, #7d8995); border-radius: 12px; background: var(--panel-bg, #182632); color: inherit; }
+.network-import-heading { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
+.network-import-heading h2 { margin: 0 0 5px; font-size: 1.08rem; }
+.network-import-heading p { margin: 0 0 12px; }
+.network-import-preview { padding-top: 8px; }
+.network-import-preview h3 { font-size: 1rem; }
+.network-import-preview .validation-list { max-height: 240px; overflow-y: auto; }

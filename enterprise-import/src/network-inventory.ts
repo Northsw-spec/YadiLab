@@ -1,0 +1,137 @@
+import type { ImportCell, ImportDiagnostic, ImportDocument, ImportRecord, ImportTable } from "./types.js";
+
+// Inventory-to-workbook bridge. It maps only fields explicitly present in the
+// source. Address proximity, gateways and hostnames NEVER imply a physical link.
+const ID = /^[a-z][a-z0-9_-]{0,63}$/;
+const key = (value: string): string => value.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g, "");
+const format = (name: string): string => name.trim().replace(/\s+/g, " ");
+
+const aliases = {
+  id: ["nodeId", "Asset ID", "asset_id", "Device ID", "deviceId", "ID"],
+  label: ["displayName", "Hostname", "Host Name", "Name", "Device Name"],
+  type: ["type", "Device Type", "Device Role", "Role", "Kind"],
+  ip: ["IPv4", "IP Address", "IP", "IPv4 Address"],
+  cidr: ["CIDR", "IP/CIDR", "IPv4/CIDR"],
+  prefix: ["prefix", "Prefix Length", "CIDR Prefix"],
+  mac: ["MAC", "MAC Address"],
+  gateway: ["Default Gateway", "Gateway", "Default GW"],
+  target: ["Connected To", "Connects To", "Link To", "Peer ID", "Peer Node"],
+} as const;
+
+function pick(record: ImportRecord, candidates: readonly string[], table: string, diagnostics: ImportDiagnostic[]): ImportCell | undefined {
+  // Alias precedence is only applied if exactly one source header matches.
+  const wanted = new Set(candidates.map(key));
+  const fields = Object.keys(record.fields).filter((h) => wanted.has(key(h)));
+  if (fields.length > 1) {
+    diagnostics.push({ code: "NETWORK_IMPORT_FIELD_AMBIGUOUS", severity: "error", message: `Multiple candidate columns for '${candidates[0]}': ${fields.join(", ")}. Resolve duplicate columns before import.`, table, row: record.recordIndex });
+    return undefined;
+  }
+  return fields.length ? record.fields[fields[0]!] : undefined;
+}
+function stringCell(cell: ImportCell | undefined): string | undefined {
+  const value = cell?.value;
+  return typeof value === "string" && value.trim() ? format(value) : typeof value === "number" && Number.isFinite(value) ? String(value) : undefined;
+}
+function cellValue(value: string, source: ImportCell | undefined, table: string, row: number): ImportCell {
+  return { value, locator: source?.locator ?? { kind: "record-row", table, row } };
+}
+function roleType(value: string | undefined, table: string, row: number, diagnostics: ImportDiagnostic[]): string {
+  if (!value) {
+    diagnostics.push({ code: "NETWORK_IMPORT_ROLE_UNSPECIFIED", severity: "warning", message: "Device type not provided; shown as generic resource. No role inferred from IP or hostname.", table, row });
+    return "resource.generic";
+  }
+  const types: Record<string, string> = {
+    switch: "network.switch", l2switch: "network.switch", l3switch: "network.switch",
+    router: "network.router", firewall: "network.firewall", gateway: "network.router",
+    server: "server.generic", linux: "endpoint.linux", linuxclient: "endpoint.linux",
+    windows: "endpoint.windows", workstation: "endpoint.windows", pc: "endpoint.windows",
+    client: "endpoint.windows", endpoint: "endpoint.windows", host: "resource.generic",
+    hypervisor: "virtualization.hypervisor", proxmox: "virtualization.proxmox",
+  };
+  const normalized = key(value);
+  if (types[normalized]) return types[normalized];
+  if (/^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/.test(value)) return value;
+  diagnostics.push({ code: "NETWORK_IMPORT_ROLE_UNKNOWN", severity: "warning", message: `Device type '${value}' is not mapped; rendered as generic resource.`, table, row });
+  return "resource.generic";
+}
+function canonicalRecord(index: number, table: string, values: Record<string, { value: string; source?: ImportCell | undefined }>): ImportRecord {
+  const fields: Record<string, ImportCell> = {};
+  for (const [field, item] of Object.entries(values)) fields[field] = cellValue(item.value, item.source, table, index);
+  return { recordIndex: index, fields };
+}
+const positiveInt = (text: string | undefined): boolean => text !== undefined && /^\d+$/.test(text) && Number(text) >= 0 && Number(text) <= 32;
+
+export function normalizeNetworkInventoryDocument(document: ImportDocument): { document: ImportDocument; diagnostics: readonly ImportDiagnostic[] } {
+  // The native Nodes/Metadata/Links workbook schema remains unchanged.
+  if (document.tables.some((t) => t.tableId === "Metadata") && document.tables.some((t) => t.tableId === "Nodes")) return { document, diagnostics: [] };
+  const inventory = document.tables.find((t) => ["devices", "nodes", "records"].includes(t.tableId.toLowerCase()));
+  if (!inventory) return { document, diagnostics: [{ code: "NETWORK_IMPORT_INVENTORY_MISSING", severity: "error", message: "Expected a Devices or Nodes worksheet, or a CSV/TSV with device rows." }] };
+  const diagnostics: ImportDiagnostic[] = [];
+  const nodes: ImportRecord[] = [], interfaces: ImportRecord[] = [], inlineLinks: ImportRecord[] = [];
+  for (const row of inventory.records) {
+    const fields = (Object.keys(aliases) as (keyof typeof aliases)[]).reduce((out, name) => {
+      out[name] = pick(row, aliases[name], inventory.tableId, diagnostics); return out;
+    }, {} as Record<keyof typeof aliases, ImportCell | undefined>);
+    const id = stringCell(fields.id), label = stringCell(fields.label), type = stringCell(fields.type);
+    if (!id || !ID.test(id)) { diagnostics.push({ code: "NETWORK_IMPORT_DEVICE_ID_INVALID", severity: "error", message: `Device row ${row.recordIndex} needs a stable lowercase ID (a-z, 0-9, underscore or hyphen).`, table: inventory.tableId, row: row.recordIndex }); continue; }
+    const mappedType = roleType(type, inventory.tableId, row.recordIndex, diagnostics);
+    const nodeValues: Record<string, { value: string; source?: ImportCell | undefined }> = {
+      nodeId: { value: id, source: fields.id }, displayName: { value: label ?? id, source: fields.label ?? fields.id }, type: { value: mappedType, source: fields.type ?? fields.id },
+    };
+    const declaredGateway = stringCell(fields.gateway);
+    if (declaredGateway) nodeValues.gateway = { value: declaredGateway, source: fields.gateway };
+    nodes.push(canonicalRecord(row.recordIndex, "Nodes", nodeValues));
+    const cidr = stringCell(fields.cidr), ip = stringCell(fields.ip), prefix = stringCell(fields.prefix);
+    let address = ip, subnetPrefix = prefix;
+    if (ip?.includes("/")) { const match = /^(.*)\/(\d{1,2})$/.exec(ip); if (match) { address = match[1]; subnetPrefix = match[2]; } }
+    if (cidr) { const match = /^(.*)\/(\d{1,2})$/.exec(cidr); if (match) { address = match[1]; subnetPrefix = match[2]; } else address = cidr; }
+    if (address) {
+      if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(address) || address.split(".").some((x) => Number(x) > 255) || (subnetPrefix !== undefined && !positiveInt(subnetPrefix))) {
+        diagnostics.push({ code: "NETWORK_IMPORT_IP_INVALID", severity: "error", message: `Invalid IPv4 address/prefix for ${id}: ${address}${subnetPrefix ? "/" + subnetPrefix : ""}.`, table: inventory.tableId, row: row.recordIndex });
+      } else {
+        const values: Record<string, { value: string; source?: ImportCell | undefined }> = {
+          nodeId: { value: id, source: fields.id }, interfaceId: { value: "primary", source: fields.id }, name: { value: "primary", source: fields.id }, IPv4: { value: address, source: fields.ip ?? fields.cidr },
+        };
+        if (subnetPrefix) values.prefix = { value: subnetPrefix, source: fields.prefix ?? fields.cidr };
+        const mac = stringCell(fields.mac); if (mac) values.MAC = { value: mac, source: fields.mac };
+        interfaces.push(canonicalRecord(row.recordIndex, "Interfaces", values));
+      }
+    }
+    const gateway = stringCell(fields.gateway);
+    if (gateway) {
+      if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(gateway) || gateway.split(".").some((x) => Number(x) > 255)) diagnostics.push({ code: "NETWORK_IMPORT_GATEWAY_INVALID", severity: "error", message: `Invalid declared gateway '${gateway}' for ${id}.`, table: inventory.tableId, row: row.recordIndex });
+      else diagnostics.push({ code: "NETWORK_IMPORT_GATEWAY_NOT_LINK", severity: "warning", message: `Gateway '${gateway}' for ${id} is retained as a source note; no cable or route was inferred.`, table: inventory.tableId, row: row.recordIndex });
+    }
+    const target = stringCell(fields.target);
+    if (target) inlineLinks.push(canonicalRecord(row.recordIndex, "Links", {
+      linkId: { value: `link_row_${row.recordIndex}`, source: fields.target }, nodeA: { value: id, source: fields.id }, nodeB: { value: target, source: fields.target },
+    }));
+  }
+  const explicitLinks = document.tables.find((t) => t.tableId.toLowerCase() === "links");
+  if (inlineLinks.length && explicitLinks) diagnostics.push({ code: "NETWORK_IMPORT_LINK_SOURCES_CONFLICT", severity: "error", message: "Links worksheet and 'Connected To' columns both specify edges; use just one explicit source to avoid accidental duplication." });
+  // Preserve a dedicated Links sheet (canonical schema). No connection is inferred.
+  const links = explicitLinks ? explicitLinks.records.map((row) => {
+    const pickLink = (names: readonly string[]) => pick(row, names, explicitLinks.tableId, diagnostics);
+    const id = pickLink(["linkId", "Link ID", "Connection ID"]);
+    const from = pickLink(["nodeA", "From", "Source", "From Device", "Source Device"]);
+    const to = pickLink(["nodeB", "To", "Destination", "To Device", "Target Device"]);
+    const portA = pickLink(["interfaceA", "From Port", "Source Port"]);
+    const portB = pickLink(["interfaceB", "To Port", "Target Port"]);
+    const kind = pickLink(["kind", "Link Type", "Connection Type"]);
+    const linkId = stringCell(id) ?? `link_sheet_row_${row.recordIndex}`;
+    const values: Record<string, { value: string; source?: ImportCell | undefined }> = {
+      linkId: { value: linkId, source: id }, nodeA: { value: stringCell(from) ?? "", source: from }, nodeB: { value: stringCell(to) ?? "", source: to },
+    };
+    if (stringCell(portA)) values.interfaceA = { value: stringCell(portA)!, source: portA };
+    if (stringCell(portB)) values.interfaceB = { value: stringCell(portB)!, source: portB };
+    if (stringCell(kind)) values.kind = { value: stringCell(kind)!, source: kind };
+    return canonicalRecord(row.recordIndex, "Links", values);
+  }) : inlineLinks;
+  if (new Set(nodes.map((r) => stringCell(r.fields.nodeId))).size !== nodes.length)
+    diagnostics.push({ code: "NETWORK_IMPORT_DUPLICATE_DEVICE_ID", severity: "error", message: "Duplicate device IDs. Each device must have a unique stable ID." });
+  const metadata: ImportTable = { tableId: "Metadata", records: [canonicalRecord(1, "Metadata", { scenarioId: { value: "imported_network" }, title: { value: "Imported Network Topology" } })] };
+  const output: ImportTable[] = [metadata, { tableId: "Nodes", records: nodes }, { tableId: "Interfaces", records: interfaces }, { tableId: "Links", records: links }];
+  if (!links.length) diagnostics.push({ code: "NETWORK_IMPORT_NO_EXPLICIT_LINKS", severity: "warning", message: "No explicit network links were supplied; the topology will show devices without connecting them." });
+  if (nodes.length === 0) diagnostics.push({ code: "NETWORK_IMPORT_NO_DEVICES", severity: "error", message: "No valid device rows were found." });
+  return { document: { tables: output }, diagnostics };
+}

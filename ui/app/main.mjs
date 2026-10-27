@@ -30,6 +30,7 @@ import guidedLinuxDns from "../../curriculum/builtin/wave1/linux-dns.json";
 import guidedLinuxFirewall from "../../curriculum/builtin/wave1/linux-firewall.json";
 import guidedLinuxSsh from "../../curriculum/builtin/wave1/linux-ssh.json";
 import defaultEnterpriseMapping from "../../examples/enterprise-import/enterprise-import-template.mapping.json";
+import { previewNetworkTopologyFile } from "../src/browser/network-topology-import.js";
 import networkFaultPack from "../../fault-packs/builtin/network-core.json";
 import windowsFaultPack from "../../fault-packs/builtin/windows-core.json";
 import linuxFaultPack from "../../fault-packs/builtin/linux-core.json";
@@ -2994,7 +2995,72 @@ function WorkspaceMenu({ label, children }) {
   );
 }
 
-function MainActions({ workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+
+function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setDiagnostics }) {
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState("");
+  const requestId = useRef(0);
+  const chooseFile = async (file) => {
+    if (!file) return;
+    const current = ++requestId.current;
+    setBusy(true); setFailure(""); setPreview(null);
+    try {
+      const result = await previewNetworkTopologyFile(file);
+      if (requestId.current !== current) return;
+      setPreview(result);
+      setDiagnostics(result.diagnostics.map((d) => ({ code: d.code, severity: d.severity, message: d.message })));
+    } catch (error) {
+      if (requestId.current === current) {
+        setFailure(error instanceof Error ? error.message : String(error));
+        setDiagnostics([{ code: "NETWORK_IMPORT_SOURCE_BLOCKED", severity: "error", message: error instanceof Error ? error.message : String(error) }]);
+      }
+    } finally { if (requestId.current === current) setBusy(false); }
+  };
+  const activate = async () => {
+    if (!preview?.ok || !preview.source || busy) return;
+    setBusy(true); setFailure("");
+    try {
+      let next = await compileBuilderWorkspace(createBuilderWorkspace(preview.source), compilerOptions);
+      if (next.compile.status !== "valid") {
+        const diagnostics = next.compile.diagnostics.map((d) => ({ severity: d.severity, code: d.code, message: d.message }));
+        setDiagnostics(diagnostics);
+        setFailure(`Compilation blocked: ${diagnostics.map((d) => d.code).join(", ")}`);
+        return;
+      }
+      const layout = await autoLayoutBuilder(next, new ElkLayoutBackend());
+      if (!layout.ok) {
+        setDiagnostics(layout.diagnostics);
+        setFailure("Layout failed; the active workspace was not replaced.");
+        return;
+      }
+      next = layout.workspace;
+      setDiagnostics([...preview.diagnostics.map((d) => ({ code: d.code, severity: d.severity, message: d.message })), ...layout.diagnostics]);
+      onActivate(next);
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : String(error));
+      setDiagnostics([{ code: "NETWORK_IMPORT_ACTIVATION_BLOCKED", severity: "error", message: error instanceof Error ? error.message : String(error) }]);
+    } finally { setBusy(false); }
+  };
+  return e("section", { className: "network-import-panel", "data-network-import-panel": "ready", "aria-label": "Import Network from Excel / CSV" },
+    e("div", { className: "network-import-heading" },
+      e("div", null, e("h2", null, "Import Network from Excel / CSV"), e("p", null, "Offline import: select → review → validate → create Builder topology. Existing workspace remains unchanged until you confirm.")),
+      e("button", { type: "button", onClick: onClose, disabled: busy, "aria-label": "Close network import" }, "Close")),
+    e("p", { className: "helper-note" }, "Supported: .xlsx, .ods, .csv, .tsv. Use a Devices sheet (Asset ID, Hostname, Device Type, IP Address, Connected To), or a canonical Nodes + Links workbook. Connections require explicit endpoint IDs; IP addresses and gateways never imply cabling."),
+    e("label", { className: "file-button" }, busy ? "Reading network document…" : "Choose Excel / CSV network file",
+      e("input", { type: "file", accept: ".xlsx,.ods,.csv,.tsv", disabled: busy, "data-network-import-file": "true", onChange: (event) => { const selected = event.target.files?.[0]; event.target.value = ""; chooseFile(selected); }, hidden: true })),
+    failure ? e("p", { role: "alert", className: "helper-status blocked" }, failure) : null,
+    preview ? e("div", { className: "network-import-preview", "data-network-import-preview": preview.ok ? "READY" : "BLOCKED" },
+      e("h3", null, "Preview – ", preview.filename),
+      e("p", null, `Found sheets: ${preview.sheets.join(", ") || "none"} · Devices: ${preview.devices} · Explicit links: ${preview.links}`),
+      e("p", { className: "helper-note" }, preview.links === 0 ? "No physical connections provided. Devices will be shown without invented links." : "Only explicitly declared links will appear in the topology."),
+      preview.diagnostics.length ? e("ul", { className: "validation-list" }, ...preview.diagnostics.slice(0, 30).map((d, i) => e("li", { key: i }, `${d.severity.toUpperCase()}: ${d.code} – ${d.message}`))) : e("p", null, "No import diagnostics."),
+      e("button", { type: "button", disabled: !preview.ok || busy, "data-network-import-activate": "true", onClick: activate }, busy ? "Validating…" : "Create topology in Builder (replace current workspace)"),
+    ) : null,
+  );
+}
+
+function MainActions({ onImportNetwork, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   return e("section", { className: "main-actions", "aria-label": "Main actions" },
     e("div", { className: "main-actions-heading" },
@@ -3026,6 +3092,7 @@ function MainActions({ workspace, busy, branding, enterpriseScenarioId, setEnter
         workspace.mode === "runtime" ? e("button", { type: "button", onClick: clearAutosave, disabled: !workspace }, "Rensa autosparning") : null,
       ),
       e(WorkspaceMenu, { label: "Import / Export" },
+        e("button", { type: "button", "data-import-network-action": "true", onClick: onImportNetwork }, "Import Network from Excel / CSV"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: exportSource }, "Exportera källfil") : e("button", { type: "button", onClick: exportProgress }, "Exportera framsteg"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: () => exportPackage("student"), disabled: workspace.compile.status !== "valid" }, "Exportera elevpaket") : fileAction("Läs in framsteg", `${branding.progressExtension},application/json`, (event) => loadProgress(event.target.files?.[0]), "load-progress"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: () => exportPackage("author"), disabled: workspace.compile.status !== "valid" }, "Exportera författarpaket") : e("button", { type: "button", onClick: exportTroubleshootingSession }, "Exportera sessionsbackup"),
@@ -3179,6 +3246,7 @@ function App() {
   }, []);
   const [workspace, setWorkspace] = useState(() => createBuilderWorkspace(welcomeScenario));
   const [importWorkbench, setImportWorkbench] = useState(() => emptyImportWorkbench());
+  const [networkImportOpen, setNetworkImportOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState([]);
   const [busy, setBusy] = useState(false);
   const [guidedLabId, setGuidedLabId] = useState(() => builtinGuidedLabs[0]?.id ?? "");
@@ -3733,8 +3801,8 @@ function App() {
 
   return e("div", { className: "app-frame", "data-app-runtime": "ready", "data-runtime-scenario-id": workspace.mode === "runtime" ? workspace.scenario.scenarioId : workspace.source.scenarioId, "data-runtime-scenario-hash": workspace.mode === "runtime" ? workspace.scenario.sourceHash : "builder" },
     e("header", { className: "app-header" },
-      e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": "1.8.0-dev.11" }, "v1.8.0-dev.11")),
-      e(MainActions, { workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
+      e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": "1.8.0-dev.11" }, "v1.8.0-dev.11"), e("small", { "data-development-checkpoint": "IMPORT-001" }, "Import checkpoint IMPORT-001")),
+      e(MainActions, { onImportNetwork: () => setNetworkImportOpen(true), workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
     selectedGuidedLab ? e("section", { className: "curriculum-strip", "data-curriculum-wave": "guided_troubleshooting_wave1" },
@@ -3745,6 +3813,7 @@ function App() {
         e("span", null, `Beroendedjup ${selectedGuidedLab.difficulty.dependencyDepth}`),
         e("span", null, `Evidenssynlighet ${selectedGuidedLab.difficulty.evidenceVisibility}`),
         e("span", null, `Åtgärdsbegränsningar ${selectedGuidedLab.difficulty.remediationConstraints}`))) : null,
+    networkImportOpen ? e(NetworkTopologyImportPanel, { compilerOptions, setDiagnostics, onClose: () => setNetworkImportOpen(false), onActivate: (next) => { beginScenarioTransition(); setWorkspace(next); setNetworkImportOpen(false); } }) : null,
     e("main", { className: "workspace-grid" },
       e(ControlCenter, null,
         e(ControlSection, { title: "Verification, experiments & promotion", description: "Evidence, intent, matrix and promotion workflows stay available on demand.", searchTerms: "Troubleshooting Case Network Intent Scenario Experiments Verified Baselines Regression Campaigns Transition Matrix Campaign Bundle Change Sets Verification Suites What-If Matrix Promotion Rollback" },

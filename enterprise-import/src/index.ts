@@ -22,3 +22,4 @@ export { resolveReconciliationGroup, searchReconciliation, summarizeReconciliati
 export type { ReconciliationGroup, ReconciliationStatus, ReconciliationSummary } from "./reconciliation.js";
 
 export * from "./merge.js";
+export { normalizeNetworkInventoryDocument } from "./network-inventory.js";
