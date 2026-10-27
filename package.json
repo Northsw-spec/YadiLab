@@ -1,6 +1,6 @@
 {
   "name": "visual-infrastructure-lab-app",
-  "version": "1.8.0-dev.11",
+  "version": "1.8.0-dev.12",
   "private": true,
   "type": "module",
   "scripts": {
@@ -120,7 +120,8 @@
     "test:dev11-ui": "npm run test:visual-journey && tsc -p tests/tsconfig.browser.json && node tests/browser/run_dev11_ui_runtime_contract_tests.mjs && node tests/browser/run_dev11_verified_delivery_tests.mjs && node tests/browser/run_dev11_topology_rendering_regression_tests.mjs",
     "test:ui-layout-localization": "node tests/browser/run_ui_layout_localization_contract_tests.mjs",
     "test:scenario-studio": "rm -rf dist-browser-test && tsc -p tests/tsconfig.browser.json && node tests/browser/run_dev1_scenario_studio_tests.mjs && node tests/browser/run_dev1_scenario_studio_adversarial.mjs",
-    "test:network-topology-import": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_network_topology_import_checkpoint.mjs && tsc -p tests/tsconfig.browser.json && node tests/browser/run_network_topology_checkpoint_tests.mjs"
+    "test:network-topology-import": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_network_topology_import_checkpoint.mjs && tsc -p tests/tsconfig.browser.json && node tests/browser/run_network_topology_checkpoint_tests.mjs",
+    "test:import002-ui": "node tests/browser/run_import002_visibility_version_tests.mjs"
   },
   "dependencies": {
     "ajv": "8.17.1",

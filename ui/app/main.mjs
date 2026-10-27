@@ -3042,7 +3042,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       setDiagnostics([{ code: "NETWORK_IMPORT_ACTIVATION_BLOCKED", severity: "error", message: error instanceof Error ? error.message : String(error) }]);
     } finally { setBusy(false); }
   };
-  return e("section", { className: "network-import-panel", "data-network-import-panel": "ready", "aria-label": "Import Network from Excel / CSV" },
+  return e("section", { id: "network-topology-import-panel", className: "network-import-panel", "data-network-import-panel": "ready", "aria-label": "Import Network from Excel / CSV" },
     e("div", { className: "network-import-heading" },
       e("div", null, e("h2", null, "Import Network from Excel / CSV"), e("p", null, "Offline import: select → review → validate → create Builder topology. Existing workspace remains unchanged until you confirm.")),
       e("button", { type: "button", onClick: onClose, disabled: busy, "aria-label": "Close network import" }, "Close")),
@@ -3070,6 +3070,10 @@ function MainActions({ onImportNetwork, workspace, busy, branding, enterpriseSce
         e("label", { className: "context-select" }, "Verifierad leverans", e("select", { value: verifiedDeliveryScenarioId, onChange: (event) => setVerifiedDeliveryScenarioId(event.target.value), "data-verified-delivery-scenario-selector": "true" }, ...verifiedDeliveryScenarios.map((scenario) => e("option", { key: scenario.scenarioId, value: scenario.scenarioId }, scenario.metadata.title)))),
         e("label", { className: "context-select" }, "Guidad labb", e("select", { value: guidedLabId, onChange: (event) => setGuidedLabId(event.target.value), disabled: !builtinGuidedLabs.length, "data-guided-lab-catalog": "wave1" }, ...builtinGuidedLabs.map((lab) => e("option", { key: lab.id, value: lab.id }, `${lab.sequence}. ${lab.title} · ${lab.focus}`)))),
       ),
+    ),
+    e("div", { className: "main-actions-primary-import", "data-network-import-entrypoint": "always-visible" },
+      e("button", { type: "button", className: "network-import-primary-button", "data-network-import-primary": "true", onClick: onImportNetwork, disabled: busy, "aria-controls": "network-topology-import-panel" }, "Import Excel / CSV → Network Topology"),
+      e("span", null, "Import .xlsx / .ods / .csv / .tsv network inventories. Preview before replacing your topology."),
     ),
     e("div", { className: "main-actions-menus" },
       e(WorkspaceMenu, { label: "Lab & Scenario" },
@@ -3801,7 +3805,7 @@ function App() {
 
   return e("div", { className: "app-frame", "data-app-runtime": "ready", "data-runtime-scenario-id": workspace.mode === "runtime" ? workspace.scenario.scenarioId : workspace.source.scenarioId, "data-runtime-scenario-hash": workspace.mode === "runtime" ? workspace.scenario.sourceHash : "builder" },
     e("header", { className: "app-header" },
-      e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": "1.8.0-dev.11" }, "v1.8.0-dev.11"), e("small", { "data-development-checkpoint": "IMPORT-001" }, "Import checkpoint IMPORT-001")),
+      e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": "1.8.0-dev.12" }, "v1.8.0-dev.12"), e("small", { "data-development-checkpoint": "IMPORT-002" }, "IMPORT-002 · Direct Excel / CSV import")),
       e(MainActions, { onImportNetwork: () => setNetworkImportOpen(true), workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),

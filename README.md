@@ -1,3 +1,11 @@
+# YadiLab — v1.8.0-dev.12 (IMPORT-002)
+
+**Current development checkpoint (not yet user verified).** The user-verified Dev11 source remains immutable in Git history at `8fbf429f2eeab83066ae78d49d64ff9483868b2e` (source ZIP SHA-256 `cce1deddc0b28b5b1b1c0aa467731d9cbfa2aa6be65f2db088c46c93846372d1`). IMPORT-001 is `2a4360f62e1562de186a9be9582bbe33737e34dd`. This successor fixes Excel import discovery by exposing **Import Excel / CSV → Network Topology** permanently in the MAIN ACTIONS area (not in a collapsed menu); it includes the existing explicit preview and confirm flow. Version, start-script marker and browser build marker are now `1.8.0-dev.12 / IMPORT-002`. Portable Linux package uses port `18234` by default to avoid confusing old `18233` servers/browser profiles with the current build. See `docs/IMPORT002_DIRECT_EXCEL_CSV_ENTRYPOINT.md`. No `.docx`/PDF-table import is implied.
+
+---
+
+## Earlier project documentation (historical)
+
 # YadiLab v1.1.0-dev.23
 
 

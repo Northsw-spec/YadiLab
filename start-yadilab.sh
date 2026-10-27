@@ -4,9 +4,11 @@ set -uo pipefail
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 DIST="$ROOT/distribution/linux-x86_64"
 LAUNCHER="$DIST/app-launcher"
-PORT=${YADILAB_PORT:-18233}
+PORT=${YADILAB_PORT:-18234}
 URL="http://127.0.0.1:$PORT/"
-MARKER=yadilab-v1.8.0-dev.11
+APP_VERSION=1.8.0-dev.12
+CHECKPOINT=IMPORT-002
+MARKER=yadilab-v${APP_VERSION}
 RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp}
 [[ -d "$RUNTIME_DIR" && -w "$RUNTIME_DIR" ]] || RUNTIME_DIR=/tmp
 PIDFILE="$RUNTIME_DIR/yadilab-$PORT.pid"
@@ -31,8 +33,9 @@ verify_marker() {
   local response
   response=$(curl -fsS --max-time 2 "${URL}build-marker.json" 2>/dev/null) || return 1
   grep -Fq '"formatId": "yadilab.browser-build-marker"' <<<"$response" &&
-    grep -Fq '"version": "1.8.0-dev.11"' <<<"$response" &&
-    grep -Fq '"marker": "yadilab-v1.8.0-dev.11"' <<<"$response"
+    grep -Fq "\"version\": \"$APP_VERSION\"" <<<"$response" &&
+    grep -Fq "\"marker\": \"$MARKER\"" <<<"$response" &&
+    grep -Fq "\"checkpoint\": \"$CHECKPOINT\"" <<<"$response"
 }
 
 [[ "$PORT" =~ ^[0-9]+$ ]] && (( PORT >= 1024 && PORT <= 65535 )) || fail "ogiltig port: $PORT"
@@ -122,7 +125,7 @@ if [[ -z "$browser" ]]; then
   done
 fi
 [[ -n "$browser" && -x "$browser" ]] || { cleanup_failed_start; fail "Google Chrome/Chromium hittades inte"; }
-"$browser" --new-window "${URL}?build=1.8.0-dev.11" >/dev/null 2>&1 &
+"$browser" --new-window "${URL}?build=${APP_VERSION}&checkpoint=${CHECKPOINT}" >/dev/null 2>&1 &
 printf 'Browser öppnad. Låt terminalen vara öppen medan YadiLab används.\n'
 wait "$LAUNCHER_PID"
 status=$?

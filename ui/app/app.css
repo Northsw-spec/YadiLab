@@ -25,6 +25,10 @@ input { width: 100%; margin-top: .25rem; border: 1px solid #3b536e; border-radiu
 .context-select { display: grid; gap: .18rem; color: #a9c2d8; font-size: .7rem; min-width: min(100%, 18rem); }
 .context-select select { min-width: 0; border: 1px solid #31506d; border-radius: 6px; background: #0b1726; color: #edf8ff; padding: .38rem .45rem; }
 .main-actions-menus { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; }
+.main-actions-primary-import { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .55rem .7rem; border: 1px solid #34628a; border-radius: 9px; background: #102943; }
+.main-actions-primary-import .network-import-primary-button { min-height: 2.8rem; font-weight: 800; border: 2px solid #5ebfe7; background: #185074; color: #fff; box-shadow: 0 1px 8px rgba(32,142,191,.18); }
+.main-actions-primary-import .network-import-primary-button:hover:not(:disabled) { background: #24688e; }
+.main-actions-primary-import > span { color: #d2e8f9; font-size: .83rem; }
 .workspace-menu { min-width: 0; position: relative; }
 .workspace-menu > summary { list-style: none; min-height: 2.35rem; display: flex; align-items: center; justify-content: space-between; gap: .45rem; border: 1px solid #36506d; border-radius: 8px; background: #13243a; color: #eef6ff; padding: .55rem .72rem; cursor: pointer; font-weight: 700; }
 .workspace-menu > summary::-webkit-details-marker { display: none; }
