@@ -94,7 +94,7 @@ export function reviewDocxMultiReferences(
       item.association.assertion !== "USER_ASSERTED_ASSOCIATION_NOT_VERIFIED" ||
       !safeId(item.association.targetResourceId) || !ids.has(item.association.targetResourceId) ||
       !Array.isArray(item.warnings) ||
-      item.warnings.length !== 2 || !item.warnings.every(x => typeof x === "string")) {
+      item.warnings.length !== 2 || !item.warnings.every((x: unknown) => typeof x === "string")) {
       return block("DOCX_MULTI_REFERENCE_INVALID");
     }
     const loc = item.source.cellLocator;
