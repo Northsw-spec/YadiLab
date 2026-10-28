@@ -49,6 +49,7 @@ if ! git -C "$ROOT" diff --quiet HEAD -- \
   scripts/run_ansible_ini_parrot_acceptance.sh \
   tests/acceptance/run_ansible_ini_p2_real_browser.py \
   tests/acceptance/run_ansible_ini_p3_real_browser.py \
+  tests/acceptance/target_platform_identity.py \
   tests/fixtures/import/ansible-ini; then
   blocked "TEST_SOURCE_OR_FIXTURES_MODIFIED"
 fi
@@ -111,6 +112,7 @@ folder=Path(sys.argv[1]); stage=sys.argv[2]
 name="ansible-ini-p2-chromium.json" if stage=="p2" else "ansible-ini-p3-chromium.json"
 result=json.loads((folder/name).read_text(encoding="utf-8"))
 assert result["status"]=="PASS" and len(result["cases"])>0
+assert result.get("actualParrotHost") is True, "Real browser report was not recorded on Parrot"
 assert all(case["status"]=="PASS" for case in result["cases"])
 if stage=="p3":
     assert all(case["builderUnchanged"] is True for case in result["cases"])

@@ -8,6 +8,8 @@ on:
       - 'tests/acceptance/run_ansible_ini_parrot_gate_contract.sh'
       - 'tests/acceptance/run_ansible_ini_p2_real_browser.py'
       - 'tests/acceptance/run_ansible_ini_p3_real_browser.py'
+      - 'tests/acceptance/target_platform_identity.py'
+      - 'tests/acceptance/test_target_platform_identity.py'
       - 'docs/acceptance/ANSIBLE_INI_PARROT_001.md'
       - '.github/workflows/ansible-ini-parrot-gate.yml'
   workflow_dispatch:
@@ -28,6 +30,7 @@ jobs:
           bash -n scripts/run_ansible_ini_parrot_acceptance.sh
           bash -n tests/acceptance/run_ansible_ini_parrot_gate_contract.sh
           bash tests/acceptance/run_ansible_ini_parrot_gate_contract.sh
+          python3 tests/acceptance/test_target_platform_identity.py
 
   independent-ubuntu-chromium-regression:
     runs-on: ubuntu-24.04
@@ -66,6 +69,16 @@ jobs:
           curl -fsS http://127.0.0.1:18985/browser-build-manifest.json >/dev/null
           /tmp/yadilab-parrot-ini-venv/bin/python tests/acceptance/run_ansible_ini_p2_real_browser.py --url http://127.0.0.1:18985/ --evidence-dir /tmp/parrot-ini-ubuntu-evidence/p2
           /tmp/yadilab-parrot-ini-venv/bin/python tests/acceptance/run_ansible_ini_p3_real_browser.py --url http://127.0.0.1:18985/ --evidence-dir /tmp/parrot-ini-ubuntu-evidence/p3
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for stage in ("p2", "p3"):
+              filename = "ansible-ini-p2-chromium.json" if stage == "p2" else "ansible-ini-p3-chromium.json"
+              report = json.loads((Path("/tmp/parrot-ini-ubuntu-evidence") / stage / filename).read_text())
+              assert report["actualParrotHost"] is False, "Ubuntu CI must not claim Parrot acceptance"
+              assert report["osId"] == "ubuntu", "Unexpected CI host OS identity"
+          print("PASS Ubuntu CI evidence explicitly NOT Parrot native")
+          PY
       - name: Upload Ubuntu-only evidence (NOT Parrot acceptance)
         if: always()
         uses: actions/upload-artifact@v4

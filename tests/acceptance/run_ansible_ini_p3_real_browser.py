@@ -4,6 +4,7 @@ import argparse, hashlib, json, os, sys
 from pathlib import Path
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright, expect
+from target_platform_identity import describe_local_host
 
 ROOT=Path(__file__).resolve().parents[2]
 FIXTURES=ROOT/"tests/fixtures/import/ansible-ini"
@@ -126,7 +127,10 @@ def main():
                 results.append(result)
                 print("PASS ANSIBLE-INI-P3 real Chromium "+result["case"],flush=True)
         finally:browser.close()
-    report={"status":"PASS","kind":"actual compiled YadiLab interactive Chromium","platform":"GitHub Ubuntu (NOT target Parrot)","cases":results}
+    host=describe_local_host()
+    report={"status":"PASS","kind":"actual compiled YadiLab interactive Chromium",
+      "platform":host["osPrettyName"],"osId":host["osId"],
+      "actualParrotHost":host["actualParrotHost"],"cases":results}
     (args.evidence_dir/"ansible-ini-p3-chromium.json").write_text(json.dumps(report,indent=2)+"\n")
     print(json.dumps(report,indent=2))
 if __name__=="__main__":
