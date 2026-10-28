@@ -57,6 +57,75 @@ def confirm_unchanged(page, base, errors, external):
     require(not external, "Unexpected external request while inspecting XML: " + repr(external))
 
 
+def export_builder_source(page):
+    menu = page.locator(".workspace-menu", has=page.locator("summary", has_text="Import / Export"))
+    require(menu.count() == 1, "Import / Export menu must be unique")
+    if menu.get_attribute("open") is None:
+        menu.locator("summary").click()
+    export = menu.get_by_role("button", name="Exportera källfil")
+    export.wait_for(state="visible", timeout=15000)
+    with page.expect_download(timeout=15000) as downloaded:
+        export.click()
+    return json.loads(Path(downloaded.value.path()).read_text())
+
+
+def case_reviewed_association(browser, url):
+    page, errors, external, base = setup(browser, url)
+    try:
+        before = export_builder_source(page)
+        require(before["scenarioId"] == base, "Unexpected initial Builder")
+        require(any(resource["id"] == "rds01" for resource in before["resources"]),
+                "Expected existing resource for explicit association")
+        inspect(page)
+        choose(page, "valid-observed-hosts.xml")
+        page.locator('[data-nmap-association-review="REVIEW_REQUIRED"]').wait_for(timeout=15000)
+        require(page.locator('[data-nmap-associate-host="0"]').input_value() == "",
+                "Observed host must not be linked automatically")
+        require(page.locator('[data-nmap-association-export]').is_disabled(),
+                "Unreviewed evidence export must be blocked")
+        page.locator('[data-nmap-associate-host="0"]').select_option("rds01")
+        require(page.locator('[data-nmap-association-export]').is_disabled(),
+                "Missing explicit unverified-identity acknowledgment did not block export")
+        page.locator('[data-nmap-association-ack]').check()
+        require(page.locator('[data-nmap-association-export]').is_enabled(),
+                "Fully reviewed evidence association cannot be exported")
+        with page.expect_download(timeout=20000) as downloaded:
+            page.locator('[data-nmap-association-export]').click()
+        sidecar = json.loads(Path(downloaded.value.path()).read_text())
+        require(sidecar["formatId"] == "yadilab.nmap-observation-associations", "Wrong sidecar format")
+        require(sidecar["status"] == "REVIEWED_ASSOCIATIONS_ONLY", "Observed evidence was promoted into Engine truth")
+        require(sidecar["engineVerified"] is False and sidecar["physicalTopologyVerified"] is False,
+                "Sidecar incorrectly claims verified network state")
+        require(sidecar["source"]["sha256"] == hashlib.sha256(
+            (FIXTURES / "valid-observed-hosts.xml").read_bytes()).hexdigest(),
+            "Original Nmap source provenance lost")
+        require(sidecar["targetModel"]["scenarioId"] == base, "Target model identity differs")
+        require(len(sidecar["associations"]) == 1, "Nonselected hosts were associated")
+        association = sidecar["associations"][0]
+        require(association["targetResourceId"] == "rds01", "Unreviewed target resource used")
+        require(association["hostLocator"]["kind"] == "nmap-host"
+                and association["hostLocator"]["hostOrdinal"] == 0, "Original host locator lost")
+        require(association["assertion"] == "USER_ASSERTED_ASSOCIATION_NOT_VERIFIED",
+                "Association truth boundary lost")
+        require("connections" not in sidecar and "resources" not in sidecar and "engineState" not in sidecar,
+                "Imported observation was confused with ScenarioSource")
+        page.locator('[data-nmap-associate-host="1"]').select_option("rds01")
+        require(page.locator('[data-nmap-association-conflict="BLOCKED"]').count() == 1,
+                "Conflicting duplicate target not shown")
+        require(page.locator('[data-nmap-association-export]').is_disabled(),
+                "Conflicting duplicate target did not block export")
+        confirm_unchanged(page, base, errors, external)
+        page.locator('[data-nmap-close="true"]').click()
+        page.locator('[data-nmap-panel]').wait_for(state="detached")
+        after = export_builder_source(page)
+        require(after == before, "Evidence association changed canonical Builder source")
+        confirm_unchanged(page, base, errors, external)
+        return {"case": "reviewed_sidecar_export", "status": "PASS",
+                "sourceUnchanged": True, "associations": 1, "autoLinks": 0}
+    finally:
+        page.close()
+
+
 def case_valid(browser, url):
     page, errors, external, base = setup(browser, url)
     try:
@@ -167,7 +236,7 @@ def main():
             flags.append("--no-sandbox")
         browser = playwright.chromium.launch(headless=True, args=flags)
         try:
-            for check in (case_valid, case_invalid, case_stylesheet_and_escape):
+            for check in (case_valid, case_invalid, case_stylesheet_and_escape, case_reviewed_association):
                 outcome = check(browser, args.url)
                 result.append(outcome)
                 print("PASS NMAP-XML-P2 real Chromium:", outcome["case"], flush=True)
