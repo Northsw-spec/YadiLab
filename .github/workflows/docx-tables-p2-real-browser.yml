@@ -1,0 +1,71 @@
+name: DOCX P2 compiled Chromium structural-only acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ui/src/browser/docx-file-structural-preview.ts'
+      - 'ui/app/docx-structure-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_docx_structure_ui_tests.mjs'
+      - 'tests/acceptance/run_docx_p2_real_browser.py'
+      - 'enterprise-import/src/docx-tables-structural-preview.ts'
+      - 'docs/architecture/DOCX_TABLES_P2_FROZEN_BROWSER_ORACLES.md'
+      - '.github/workflows/docx-tables-p2-real-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docx-p2-real-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact pinned application dependencies
+        run: npm ci
+      - name: Install isolated pinned Playwright/Chromium for tests ONLY
+        run: |
+          python3 -m venv /tmp/yadilab-docx-p2-venv
+          /tmp/yadilab-docx-p2-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/yadilab-docx-p2-venv/bin/python -m playwright install --with-deps chromium
+      - name: Compile strict TypeScript, domain and React SSR tests
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          node tests/enterprise-import/run_docx_tables_p1_tests.mjs
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_docx_structure_ui_tests.mjs
+          node tests/browser/run_ansible_ini_inventory_ui_tests.mjs
+      - name: Build exact actual compiled YadiLab browser
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+          node scripts/verify_release_identity.mjs
+      - name: Real Chromium file chooser, blocked malicious DOCX, no Builder changes
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18987 --bind 127.0.0.1 --directory ui/dist >/tmp/yadilab-docx-p2-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for n in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18987/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18987/browser-build-manifest.json >/dev/null
+          /tmp/yadilab-docx-p2-venv/bin/python tests/acceptance/run_docx_p2_real_browser.py --url http://127.0.0.1:18987/ --evidence-dir /tmp/docx-p2-browser-evidence
+      - name: Upload actual Ubuntu Chromium test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docx-p2-real-browser-evidence
+          path: /tmp/docx-p2-browser-evidence/
+          if-no-files-found: ignore
