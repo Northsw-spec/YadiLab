@@ -64,7 +64,7 @@ export function AnsibleAssociationReview({ result, model, busy = false, onExport
                   e("option", { value: "" }, "Do not associate (default)"),
                   ...model.resources.map(resource =>
                     e("option", { key: resource.id, value: resource.id },
-                      `${resource.label} [${resource.id}]`))))))
+                      `${resource.label} [${resource.id}]`)))))))
       : null,
     preview.hosts.length > DISPLAY_LIMIT
       ? e("p", { "data-ansible-association-limit": "true" },
