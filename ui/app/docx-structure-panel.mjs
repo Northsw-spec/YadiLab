@@ -27,8 +27,8 @@ export function DocxTableStructureDetails({ result }) {
                   ...row.cells.slice(0, DISPLAY_CELLS).map((cell) =>
                     e("li", { key: cell.cellOrdinal,
                         "data-docx-cell": `${table.tableOrdinal}:${row.rowOrdinal}:${cell.cellOrdinal}` },
-                      `Cell ${cell.cellOrdinal + 1}: ${cell.textCodeUnits} text code units · source table ${cell.locator.tableOrdinal + 1}, row ${cell.locator.rowOrdinal + 1}, cell ${cell.locator.cellOrdinal + 1}`)))),
-                row.cells.length > DISPLAY_CELLS ? e("p", null, "Further cells not displayed.") : null)),
+                      `Cell ${cell.cellOrdinal + 1}: ${cell.textCodeUnits} text code units · source table ${cell.locator.tableOrdinal + 1}, row ${cell.locator.rowOrdinal + 1}, cell ${cell.locator.cellOrdinal + 1}`)),
+                row.cells.length > DISPLAY_CELLS ? e("p", null, "Further cells not displayed.") : null))),
             table.rows.length > DISPLAY_ROWS
               ? e("li", { "data-docx-row-limit": "true" }, `Showing first ${DISPLAY_ROWS} of ${table.rows.length} rows.`) : null))),
     e("p", { "data-docx-activation-status": "BLOCKED" },
