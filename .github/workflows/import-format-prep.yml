@@ -1,0 +1,46 @@
+name: Import format PREP source regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/**'
+      - 'ui/src/browser/import-*.ts'
+      - 'ui/src/browser/network-topology-import.ts'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_network_topology_checkpoint_tests.mjs'
+      - 'docs/architecture/IMPORT_FORMATS_PREP_001_ADR_AND_BASELINE.md'
+      - '.github/workflows/import-format-prep.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  import-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout actual GitHub source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use declared Node runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Source release contract test (not browser acceptance)
+        run: npm run test:release-identity
+      - name: Existing enterprise import adapters and adversarial cases
+        run: npm run test:enterprise-import
+      - name: Workbook and current quick-import regression
+        run: |
+          npm run test:workbook
+          npm run test:network-topology-import
+      - name: Imported modeled-probe and historical UI contract regressions
+        run: |
+          npm run test:imported-probes
+          npm run test:dev11-ui
+          npm run test:import-helper

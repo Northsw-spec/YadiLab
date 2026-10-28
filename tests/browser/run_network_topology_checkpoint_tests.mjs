@@ -30,5 +30,21 @@ const ui = fs.readFileSync("ui/app/main.mjs", "utf8");
 assert.ok(ui.includes('"data-import-network-action": "true"'));
 assert.ok(ui.includes('"data-network-import-activate": "true"'));
 assert.ok(ui.includes('"data-network-import-panel": "ready"'));
-assert.ok(ui.includes('"data-development-checkpoint": "IMPORT-004"'));
-console.log("PASS IMPORT-004 browser integration: actual CSV/XLSX reader, source validation, compiler, blocked invalid references, discoverable menu and explicit activation.");
+// Source-level identity wiring contract: the visible checkpoint comes from current package metadata,
+// not from an obsolete literal embedded in a historical IMPORT-004 fixture.
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+assert.equal(typeof pkg.yadilabRelease?.checkpoint, "string");
+assert.ok(pkg.yadilabRelease.checkpoint.length > 0);
+assert.match(ui, /const releaseIdentity\s*=\s*\{[^;]*checkpoint:\s*releasePackage\.yadilabRelease\.checkpoint/);
+const hasReleaseHeaderBindings = (text) =>
+  /"data-yadilab-build-version":\s*releaseIdentity\.version\b/.test(text)
+  && /"data-source-commit":\s*releaseIdentity\.sourceCommit\b/.test(text)
+  && /"data-development-checkpoint":\s*releaseIdentity\.checkpoint\b/.test(text);
+assert.equal(hasReleaseHeaderBindings(ui), true, "UI header must bind release fields to their real releaseIdentity properties");
+// Negative control: replacing the bound checkpoint with a historical constant MUST fail.
+assert.equal(
+  hasReleaseHeaderBindings(ui.replace('"data-development-checkpoint": releaseIdentity.checkpoint', '"data-development-checkpoint": "IMPORT-004"')),
+  false,
+  "Source wiring check must reject literal old checkpoint values"
+);
+console.log("PASS network topology browser source contract: CSV/XLSX input, validation, compile, invalid refs, UI actions and current package-bound release identity (DOM not asserted here).");
