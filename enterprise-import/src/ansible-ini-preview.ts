@@ -7,7 +7,7 @@ const NAME=/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/;
 const KEY=/^[A-Za-z_][A-Za-z0-9_]*$/;
 const LABEL=/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
 const FORBIDDEN=new Set(["__proto__","prototype","constructor"]);
-const fail=(code:string,message:string):never=>{throw new EnterpriseImportError(code,message);};
+function fail(code:string,message:string):never {throw new EnterpriseImportError(code,message);}
 function ident(s:string):string {
   if(!NAME.test(s)||FORBIDDEN.has(s)||s==="ungrouped") fail("ANSIBLE_INI_NAME_UNSUPPORTED","Unsupported host or group identifier.");
   return s;
