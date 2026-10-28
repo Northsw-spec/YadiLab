@@ -46,3 +46,8 @@ export type {
 // Strict Ansible YAML static inventory evidence preview. NOT an active adapter.
 export { ANSIBLE_YAML_PREVIEW_PROFILE, previewAnsibleStaticInventory } from "./ansible-yaml-preview.js";
 export type { AnsibleStaticInventoryPreview, AnsibleHostObservation, AnsibleInventoryLocator } from "./ansible-yaml-preview.js";
+
+// Operator-reviewed Ansible inventory associations: separate JSON sidecar, NOT an Engine source.
+export { ANSIBLE_ASSOCIATION_FORMAT, reviewAnsibleInventoryAssociations } from "./ansible-association-review.js";
+export type { AnsibleModeledResource, AnsibleBuilderSnapshot, AnsibleAssociationDecision,
+  AnsibleReviewedAssociation, AnsibleAssociationSidecar, AnsibleAssociationResult } from "./ansible-association-review.js";
