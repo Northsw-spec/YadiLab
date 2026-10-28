@@ -1,0 +1,64 @@
+name: Third-party manifest and dependency policy attestation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'dependencies/**'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'enterprise-import/src/ansible-yaml-preview.ts'
+      - 'scripts/third-party-notices-lib.mjs'
+      - '.github/workflows/third-party-manifest-attestation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-third-party-manifest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout actual PR Git tree
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use pinned Node 22 runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact locked runtime dependencies
+        run: npm ci
+      - name: Verify approved runtime and license policies
+        run: |
+          set -Eeuo pipefail
+          node scripts/check_dependency_contract.mjs
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          import assert from 'node:assert/strict';
+          const policy=JSON.parse(fs.readFileSync('dependencies/license-inventory.policy.json','utf8'));
+          const runtime=JSON.parse(fs.readFileSync('dependencies/browser-runtime.policy.json','utf8'));
+          const inventory=JSON.parse(fs.readFileSync('dependencies/third-party-inventory.json','utf8'));
+          const stable=(x)=>Array.isArray(x)?x.map(stable):x&&typeof x==='object'
+            ?Object.fromEntries(Object.keys(x).sort().map(k=>[k,stable(x[k])])):x;
+          const sha=crypto.createHash('sha256').update(JSON.stringify(stable(policy))).digest('hex');
+          assert.equal(inventory.sourcePolicySha256,sha,'Third party inventory must be tied to current license source policy');
+          assert.equal(runtime.runtimeDependencies.yaml,'2.8.3');
+          assert.equal(policy.entries.filter(x=>x.name==='yaml'&&x.scope==='runtime'&&x.version==='2.8.3'&&x.license==='ISC').length,1);
+          assert.equal(inventory.bundledRuntimeComponents.filter(x=>x.name==='yaml'&&x.version==='2.8.3'&&x.license==='ISC').length,1);
+          NODE
+      - name: Build actual browser bundle and verify canonical generated metadata
+        run: |
+          set -Eeuo pipefail
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+          node scripts/verify_release_identity.mjs
+          git diff --exit-code -- dependencies/third-party-inventory.json THIRD_PARTY_NOTICES.md
+          test -z "$(git status --porcelain)"
+      - name: Print manifest evidence
+        run: |
+          node -e "let x=require('./dependencies/third-party-inventory.json'); console.log(JSON.stringify({status:x.status,complete:x.completeResolvedBundleInventory,sourcePolicySha256:x.sourcePolicySha256,components:x.bundledRuntimeComponents.length,approvedYaml:x.bundledRuntimeComponents.some(y=>y.name==='yaml'&&y.version==='2.8.3')},null,2))"
