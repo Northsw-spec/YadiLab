@@ -5,6 +5,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { previewAnsibleYamlFileReadOnly } from "../../dist-browser-test/ui/src/browser/ansible-yaml-file-preview.js";
 import { AnsibleInventoryPanel, AnsibleInventoryDetails } from "../../ui/app/ansible-inventory-panel.mjs";
+import { AnsibleAssociationReview } from "../../ui/app/ansible-association-review.mjs";
 
 const read = (name) => Uint8Array.from(fs.readFileSync("tests/fixtures/import/ansible-yaml/" + name));
 const valid = read("valid-nested.yml");
@@ -65,6 +66,39 @@ eq(escaped.includes("<img src"),false,"Never inject DOM image");
 eq(escaped.includes("<script>alert(2)</script>"),false,"Never inject executable script");
 eq(escaped.includes("&lt;img"),true,"Host id escaped by React");
 eq(escaped.includes("&lt;script&gt;"),true,"Group path escaped by React");
+const modeled={scenarioId:"site_existing",sourceRevision:4,
+ resources:[{id:"rds01",label:"RDS server"},{id:"fw01",label:"Firewall"}]};
+const assocHtml=renderToStaticMarkup(React.createElement(AnsibleAssociationReview,{
+ result,model:modeled,onExport:async()=>{},
+}));
+for(const token of ['data-ansible-association-review="REVIEW_REQUIRED"',
+ 'data-ansible-associate-host="0"','data-ansible-associate-host="3"',
+ 'data-ansible-association-ack="true"','data-ansible-association-export="true"',
+ 'Do not associate (default)','unverified inventory-to-model','rds01']) {
+ assert.ok(assocHtml.includes(token),"Missing P3 review control: "+token);checks++;
+}
+eq(assocHtml.includes('disabled=""'),true,"No default selection or ack disables export");
+const runtime=renderToStaticMarkup(React.createElement(AnsibleAssociationReview,{
+ result,model:null,onExport:async()=>{},
+}));
+eq(runtime.includes('data-ansible-association-review="BUILDER_REQUIRED"'),true);
+eq(runtime.includes('data-ansible-associate-host="0"'),false,"Runtime has no selectable resources");
+const hostileTarget=renderToStaticMarkup(React.createElement(AnsibleAssociationReview,{
+ result,model:{...modeled,resources:[{id:"rds01",label:'<svg onload=alert(1)>'}]},
+ onExport:async()=>{},
+}));
+eq(hostileTarget.includes('<svg onload='),false,"No attacker target HTML element");
+eq(hostileTarget.includes('&lt;svg'),true,"React escapes target labels");
+const assocCode=fs.readFileSync("ui/app/ansible-association-review.mjs","utf8");
+eq(/\bsetWorkspace\s*\(|dangerouslySetInnerHTML|\bonActivate\s*[:=]/.test(assocCode),
+ false,"No workspace mutation nor injected HTML in review");
+const source=fs.readFileSync("ui/app/main.mjs","utf8");
+for(const re of [/reviewAnsibleInventoryAssociations\(inventoryPreview, currentModel, decision\)/,
+ /downloadJson\(\{[\s\S]*?filename: `ansible-inventory-associations-/,
+ /onExportAssociation: async \(inventoryPreview, decision\)/,
+ /sourceRevision: workspace\.sourceRevision/]) {
+ assert.match(source,re);checks++;
+}
 const panelCode = fs.readFileSync("ui/app/ansible-inventory-panel.mjs","utf8");
 const executable=panelCode.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,"");
 const forbidden=/\bsetWorkspace\s*\(|dangerouslySetInnerHTML|\bonActivate\s*[:=]|\bonConfirm\s*[:=]/;
