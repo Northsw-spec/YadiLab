@@ -42,7 +42,7 @@ import { previewAnsibleYamlFileReadOnly } from "../src/browser/ansible-yaml-file
 import { AnsibleInventoryPanel } from "./ansible-inventory-panel.mjs";
 import { previewAnsibleIniFileReadOnly } from "../src/browser/ansible-ini-file-preview.js";
 import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
-import { previewDocxFileStructure } from "../src/browser/docx-file-structural-preview.js";
+import { previewDocxFileStructure, reviewDocxFileCell } from "../src/browser/docx-file-structural-preview.js";
 import { DocxTableStructurePanel } from "./docx-structure-panel.mjs";
 import { reviewAnsibleIniInventoryAssociations } from "../../enterprise-import/src/ansible-ini-association-review.js";
 import { reviewAnsibleInventoryAssociations } from "../../enterprise-import/src/ansible-association-review.js";
@@ -3931,6 +3931,7 @@ function App() {
     }) : null,
     docxStructureOpen ? e(DocxTableStructurePanel, {
       inspectFile: previewDocxFileStructure,
+      reviewFile: reviewDocxFileCell,
       onClose: () => setDocxStructureOpen(false),
     }) : null,
     ansibleIniOpen ? e(AnsibleIniInventoryPanel, {
