@@ -72,7 +72,7 @@ await blocked(encoder.encode("all:\n  hosts:\n    a:\n      ansible_host: 999.0.
 await blocked(encoder.encode("all:\n  children:\n    group1:\n      hosts:\n        srv:\n          ansible_host: 192.0.2.10\n    group2:\n      hosts:\n        srv:\n          ansible_host: 192.0.2.11\n"),
   "ANSIBLE_YAML_HOST_CONFLICT");
 await blocked(encoder.encode("all:\n  hosts:\n    __proto__: null\n"),"ANSIBLE_YAML_FORBIDDEN_KEY");
-await blocked(encoder.encode("all:\n  hosts:\n    root01: \n      ansible_host: \\"{{ lookup(\u0027pipe\u0027, \u0027id\u0027) }}\\"\n"),
+await blocked(encoder.encode("all:\n  hosts:\n    root01: \n      ansible_host: \"{{ lookup(\u0027pipe\u0027, \u0027id\u0027) }}\"\n"),
   "ANSIBLE_YAML_ADDRESS_UNSUPPORTED");
 await blocked(encoder.encode("all:\n  children:\n    web:\n      hosts:\n        a: null\n      children:\n        web:\n          hosts:\n            b: null\n"),"ANSIBLE_YAML_GROUP_RECURSIVE");
 const empty = await previewAnsibleStaticInventory(encoder.encode("all:\n  children:\n    spare:\n"));
