@@ -65,5 +65,16 @@ assert.ok(main.includes('buildRuntimeActiveProbeModel(runtime.workspace)'));
 assert.ok(main.includes('data-open-active-probes'));
 assert.ok(main.includes('data-import-probe-boundary'));
 assert.ok(main.includes('probeDisclosureRef.current.open = true'));
-assert.ok(main.includes('data-development-checkpoint": "IMPORT-004"'));
+// The IMPORT-004 probe feature remains tested, but the release label is now
+// sourced from current package metadata rather than a frozen IMPORT-004 string.
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+assert.ok(typeof pkg.yadilabRelease?.checkpoint === 'string' && pkg.yadilabRelease.checkpoint.length > 0);
+assert.match(main, /const releaseIdentity\s*=\s*\{[^;]*checkpoint:\s*releasePackage\.yadilabRelease\.checkpoint/);
+assert.match(main, /"data-development-checkpoint":\s*releaseIdentity\.checkpoint\b/);
+assert.doesNotMatch(main, /"data-development-checkpoint":\s*"IMPORT-004"/);
+// Negative control for this source-level binding check; browser DOM is a separate release gate.
+assert.doesNotMatch(
+  main.replace('"data-development-checkpoint": releaseIdentity.checkpoint', '"data-development-checkpoint": "IMPORT-004"'),
+  /"data-development-checkpoint":\s*releaseIdentity\.checkpoint\b/
+);
 console.log(`PASS IMPORT-004: imported modeled probes CSV ${JSON.stringify(csv)}, 4-device example ${JSON.stringify(example)}${municipal?`, Arvidsjaur 47/46 ${JSON.stringify(municipal)}`:''}; actual Engine truth preserved`);
