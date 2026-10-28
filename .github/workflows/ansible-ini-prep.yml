@@ -1,0 +1,29 @@
+name: Ansible INI PREP oracle integrity (not parser acceptance)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/architecture/ANSIBLE_INI_PREP_001_ORACLES.md'
+      - 'tests/fixtures/import/ansible-ini/**'
+      - 'tests/enterprise-import/run_ansible_ini_prep_fixture_contract.mjs'
+      - '.github/workflows/ansible-ini-prep.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixture-contract-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact GitHub source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run frozen synthetic fixture inventory check (NOT a parser test)
+        run: node tests/enterprise-import/run_ansible_ini_prep_fixture_contract.mjs
