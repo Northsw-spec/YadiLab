@@ -1,0 +1,62 @@
+name: GraphML P2C real Chromium acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tests/acceptance/run_graphml_p2c_real_browser.py'
+      - '.github/workflows/graphml-p2c-real-browser.yml'
+      - 'enterprise-import/src/graphml-*.ts'
+      - 'ui/app/graphml-preview-panel.mjs'
+      - 'ui/app/main.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-graphml-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout actual branch source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact application dependencies
+        run: npm ci
+      - name: Install isolated pinned acceptance-only Playwright and Chromium
+        run: |
+          python3 -m venv /tmp/yadilab-graphml-browser-venv
+          /tmp/yadilab-graphml-browser-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/yadilab-graphml-browser-venv/bin/python -m playwright install --with-deps chromium
+      - name: Build actual browser application from checkout
+        run: |
+          npm run test:release-identity
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Run real Chromium interactions against locally served bundle
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18977 --bind 127.0.0.1 --directory ui/dist > /tmp/yadilab-graphml-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for n in $(seq 1 50); do
+            if curl --fail --silent http://127.0.0.1:18977/browser-build-manifest.json >/dev/null; then break; fi
+            sleep 0.2
+          done
+          curl --fail --silent http://127.0.0.1:18977/browser-build-manifest.json >/dev/null
+          /tmp/yadilab-graphml-browser-venv/bin/python tests/acceptance/run_graphml_p2c_real_browser.py \
+            --url http://127.0.0.1:18977/ --evidence-dir /tmp/graphml-p2c-evidence
+      - name: Upload actual acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphml-p2c-browser-evidence
+          path: /tmp/graphml-p2c-evidence/
+          if-no-files-found: ignore
