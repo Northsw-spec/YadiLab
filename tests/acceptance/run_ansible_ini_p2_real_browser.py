@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright, expect
+from target_platform_identity import describe_local_host
 
 ROOT=Path(__file__).resolve().parents[2]
 FIXTURES=ROOT/"tests/fixtures/import/ansible-ini"
@@ -163,8 +164,11 @@ def main():
                 checks.append(outcome)
                 print("PASS ANSIBLE-INI-P2 real Chromium "+outcome["case"],flush=True)
         finally:browser.close()
+    host=describe_local_host()
     report={"status":"PASS","kind":"real compiled YadiLab app and Chromium interaction",
-            "environment":"GitHub Ubuntu 24.04 (NOT user Parrot)","cases":checks,"builderOrEngineModified":False}
+            "environment":host["osPrettyName"],"osId":host["osId"],
+            "actualParrotHost":host["actualParrotHost"],"cases":checks,
+            "builderOrEngineModified":False}
     (a.evidence_dir/"ansible-ini-p2-chromium.json").write_text(json.dumps(report,indent=2)+"\n")
     print(json.dumps(report,indent=2))
 if __name__=="__main__":

@@ -27,3 +27,7 @@
 - Does NOT run Ansible, scan live networks, modify OS/system packages or infer physical network topology and Engine truth.
 - Only tests Ansible INI P2/P3 and packed launcher; not full application certification.
 - Ubuntu CI must show exit 77/BLOCKED for this target-native script, while separately verifying the same browser cases using Ubuntu Chromium. **Actual Parrot USER_ACCEPTED remains NOT RUN** until executed there and reports checked.
+
+## Host provenance correction
+
+P2 and P3 report the actual /etc/os-release ID and PRETTY_NAME via target_platform_identity.py, plus the boolean actualParrotHost. The local Parrot wrapper independently asserts that both reports have actualParrotHost=true, while Ubuntu CI asserts false. This fixes formerly hard-coded Ubuntu report labels without pretending that Ubuntu CI is target-machine acceptance.
