@@ -14,6 +14,9 @@ on:
       - 'ui/app/main.mjs'
       - 'ui/app/graphml-preview-panel.mjs'
       - 'ui/app/nmap-observation-panel.mjs'
+      - 'ui/app/ansible-inventory-panel.mjs'
+      - 'ui/src/browser/ansible-yaml-file-preview.ts'
+      - 'tests/browser/run_ansible_yaml_inventory_ui_tests.mjs'
       - 'ui/app/nmap-association-review.mjs'
       - 'tests/enterprise-import/run_nmap_association_review_tests.mjs'
       - 'ui/src/browser/nmap-xml-file-preview.ts'
@@ -71,6 +74,10 @@ jobs:
         run: |
           tsc -p tests/tsconfig.enterprise-import.json
           node tests/enterprise-import/run_graphml_review_mapping_tests.mjs
+      - name: Ansible YAML read-only UI, secret-redaction and unsafe input gates
+        run: |
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_ansible_yaml_inventory_ui_tests.mjs
       - name: Nmap XML observed-evidence UI and hostile browser file checks
         run: |
           tsc -p tests/tsconfig.browser.json
