@@ -42,6 +42,7 @@ import { previewAnsibleYamlFileReadOnly } from "../src/browser/ansible-yaml-file
 import { AnsibleInventoryPanel } from "./ansible-inventory-panel.mjs";
 import { previewAnsibleIniFileReadOnly } from "../src/browser/ansible-ini-file-preview.js";
 import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
+import { reviewAnsibleIniInventoryAssociations } from "../../enterprise-import/src/ansible-ini-association-review.js";
 import { reviewAnsibleInventoryAssociations } from "../../enterprise-import/src/ansible-association-review.js";
 import { reviewNmapObservationAssociations } from "../../enterprise-import/src/nmap-association-review.js";
 import networkFaultPack from "../../fault-packs/builtin/network-core.json";
@@ -3926,6 +3927,29 @@ function App() {
     }) : null,
     ansibleIniOpen ? e(AnsibleIniInventoryPanel, {
       inspectFile: previewAnsibleIniFileReadOnly,
+      model: workspace.mode === "builder" ? {
+        scenarioId: workspace.source.scenarioId,
+        sourceRevision: workspace.sourceRevision,
+        resources: workspace.source.resources.map(resource => ({ id: resource.id, label: resource.label })),
+      } : null,
+      onExportAssociation: async (inventoryPreview, decision) => {
+        // Revalidate against CURRENT Builder state at click time, not captured UI choices.
+        const currentModel = workspace.mode === "builder" ? {
+          scenarioId: workspace.source.scenarioId,
+          sourceRevision: workspace.sourceRevision,
+          resources: workspace.source.resources.map(resource => ({ id: resource.id, label: resource.label })),
+        } : null;
+        const reviewed = reviewAnsibleIniInventoryAssociations(inventoryPreview, currentModel, decision);
+        if (reviewed.status !== "READY_FOR_EXPORT" || !reviewed.sidecar) {
+          throw new Error(`Ansible INI association blocked: ${reviewed.diagnostics.map(d => d.code).join(", ")}`);
+        }
+        // Sidecar download only: NEVER ScenarioSource, Engine, or modeled connections.
+        downloadJson({
+          filename: `ansible-ini-inventory-associations-${inventoryPreview.sourceSha256.slice(0, 12)}.json`,
+          mime: "application/json",
+          text: JSON.stringify(reviewed.sidecar, null, 2),
+        });
+      },
       onClose: () => setAnsibleIniOpen(false),
     }) : null,
     nmapObservationOpen ? e(NmapObservationPanel, {

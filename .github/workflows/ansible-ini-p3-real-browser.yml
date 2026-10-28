@@ -1,0 +1,67 @@
+name: Ansible INI P3 reviewed association actual Chromium
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/ansible-ini-association-review.ts'
+      - 'tests/enterprise-import/run_ansible_ini_association_review_tests.mjs'
+      - 'ui/app/ansible-ini-association-review.mjs'
+      - 'ui/app/ansible-ini-inspection-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_ansible_ini_association_ui_tests.mjs'
+      - 'tests/browser/run_ansible_ini_inventory_ui_tests.mjs'
+      - 'tests/acceptance/run_ansible_ini_p3_real_browser.py'
+      - '.github/workflows/ansible-ini-p3-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reviewed-ini-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install pinned isolated Playwright and Chromium
+        run: |
+          python3 -m venv /tmp/yadilab-ini-p3-venv
+          /tmp/yadilab-ini-p3-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/yadilab-ini-p3-venv/bin/python -m playwright install --with-deps chromium
+      - name: Strict unit, independent UI source contracts, and compiled YadiLab
+        run: |
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          node tests/enterprise-import/run_ansible_ini_association_review_tests.mjs
+          node tests/enterprise-import/run_ansible_ini_readonly_preview_tests.mjs
+          node tests/enterprise-import/run_ansible_association_review_tests.mjs
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_ansible_ini_association_ui_tests.mjs
+          node tests/browser/run_ansible_ini_inventory_ui_tests.mjs
+          node tests/browser/run_ansible_yaml_inventory_ui_tests.mjs
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real Chromium JSON sidecar download and Builder original equality
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18983 --bind 127.0.0.1 --directory ui/dist >/tmp/yadilab-ini-p3-http.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:18983/browser-build-manifest.json >/dev/null; then break; fi
+            sleep 0.2
+          done
+          curl --fail --silent http://127.0.0.1:18983/browser-build-manifest.json >/dev/null
+          /tmp/yadilab-ini-p3-venv/bin/python tests/acceptance/run_ansible_ini_p3_real_browser.py --url http://127.0.0.1:18983/ --evidence-dir /tmp/yadilab-ini-p3-browser-evidence
+      - name: Upload true Chromium evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-ini-p3-reviewed-browser-evidence
+          path: /tmp/yadilab-ini-p3-browser-evidence/
+          if-no-files-found: ignore

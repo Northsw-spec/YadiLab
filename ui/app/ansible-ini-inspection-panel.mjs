@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { AnsibleIniAssociationReview } from "./ansible-ini-association-review.mjs";
 const e = React.createElement;
 const DISPLAY_HOSTS = 80;
 const DISPLAY_GROUPS = 100;
@@ -42,11 +43,11 @@ export function AnsibleIniInventoryDetails({ result }) {
           ...preview.diagnostics.map((d, i) => e("li", { key: i }, `${d.code}: ${d.message}`)))
       : null,
     e("p", { "data-ansible-ini-activation-status": "BLOCKED" },
-      "Read-only inspection. No Builder resource creation, file export, Ansible execution, modeled cable, association or Engine verification is available."));
+      "Read-only inspection. No Builder resource creation, Ansible execution, modeled cable or Engine verification is available. Optional human-reviewed references are separate unverified JSON sidecars."));
 }
 
-/** Separate modal deliberately receives NO workspace, Engine or import callback. */
-export function AnsibleIniInventoryPanel({ inspectFile, onClose }) {
+/** Separate modal: receives ONLY a read-only Builder identity snapshot and sidecar export callback; no workspace mutation. */
+export function AnsibleIniInventoryPanel({ inspectFile, onClose, model = null, onExportAssociation }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -97,6 +98,10 @@ export function AnsibleIniInventoryPanel({ inspectFile, onClose }) {
       error ? e("p", { role: "alert", className: "helper-status blocked",
           "data-ansible-ini-error": "BLOCKED" }, error) : null,
       e(AnsibleIniInventoryDetails, { result }),
+      result ? e(AnsibleIniAssociationReview, {
+        key: `${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
+        result, model, busy, onExportAssociation,
+      }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-ansible-ini-close": "true",
           onClick: () => { currentRequest.current++; onClose(); } }, "Close without changes"))));
