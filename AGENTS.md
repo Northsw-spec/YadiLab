@@ -18,3 +18,12 @@
 Record the current `main` SHA at start; branch/PR URL; scope and source paths; tests with actual PASS/FAIL/NOT_RUN; CI run URL; risk or unverified items; final code commit SHA; whether `main` includes it. Do not announce delivery as finished if any code exists only in a temporary environment. Do not mix Google Drive document upload with GitHub code delivery.
 
 **Short rule:** GitHub = code and commits. Google Drive = research/plan documents. Temporary environments = never the only copy of a code change.
+
+## CI-first acceptance policy (user-approved 2026-10-28)
+
+1. **Actual GitHub Actions SUCCESS on the exact checked commit is sufficient verification to continue coding checkpoints.** The project owner does not need to repeat equivalent tests manually on Parrot.
+2. Never fabricate coverage: record exactly which features and host environments were exercised. Ubuntu CI can prove only its tested behaviors; it is not evidence of target-native Parrot functionality.
+3. Request human involvement **only** when a feature genuinely needs subjective visual/usability feedback, live user-only access, physical peripherals/hardware, or another property impossible to test credibly in CI. Explain the concrete reason before asking.
+4. Do not block normal code development or merging solely because optional Parrot user acceptance was not run. Maintain and improve automated real-browser CI, negative security oracles, source/commit identity, and release integrity checks.
+5. This user-approved principle supersedes earlier *procedural* Parrot-manual-check gating language in historical plans; it does not weaken security tests or turn NOT_RUN into PASS.
+
