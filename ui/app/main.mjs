@@ -40,6 +40,7 @@ import { previewNmapXmlFileReadOnly } from "../src/browser/nmap-xml-file-preview
 import { NmapObservationPanel } from "./nmap-observation-panel.mjs";
 import { previewAnsibleYamlFileReadOnly } from "../src/browser/ansible-yaml-file-preview.js";
 import { AnsibleInventoryPanel } from "./ansible-inventory-panel.mjs";
+import { reviewAnsibleInventoryAssociations } from "../../enterprise-import/src/ansible-association-review.js";
 import { reviewNmapObservationAssociations } from "../../enterprise-import/src/nmap-association-review.js";
 import networkFaultPack from "../../fault-packs/builtin/network-core.json";
 import windowsFaultPack from "../../fault-packs/builtin/windows-core.json";
@@ -3894,6 +3895,29 @@ function App() {
     networkImportOpen ? e(NetworkTopologyImportPanel, { compilerOptions, setDiagnostics, initialSelection: networkImportSelection, onClose: () => { setNetworkImportOpen(false); setNetworkImportSelection(null); }, onActivate: (next, openProbes) => { beginScenarioTransition(); setImportedProbeAutoOpen(Boolean(openProbes)); setWorkspace(next); setNetworkImportOpen(false); setNetworkImportSelection(null); } }) : null,
     ansibleInventoryOpen ? e(AnsibleInventoryPanel, {
       inspectFile: previewAnsibleYamlFileReadOnly,
+      model: workspace.mode === "builder" ? {
+        scenarioId: workspace.source.scenarioId,
+        sourceRevision: workspace.sourceRevision,
+        resources: workspace.source.resources.map(resource => ({ id: resource.id, label: resource.label })),
+      } : null,
+      onExportAssociation: async (inventoryPreview, decision) => {
+        // Evaluate current Builder state at click time. Never trust stale UI choices.
+        const currentModel = workspace.mode === "builder" ? {
+          scenarioId: workspace.source.scenarioId,
+          sourceRevision: workspace.sourceRevision,
+          resources: workspace.source.resources.map(resource => ({ id: resource.id, label: resource.label })),
+        } : null;
+        const reviewed = reviewAnsibleInventoryAssociations(inventoryPreview, currentModel, decision);
+        if (reviewed.status !== "READY_FOR_EXPORT" || !reviewed.sidecar) {
+          throw new Error(`Ansible association blocked: ${reviewed.diagnostics.map(d => d.code).join(", ")}`);
+        }
+        // Human decision is a separate downloaded report; NEVER ScenarioSource/Engine.
+        downloadJson({
+          filename: `ansible-inventory-associations-${inventoryPreview.sourceSha256.slice(0, 12)}.json`,
+          mime: "application/json",
+          text: JSON.stringify(reviewed.sidecar, null, 2),
+        });
+      },
       onClose: () => setAnsibleInventoryOpen(false),
     }) : null,
     nmapObservationOpen ? e(NmapObservationPanel, {
