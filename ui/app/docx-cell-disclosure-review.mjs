@@ -3,7 +3,7 @@ import { DocxReviewedCellAssociation } from "./docx-reviewed-cell-association.mj
 const e = React.createElement;
 
 /** Only one explicitly consented cell value is ever rendered. No persistent/Engine APIs. */
-export function DocxCellDisclosureReview({ preview, onRevealCell, model = null, onExportAssociation }) {
+export function DocxCellDisclosureReview({ preview, onRevealCell, model = null, onExportAssociation, onStageAssociation }) {
   const [selected, setSelected] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [disclosed, setDisclosed] = useState(null);
@@ -83,7 +83,7 @@ export function DocxCellDisclosureReview({ preview, onRevealCell, model = null, 
       e("button", { type: "button", "data-docx-hide": "true", onClick: clear }, "Hide value")) : null,
     disclosed ? e(DocxReviewedCellAssociation, {
       key: [disclosed.sourceSha256, disclosed.locator.tableOrdinal, disclosed.locator.rowOrdinal, disclosed.locator.cellOrdinal].join(":"),
-      disclosed, model, onExportAssociation,
+      disclosed, model, onExportAssociation, onStageAssociation,
     }) : null
   );
 }

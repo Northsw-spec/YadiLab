@@ -1,0 +1,73 @@
+name: DOCX P5 exact-source multi-reference Chromium acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/docx-multi-reference-review.ts'
+      - 'ui/app/docx-multi-reference-queue.mjs'
+      - 'ui/app/docx-reviewed-cell-association.mjs'
+      - 'ui/app/docx-cell-disclosure-review.mjs'
+      - 'ui/app/docx-structure-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_docx_p5_multi_reference_tests.mjs'
+      - 'tests/acceptance/run_docx_p5_real_browser.py'
+      - 'docs/architecture/DOCX_P5_BOUNDED_MULTI_REFERENCE_ORACLES.md'
+      - '.github/workflows/docx-p5-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  p5-real-compiled-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install isolated pinned Chromium tests
+        run: |
+          python3 -m venv /tmp/docx-p5-venv
+          /tmp/docx-p5-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/docx-p5-venv/bin/python -m playwright install --with-deps chromium
+      - name: Compile and run independently frozen P1-P5 security/source tests
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/enterprise-import/run_docx_tables_p1_tests.mjs
+          node tests/browser/run_docx_structure_ui_tests.mjs
+          node tests/browser/run_docx_p3_cell_review_tests.mjs
+          node tests/browser/run_docx_p4_reviewed_association_tests.mjs
+          node tests/browser/run_docx_p5_multi_reference_tests.mjs
+      - name: Build and verify actual clean browser release
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real Chromium P2 through P5 on exact compiled browser
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18990 --bind 127.0.0.1 --directory ui/dist >/tmp/docx-p5-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for n in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18990/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18990/browser-build-manifest.json >/dev/null
+          /tmp/docx-p5-venv/bin/python tests/acceptance/run_docx_p2_real_browser.py --url http://127.0.0.1:18990/ --evidence-dir /tmp/docx-p5-actual/p2
+          /tmp/docx-p5-venv/bin/python tests/acceptance/run_docx_p3_real_browser.py --url http://127.0.0.1:18990/ --evidence-dir /tmp/docx-p5-actual/p3
+          /tmp/docx-p5-venv/bin/python tests/acceptance/run_docx_p4_real_browser.py --url http://127.0.0.1:18990/ --evidence-dir /tmp/docx-p5-actual/p4
+          /tmp/docx-p5-venv/bin/python tests/acceptance/run_docx_p5_real_browser.py --url http://127.0.0.1:18990/ --evidence-dir /tmp/docx-p5-actual/p5
+      - name: Upload factual evidence, if present
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docx-p5-actual-chromium
+          path: /tmp/docx-p5-actual/
+          if-no-files-found: ignore

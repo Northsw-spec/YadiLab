@@ -46,6 +46,7 @@ import { previewDocxFileStructure, reviewDocxFileCell } from "../src/browser/doc
 import { DocxTableStructurePanel } from "./docx-structure-panel.mjs";
 import { reviewAnsibleIniInventoryAssociations } from "../../enterprise-import/src/ansible-ini-association-review.js";
 import { reviewDocxCellAssociation } from "../../enterprise-import/src/docx-association-review.js";
+import { reviewDocxMultiReferences } from "../../enterprise-import/src/docx-multi-reference-review.js";
 import { reviewAnsibleInventoryAssociations } from "../../enterprise-import/src/ansible-association-review.js";
 import { reviewNmapObservationAssociations } from "../../enterprise-import/src/nmap-association-review.js";
 import networkFaultPack from "../../fault-packs/builtin/network-core.json";
@@ -3933,6 +3934,36 @@ function App() {
     docxStructureOpen ? e(DocxTableStructurePanel, {
       inspectFile: previewDocxFileStructure,
       reviewFile: reviewDocxFileCell,
+      onBuildAssociation: (reviewedCell, decision) => {
+        const currentModel=workspace.mode==="builder" ? {
+          scenarioId:workspace.source.scenarioId,sourceRevision:workspace.sourceRevision,
+          resources:workspace.source.resources.map(r=>({id:r.id,label:r.label})),
+        } : null;
+        const reviewed=reviewDocxCellAssociation(reviewedCell,currentModel,decision);
+        if(reviewed.status!=="READY_FOR_EXPORT" || !reviewed.sidecar){
+          const err=new Error("DOCX_MULTI_ASSOC_BLOCKED");
+          err.code=reviewed.diagnostics[0]?.code??"DOCX_MULTI_ASSOC_BLOCKED";
+          throw err;
+        }
+        return reviewed.sidecar;
+      },
+      onExportMulti: (staged, decision) => {
+        const currentModel=workspace.mode==="builder" ? {
+          scenarioId:workspace.source.scenarioId,sourceRevision:workspace.sourceRevision,
+          resources:workspace.source.resources.map(r=>({id:r.id,label:r.label})),
+        } : null;
+        const reviewed=reviewDocxMultiReferences(staged,currentModel,decision);
+        if(reviewed.status!=="READY_FOR_EXPORT" || !reviewed.sidecar){
+          const err=new Error("DOCX_MULTI_EXPORT_BLOCKED");
+          err.code=reviewed.diagnostics[0]?.code??"DOCX_MULTI_EXPORT_BLOCKED";
+          throw err;
+        }
+        downloadJson({
+          filename:"docx-reviewed-multi-"+reviewed.sidecar.source.sha256.slice(0,12)+".json",
+          mime:"application/json",
+          text:JSON.stringify(reviewed.sidecar,null,2),
+        });
+      },
       model: workspace.mode === "builder" ? {
         scenarioId: workspace.source.scenarioId,
         sourceRevision: workspace.sourceRevision,
