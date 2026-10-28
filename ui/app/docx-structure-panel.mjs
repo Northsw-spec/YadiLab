@@ -8,6 +8,31 @@ export function DocxTableStructureDetails({ result }) {
   if (!result) return e("p", { "data-docx-empty": "true" },
     "Choose a local .docx file. This inspection deliberately displays no document cell text.");
   const { filename, preview } = result;
+  const tableItems = [];
+  for (const table of preview.tables.slice(0, DISPLAY_TABLES)) {
+    const rowItems = [];
+    for (const row of table.rows.slice(0, DISPLAY_ROWS)) {
+      const cellItems = row.cells.slice(0, DISPLAY_CELLS).map((cell) =>
+        e("li", {
+            key: cell.cellOrdinal,
+            "data-docx-cell": `${table.tableOrdinal}:${row.rowOrdinal}:${cell.cellOrdinal}`,
+          },
+          `Cell ${cell.cellOrdinal + 1}: ${cell.textCodeUnits} text code units · source table ${cell.locator.tableOrdinal + 1}, row ${cell.locator.rowOrdinal + 1}, cell ${cell.locator.cellOrdinal + 1}`));
+      rowItems.push(e("li", { key: row.rowOrdinal,
+          "data-docx-row": `${table.tableOrdinal}:${row.rowOrdinal}` },
+        `Row ${row.rowOrdinal + 1}: ${row.cells.length} cells`,
+        e("ul", { className: "validation-list" }, ...cellItems),
+        row.cells.length > DISPLAY_CELLS ? e("p", null, "Further cells not displayed.") : null));
+    }
+    if (table.rows.length > DISPLAY_ROWS) {
+      rowItems.push(e("li", { key: "limit", "data-docx-row-limit": "true" },
+        `Showing first ${DISPLAY_ROWS} of ${table.rows.length} rows.`));
+    }
+    tableItems.push(e("li", { key: table.tableOrdinal,
+      "data-docx-table": String(table.tableOrdinal) },
+      e("strong", null, `Table ${table.tableOrdinal + 1}: ${table.rows.length} rows`),
+      e("ol", { className: "validation-list" }, ...rowItems)));
+  }
   return e("section", { className: "network-import-preview", "data-docx-preview": "CONFIG_DOCUMENTED" },
     e("h3", null, "DOCX table structure — ", filename),
     e("p", { "data-docx-summary": "true" },
@@ -15,22 +40,7 @@ export function DocxTableStructureDetails({ result }) {
     e("p", { "data-docx-source-hash": "true" }, `Original SHA-256: ${preview.sourceSha256}`),
     e("p", { className: "helper-note", "data-docx-truth-boundary": "true" },
       "CONFIG_DOCUMENTED, REVIEW_REQUIRED. These are document table shapes only. No cell values, source secrets, identified machines, verified physical links, Builder changes or Engine PASS."),
-    e("ol", { className: "validation-list", "data-docx-tables": "true" },
-      ...preview.tables.slice(0, DISPLAY_TABLES).map((table) =>
-        e("li", { key: table.tableOrdinal, "data-docx-table": String(table.tableOrdinal) },
-          e("strong", null, `Table ${table.tableOrdinal + 1}: ${table.rows.length} rows`),
-          e("ol", { className: "validation-list" },
-            ...table.rows.slice(0, DISPLAY_ROWS).map((row) =>
-              e("li", { key: row.rowOrdinal, "data-docx-row": `${table.tableOrdinal}:${row.rowOrdinal}` },
-                `Row ${row.rowOrdinal + 1}: ${row.cells.length} cells`,
-                e("ul", { className: "validation-list" },
-                  ...row.cells.slice(0, DISPLAY_CELLS).map((cell) =>
-                    e("li", { key: cell.cellOrdinal,
-                        "data-docx-cell": `${table.tableOrdinal}:${row.rowOrdinal}:${cell.cellOrdinal}` },
-                      `Cell ${cell.cellOrdinal + 1}: ${cell.textCodeUnits} text code units · source table ${cell.locator.tableOrdinal + 1}, row ${cell.locator.rowOrdinal + 1}, cell ${cell.locator.cellOrdinal + 1}`)),
-                row.cells.length > DISPLAY_CELLS ? e("p", null, "Further cells not displayed.") : null))),
-            table.rows.length > DISPLAY_ROWS
-              ? e("li", { "data-docx-row-limit": "true" }, `Showing first ${DISPLAY_ROWS} of ${table.rows.length} rows.`) : null))),
+    e("ol", { className: "validation-list", "data-docx-tables": "true" }, ...tableItems),
     e("p", { "data-docx-activation-status": "BLOCKED" },
       "Read-only structure inspection. No DOCX-to-topology mapping or simulation activation. Close without changes."));
 }
