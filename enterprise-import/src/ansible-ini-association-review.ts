@@ -157,7 +157,7 @@ export function reviewAnsibleIniInventoryAssociations(
         { reportedConnectionAddress: host.reportedConnectionAddress }),
       addressTruth: host.addressTruth,
       directGroups: [...host.directGroups],
-      hostLocators: host.locators.map(l => ({ ...l })),
+      hostLocators: host.locators.map((l: AnsibleIniHostLocator) => ({ ...l })),
       targetResourceId: choice.resourceId,
       assertion: "USER_ASSERTED_ASSOCIATION_NOT_VERIFIED",
     });
