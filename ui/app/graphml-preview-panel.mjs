@@ -32,7 +32,7 @@ export function GraphmlPreviewDetails({ result }) {
       ? e("ul", { className: "validation-list", "data-graphml-warnings": "true" },
           ...preview.diagnostics.map((d, i) => e("li", { key: i }, `${d.code}: ${d.message}`)))
       : null,
-    e("p", { className: "helper-note", "data-graphml-activation-status": "BLOCKED" },
+    e("p", { className: "helper-note", "data-graphml-activation-status": "REVIEW_REQUIRED" },
       "Read-only source inspection. Creating a separate Builder draft requires explicit reviewed mapping below; no Engine network truth is inferred."),
   );
 }
