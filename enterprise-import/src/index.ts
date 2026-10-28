@@ -23,3 +23,7 @@ export type { ReconciliationGroup, ReconciliationStatus, ReconciliationSummary }
 
 export * from "./merge.js";
 export { normalizeNetworkInventoryDocument } from "./network-inventory.js";
+
+// Read-only GraphML candidate preview. Does NOT register an import adapter or activate a scenario.
+export { GRAPHML_PREVIEW_PROFILE, previewGraphmlReadOnly } from "./graphml-preview.js";
+export type { GraphmlReadOnlyPreview, GraphmlPreviewNode, GraphmlPreviewEdge, GraphmlSourceLocator } from "./graphml-preview.js";
