@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
+import { DocxReviewedCellAssociation } from "./docx-reviewed-cell-association.mjs";
 const e = React.createElement;
 
 /** Only one explicitly consented cell value is ever rendered. No persistent/Engine APIs. */
-export function DocxCellDisclosureReview({ preview, onRevealCell }) {
+export function DocxCellDisclosureReview({ preview, onRevealCell, model = null, onExportAssociation }) {
   const [selected, setSelected] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [disclosed, setDisclosed] = useState(null);
@@ -79,6 +80,10 @@ export function DocxCellDisclosureReview({ preview, onRevealCell }) {
     disclosed ? e("p", { "data-docx-revealed": "UNVERIFIED" },
       "Selected cell (DOCUMENTED, NOT VERIFIED): ",
       e("code", { "data-docx-revealed-value": "true" }, disclosed.text),
-      e("button", { type: "button", "data-docx-hide": "true", onClick: clear }, "Hide value")) : null
+      e("button", { type: "button", "data-docx-hide": "true", onClick: clear }, "Hide value")) : null,
+    disclosed ? e(DocxReviewedCellAssociation, {
+      key: [disclosed.sourceSha256, disclosed.locator.tableOrdinal, disclosed.locator.rowOrdinal, disclosed.locator.cellOrdinal].join(":"),
+      disclosed, model, onExportAssociation,
+    }) : null
   );
 }

@@ -46,7 +46,7 @@ export function DocxTableStructureDetails({ result }) {
       "Read-only structure inspection. No DOCX-to-topology mapping or simulation activation. Close without changes."));
 }
 
-export function DocxTableStructurePanel({ inspectFile, reviewFile, onClose }) {
+export function DocxTableStructurePanel({ inspectFile, reviewFile, model = null, onExportAssociation, onClose }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -103,6 +103,23 @@ export function DocxTableStructurePanel({ inspectFile, reviewFile, onClose }) {
       result && typeof reviewFile === "function" ? e(DocxCellDisclosureReview, {
         key: result.preview.sourceSha256 + ":" + result.filename,
         preview: result.preview,
+        model,
+        onExportAssociation: async (disclosed, decision) => {
+          const request = currentRequest.current;
+          const selectedFile = localFile.current;
+          if (!selectedFile || typeof onExportAssociation !== "function") {
+            throw new Error("DOCX_ASSOC_EXPORT_UNAVAILABLE");
+          }
+          // Re-read and re-run full P3 security checks immediately before export.
+          const current = await reviewFile(selectedFile, result.preview.sourceSha256, disclosed.locator, true);
+          if (request !== currentRequest.current || selectedFile !== localFile.current ||
+              current.sourceSha256 !== disclosed.sourceSha256 ||
+              current.text !== disclosed.text ||
+              JSON.stringify(current.locator) !== JSON.stringify(disclosed.locator)) {
+            throw new Error("DOCX_ASSOC_STALE_REVIEW");
+          }
+          return onExportAssociation(current, decision);
+        },
         onRevealCell: async (locator, acknowledged) => {
           const request = currentRequest.current;
           const selectedFile = localFile.current;
