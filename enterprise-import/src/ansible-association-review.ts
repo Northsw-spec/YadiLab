@@ -54,7 +54,7 @@ export interface AnsibleAssociationResult {
 function blocked(code: string, message: string): AnsibleAssociationResult {
   return { status: "BLOCKED", diagnostics: [{ code, message }] };
 }
-const validId = (x: unknown): x is string => typeof x === "string" && ID.test(x);
+const validId = (x: unknown): x is string => typeof x === "string" && ID.test(x) && !["__proto__", "prototype", "constructor"].includes(x);
 const validRevision = (x: unknown) => Number.isSafeInteger(x) && (x as number) >= 0;
 
 /**
