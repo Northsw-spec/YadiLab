@@ -35,3 +35,10 @@ export type { GraphmlManualReview, GraphmlManualRole, GraphmlBuilderMapping, Gra
 // Read-only Nmap scan-time observations. NOT an active importer or Engine source.
 export { NMAP_EVIDENCE_PROFILE, previewNmapXmlObservations } from "./nmap-xml-preview.js";
 export type { NmapReadOnlyEvidence, NmapObservedHost, NmapObservedPort, NmapEvidenceLocator } from "./nmap-xml-preview.js";
+
+// Reviewed Nmap association sidecars are independent of ScenarioSource/Engine.
+export { reviewNmapObservationAssociations } from "./nmap-association-review.js";
+export type {
+  NmapModelSnapshot, NmapModeledResource, NmapManualAssociationDecision,
+  NmapReviewedAssociation, NmapAssociationSidecar, NmapAssociationResult,
+} from "./nmap-association-review.js";
