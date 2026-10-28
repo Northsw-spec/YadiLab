@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { DocxCellDisclosureReview } from "./docx-cell-disclosure-review.mjs";
+import { DocxMultiReferenceQueue } from "./docx-multi-reference-queue.mjs";
 const e = React.createElement;
 const DISPLAY_TABLES = 20;
 const DISPLAY_ROWS = 30;
@@ -46,10 +47,12 @@ export function DocxTableStructureDetails({ result }) {
       "Read-only structure inspection. No DOCX-to-topology mapping or simulation activation. Close without changes."));
 }
 
-export function DocxTableStructurePanel({ inspectFile, reviewFile, model = null, onExportAssociation, onClose }) {
+export function DocxTableStructurePanel({ inspectFile, reviewFile, model = null, onExportAssociation, onBuildAssociation, onExportMulti, onClose }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [multiItems, setMultiItems] = useState([]);
+  const [multiError, setMultiError] = useState("");
   const currentRequest = useRef(0);
   const focus = useRef(null);
   const localFile = useRef(null);
@@ -65,6 +68,7 @@ export function DocxTableStructurePanel({ inspectFile, reviewFile, model = null,
     if (!file) return;
     const request = ++currentRequest.current;
     localFile.current = file;
+    setMultiItems([]);setMultiError("");
     setResult(null); setError(""); setBusy(true);
     try {
       const next = await inspectFile(file);
@@ -79,6 +83,77 @@ export function DocxTableStructurePanel({ inspectFile, reviewFile, model = null,
     } finally {
       if (request === currentRequest.current) setBusy(false);
     }
+  };
+  const validateCellNow = async (disclosed, decision) => {
+    const request = currentRequest.current, file = localFile.current;
+    if (!file || typeof onBuildAssociation !== "function" || typeof reviewFile !== "function") {
+      throw Object.assign(new Error("DOCX_MULTI_UNAVAILABLE"),{code:"DOCX_MULTI_UNAVAILABLE"});
+    }
+    const current = await reviewFile(file, disclosed.sourceSha256, disclosed.locator, true);
+    if (request !== currentRequest.current || file !== localFile.current ||
+        current.sourceSha256 !== disclosed.sourceSha256 ||
+        current.text !== disclosed.text ||
+        JSON.stringify(current.locator) !== JSON.stringify(disclosed.locator)) {
+      throw Object.assign(new Error("DOCX_MULTI_STALE"),{code:"DOCX_MULTI_STALE"});
+    }
+    return onBuildAssociation(current, decision);
+  };
+  const stageReference = async (disclosed, decision) => {
+    if (!result || result.preview.sourceSha256 !== disclosed.sourceSha256 || !model) {
+      throw Object.assign(new Error("DOCX_MULTI_STALE"),{code:"DOCX_MULTI_STALE"});
+    }
+    if (multiItems.length >= 10) throw Object.assign(new Error("DOCX_MULTI_COUNT_INVALID"),{code:"DOCX_MULTI_COUNT_INVALID"});
+    const item = await validateCellNow(disclosed,decision);
+    const loc = item?.source?.cellLocator;
+    if (!loc || item.source.sha256 !== result.preview.sourceSha256) {
+      throw Object.assign(new Error("DOCX_MULTI_REFERENCE_INVALID"),{code:"DOCX_MULTI_REFERENCE_INVALID"});
+    }
+    const key = [loc.tableOrdinal,loc.rowOrdinal,loc.cellOrdinal].join(":");
+    if (multiItems.some(other => {
+      const a=other.source.cellLocator;
+      return [a.tableOrdinal,a.rowOrdinal,a.cellOrdinal].join(":")===key ||
+        other.association.targetResourceId===item.association.targetResourceId;
+    })) throw Object.assign(new Error("DOCX_MULTI_DUPLICATE_REFERENCE"),{code:"DOCX_MULTI_DUPLICATE_REFERENCE"});
+    // Store only P4's no-value JSON-compatible reference. Never store disclosed.text.
+    setMultiItems(prev => [...prev,item]);
+    setMultiError("");
+  };
+  const exportMulti = async () => {
+    if (!result || !localFile.current || multiItems.length < 2 || !model ||
+        typeof onBuildAssociation !== "function" || typeof onExportMulti !== "function") {
+      throw Object.assign(new Error("DOCX_MULTI_UNAVAILABLE"),{code:"DOCX_MULTI_UNAVAILABLE"});
+    }
+    const request=currentRequest.current,file=localFile.current;
+    const checked=[];
+    for (const item of multiItems) {
+      // Re-check *every* selected cell against current source bytes and P3 secret rules.
+      const loc=item.source.cellLocator;
+      const now=await reviewFile(file,result.preview.sourceSha256,loc,true);
+      if(request!==currentRequest.current || file!==localFile.current ||
+         now.sourceSha256!==item.source.sha256 ||
+         JSON.stringify(now.locator)!==JSON.stringify(loc)) {
+        throw Object.assign(new Error("DOCX_MULTI_STALE"),{code:"DOCX_MULTI_STALE"});
+      }
+      const verified=await onBuildAssociation(now,{
+        sourceSha256:item.source.sha256,
+        scenarioId:item.targetModel.scenarioId,
+        sourceRevision:item.targetModel.sourceRevision,
+        targetResourceId:item.association.targetResourceId,
+        acknowledgeNotVerified:true,
+      });
+      if(JSON.stringify(verified)!==JSON.stringify(item)){
+        throw Object.assign(new Error("DOCX_MULTI_STALE"),{code:"DOCX_MULTI_STALE"});
+      }
+      checked.push(verified);
+    }
+    if(request!==currentRequest.current || file!==localFile.current){
+      throw Object.assign(new Error("DOCX_MULTI_STALE"),{code:"DOCX_MULTI_STALE"});
+    }
+    return onExportMulti(checked,{
+      sourceSha256:result.preview.sourceSha256,
+      scenarioId:model.scenarioId,sourceRevision:model.sourceRevision,
+      acknowledgeNotVerified:true,
+    });
   };
   return e("div", { className: "network-import-overlay", "data-docx-overlay": "true" },
     e("section", { className: "network-import-panel", role: "dialog", "aria-modal": "true",
@@ -104,6 +179,7 @@ export function DocxTableStructurePanel({ inspectFile, reviewFile, model = null,
         key: result.preview.sourceSha256 + ":" + result.filename,
         preview: result.preview,
         model,
+        onStageAssociation: stageReference,
         onExportAssociation: async (disclosed, decision) => {
           const request = currentRequest.current;
           const selectedFile = localFile.current;
@@ -129,6 +205,12 @@ export function DocxTableStructurePanel({ inspectFile, reviewFile, model = null,
           return answer;
         },
       }) : null,
+      result && model && typeof onExportMulti==="function" ? e(DocxMultiReferenceQueue,{
+        items:multiItems,model,busy,
+        onRemove:index=>setMultiItems(prev=>prev.filter((_,i)=>i!==index)),
+        onExport:exportMulti,
+      }) : null,
+      multiError ? e("p",{role:"alert","data-docx-multi-parent-error":"BLOCKED"},multiError):null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-docx-close": "true",
           onClick: () => { currentRequest.current++; localFile.current = null; onClose(); } }, "Close without changes"))));
