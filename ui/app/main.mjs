@@ -2568,7 +2568,9 @@ function RuntimeObservationPanel({ workspace, setDiagnostics, onSaveEvidence, on
 }
 
 
-function RuntimeActiveProbePanel({ workspace, setDiagnostics, onSaveEvidence, onVisualJourney, onTopologyState, scenarioLoadKey = 0 }) {
+function RuntimeActiveProbePanel({ workspace, setDiagnostics, onSaveEvidence, onVisualJourney, onTopologyState, scenarioLoadKey = 0, autoOpen = false }) {
+  const probeDisclosureRef = useRef(null);
+  useEffect(() => { if (autoOpen && probeDisclosureRef.current) probeDisclosureRef.current.open = true; }, [autoOpen, workspace.scenario.sourceHash, scenarioLoadKey]);
   const acceptancePresets = verifiedDeliveryProbePresets[workspace.scenario.scenarioId] ?? [];
   const initial = buildRuntimeActiveProbeModel(workspace, workspace.selection.primary);
   const [sourceId, setSourceId] = useState(initial.sourceId ?? "");
@@ -2635,7 +2637,7 @@ function RuntimeActiveProbePanel({ workspace, setDiagnostics, onSaveEvidence, on
     }
   };
 
-  return e("details", { className: "observation-helper", "data-active-probe-engine": "wave2" },
+  return e("details", { ref: probeDisclosureRef, className: "observation-helper", "data-active-probe-engine": "wave2" },
     e("summary", null, "Modellerade aktiva prober"),
     e("div", { className: "observation-helper-body" },
       e("p", { className: "helper-note" }, "Kör deterministiska skrivskyddade anslutnings-, DNS- och DHCP-prober genom aktuellt modellerat Engine-tillstånd. Kommandonamnen är endast pedagogiska; inget gästkommando, paket, socket, DNS-anrop eller DHCP-utbyte körs."),
@@ -2821,7 +2823,7 @@ function RuntimeTroubleshootingNotebookPanel({ workspace, setWorkspace, notebook
   );
 }
 
-function Sidebar({ workspace, setWorkspace, diagnostics, setDiagnostics, notebook, setNotebook, onVisualJourney, onTopologyState, scenarioLoadKey = 0 }) {
+function Sidebar({ workspace, setWorkspace, diagnostics, setDiagnostics, notebook, setNotebook, onVisualJourney, onTopologyState, scenarioLoadKey = 0, probeAutoOpen = false }) {
   const selected = workspace.selection.primary;
   const semantic = workspace.mode === "builder"
     ? [...workspace.source.zones, ...workspace.source.resources, ...workspace.source.connections].find((x) => x.id === selected)
@@ -2902,7 +2904,7 @@ function Sidebar({ workspace, setWorkspace, diagnostics, setDiagnostics, noteboo
           e(FaultInjectionPanel, { workspace, setWorkspace, setDiagnostics, onTopologyState }),
           e(RuntimeGuidedTroubleshootingPanel, { workspace, notebook, setDiagnostics }),
           e(RuntimeObservationPanel, { workspace, setDiagnostics, onSaveEvidence: saveObservationEvidence, onTopologyState }),
-          e(RuntimeActiveProbePanel, { workspace, setDiagnostics, onSaveEvidence: saveProbeEvidence, onVisualJourney, onTopologyState, scenarioLoadKey }),
+          e(RuntimeActiveProbePanel, { workspace, setDiagnostics, onSaveEvidence: saveProbeEvidence, onVisualJourney, onTopologyState, scenarioLoadKey, autoOpen: probeAutoOpen }),
           e(RuntimeTroubleshootingNotebookPanel, { workspace, setWorkspace, notebook, setNotebook, setDiagnostics, onTopologyState }),
           e("details", { className: "inspector-disclosure" }, e("summary", null, "Inspektör"), e("pre", { className: "inspector" }, semantic ? pretty(semantic) : "Select a topology object."))),
     workspace.mode === "runtime" ? e("section", { className: "operation-editor" },
@@ -3031,7 +3033,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     document.addEventListener("keydown", onEscape);
     return () => document.removeEventListener("keydown", onEscape);
   }, [busy, onClose]);
-  const activate = async () => {
+  const activate = async (mode = "builder") => {
     if (!preview?.ok || !preview.source || busy) return;
     setBusy(true); setFailure("");
     try {
@@ -3050,7 +3052,23 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       }
       next = layout.workspace;
       setDiagnostics([...preview.diagnostics.map((d) => ({ code: d.code, severity: d.severity, message: d.message })), ...layout.diagnostics]);
-      onActivate(next);
+      if (mode === "runtime") {
+        const runtime = previewRuntime(next);
+        if (!runtime.ok || runtime.workspace?.mode !== "runtime") {
+          const errors = runtime.diagnostics ?? [];
+          setDiagnostics(errors);
+          setFailure(`Runtime unavailable: ${errors.map((d) => d.code).join(", ") || "unknown error"}`);
+          return;
+        }
+        const model = buildRuntimeActiveProbeModel(runtime.workspace);
+        if (!model.sources.length || !model.probes.length) {
+          setFailure("No explicitly declared Windows/Linux source hosts support modeled probes. Open Builder to edit device types; do not infer an OS from an IP address.");
+          return;
+        }
+        onActivate(runtime.workspace, true);
+      } else {
+        onActivate(next, false);
+      }
     } catch (error) {
       setFailure(error instanceof Error ? error.message : String(error));
       setDiagnostics([{ code: "NETWORK_IMPORT_ACTIVATION_BLOCKED", severity: "error", message: error instanceof Error ? error.message : String(error) }]);
@@ -3059,7 +3077,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   return e("div", { className: "network-import-overlay", "data-network-import-overlay": "true" },
     e("section", { id: "network-topology-import-panel", ref: panelRef, tabIndex: -1, role: "dialog", "aria-modal": "true", className: "network-import-panel", "data-network-import-panel": "ready", "aria-label": "Import Network from Excel / CSV" },
     e("div", { className: "network-import-heading" },
-      e("div", null, e("h2", null, "Import Network from Excel / CSV"), e("p", null, "Offline import: select → review → validate → create Builder topology. Existing workspace remains unchanged until you confirm.")),
+      e("div", null, e("h2", null, "Import Network from Excel / CSV"), e("p", null, "Offline import: select → review → validate → open Runtime probes or Builder. Existing workspace remains unchanged until you confirm.")),
       e("button", { type: "button", onClick: onClose, disabled: busy, "aria-label": "Close network import" }, "Close")),
     e("p", { className: "helper-note" }, "Supported: .xlsx, .ods, .csv, .tsv. Use a Devices sheet (Asset ID, Hostname, Device Type, IP Address, Connected To), or a canonical Nodes + Links workbook. Connections require explicit endpoint IDs; IP addresses and gateways never imply cabling."),
     e("label", { className: "file-button" }, busy ? "Reading network document…" : "Choose Excel / CSV network file",
@@ -3070,7 +3088,10 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       e("p", null, `Found sheets: ${preview.sheets.join(", ") || "none"} · Devices: ${preview.devices} · Explicit links: ${preview.links}`),
       e("p", { className: "helper-note" }, preview.links === 0 ? "No physical connections provided. Devices will be shown without invented links." : "Only explicitly declared links will appear in the topology."),
       preview.diagnostics.length ? e("ul", { className: "validation-list" }, ...preview.diagnostics.slice(0, 30).map((d, i) => e("li", { key: i }, `${d.severity.toUpperCase()}: ${d.code} – ${d.message}`))) : e("p", null, "No import diagnostics."),
-      e("button", { type: "button", disabled: !preview.ok || busy, "data-network-import-activate": "true", onClick: activate }, busy ? "Validating…" : "Create topology in Builder (replace current workspace)"),
+      e("div", { className: "network-import-actions" },
+        e("button", { type: "button", disabled: !preview.ok || busy, "data-network-import-runtime": "true", onClick: () => activate("runtime") }, busy ? "Validating…" : "Open modeled Runtime + Probes"),
+        e("button", { type: "button", disabled: !preview.ok || busy, "data-network-import-activate": "true", onClick: () => activate("builder") }, busy ? "Validating…" : "Create topology in Builder (edit only)")),
+      e("p", { className: "helper-note", "data-import-probe-boundary": "true" }, "Modeled probes use declared Windows/Linux source hosts and existing Engine evidence. A topology inventory alone cannot prove connectivity, routing, DNS or open ports: UNKNOWN is expected when required facts are absent. No real traffic is sent."),
     ) : null,
     ),
   );
@@ -3104,6 +3125,12 @@ function MainActions({ onImportNetwork, onImportNetworkFile, workspace, busy, br
       e("input", { type: "file", ref: networkPickerRef, accept: ".xlsx,.ods,.csv,.tsv", onChange: acceptNetworkFile, style: { display: "none" }, tabIndex: -1, "aria-label": "Select network inventory document", "data-network-import-quick-file": "true" }),
       e("span", null, "Select .xlsx / .ods / .csv / .tsv directly. A review dialog opens before topology replacement."),
     ),
+    workspace.mode === "runtime" ? e("button", { type: "button", "data-open-active-probes": "true", className: "network-import-runtime-button", onClick: () => {
+      const panel = document.querySelector('[data-active-probe-engine="wave2"]');
+      if (!panel) return;
+      panel.open = true;
+      panel.scrollIntoView({ block: "center", behavior: "smooth" });
+    } }, "Run Modeled Probes") : null,
     e("div", { className: "main-actions-menus" },
       e(WorkspaceMenu, { label: "Lab & Scenario" },
         e("button", { type: "button", onClick: () => openEnterpriseScenario(true), disabled: busy || !enterpriseScenarioId }, busy ? "Startar enterprise-labb…" : "Starta enterprise-labb"),
@@ -3281,6 +3308,7 @@ function App() {
   const [importWorkbench, setImportWorkbench] = useState(() => emptyImportWorkbench());
   const [networkImportOpen, setNetworkImportOpen] = useState(false);
   const [networkImportSelection, setNetworkImportSelection] = useState(null);
+  const [importedProbeAutoOpen, setImportedProbeAutoOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState([]);
   const [busy, setBusy] = useState(false);
   const [guidedLabId, setGuidedLabId] = useState(() => builtinGuidedLabs[0]?.id ?? "");
@@ -3835,7 +3863,7 @@ function App() {
 
   return e("div", { className: "app-frame", "data-app-runtime": "ready", "data-runtime-scenario-id": workspace.mode === "runtime" ? workspace.scenario.scenarioId : workspace.source.scenarioId, "data-runtime-scenario-hash": workspace.mode === "runtime" ? workspace.scenario.sourceHash : "builder" },
     e("header", { className: "app-header" },
-      e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": "1.8.0-dev.13" }, "v1.8.0-dev.13"), e("small", { "data-development-checkpoint": "IMPORT-003" }, "IMPORT-003 · One-click Excel / CSV import")),
+      e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": "1.8.0-dev.14" }, "v1.8.0-dev.14"), e("small", { "data-development-checkpoint": "IMPORT-004" }, "IMPORT-004 · Imported topology probes")),
       e(MainActions, { onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
@@ -3847,7 +3875,7 @@ function App() {
         e("span", null, `Beroendedjup ${selectedGuidedLab.difficulty.dependencyDepth}`),
         e("span", null, `Evidenssynlighet ${selectedGuidedLab.difficulty.evidenceVisibility}`),
         e("span", null, `Åtgärdsbegränsningar ${selectedGuidedLab.difficulty.remediationConstraints}`))) : null,
-    networkImportOpen ? e(NetworkTopologyImportPanel, { compilerOptions, setDiagnostics, initialSelection: networkImportSelection, onClose: () => { setNetworkImportOpen(false); setNetworkImportSelection(null); }, onActivate: (next) => { beginScenarioTransition(); setWorkspace(next); setNetworkImportOpen(false); setNetworkImportSelection(null); } }) : null,
+    networkImportOpen ? e(NetworkTopologyImportPanel, { compilerOptions, setDiagnostics, initialSelection: networkImportSelection, onClose: () => { setNetworkImportOpen(false); setNetworkImportSelection(null); }, onActivate: (next, openProbes) => { beginScenarioTransition(); setImportedProbeAutoOpen(Boolean(openProbes)); setWorkspace(next); setNetworkImportOpen(false); setNetworkImportSelection(null); } }) : null,
     e("main", { className: "workspace-grid" },
       e(ControlCenter, null,
         e(ControlSection, { title: "Verification, experiments & promotion", description: "Evidence, intent, matrix and promotion workflows stay available on demand.", searchTerms: "Troubleshooting Case Network Intent Scenario Experiments Verified Baselines Regression Campaigns Transition Matrix Campaign Bundle Change Sets Verification Suites What-If Matrix Promotion Rollback" },
@@ -3987,7 +4015,7 @@ function App() {
         ) : null,
       ),
       e(Topology, { workspace, setWorkspace, setDiagnostics, journey: renderableJourney, stateFocus: topologyStateFocus }),
-        workspace.mode === "runtime" ? e(Sidebar, { workspace, setWorkspace, diagnostics, setDiagnostics, scenarioLoadKey: verifiedDeliveryLoadKey, notebook, setNotebook, onVisualJourney: (nextJourney) => { setTopologyStateFocus(null); setActiveJourney(nextJourney); }, onTopologyState: (nextState) => { setActiveJourney(null); setTopologyStateFocus(nextState); } }) : null,
+        workspace.mode === "runtime" ? e(Sidebar, { workspace, setWorkspace, diagnostics, setDiagnostics, scenarioLoadKey: verifiedDeliveryLoadKey, probeAutoOpen: importedProbeAutoOpen, notebook, setNotebook, onVisualJourney: (nextJourney) => { setTopologyStateFocus(null); setActiveJourney(nextJourney); }, onTopologyState: (nextState) => { setActiveJourney(null); setTopologyStateFocus(nextState); } }) : null,
         e(RuntimeResults, { workspace }),
         evidenceWorkspace ? e("details", { className: "evidence-workspace", "aria-label": "Evidence workspace", "data-evidence-workspace": "ready" }, e("summary", null, "Evidence"), e("small", null, `Revision ${evidenceWorkspace.runtimeRevision} · ${evidenceWorkspace.records.length} Engine-event`), e("ol", null, ...evidenceWorkspace.records.slice(0, 12).map((record) => e("li", { key: record.eventId }, e("button", { type: "button", onClick: () => setDiagnostics([{ severity: "warning", code: "EVIDENCE_SELECTED", message: `${record.eventId} · ${record.domain} · ${record.summary}` }]) }, `${record.sequence}. ${record.domain} · ${record.eventType}`), e("small", null, record.summary)))) ) : null,
         troubleshootingTimeline ? e("details", { className: "troubleshooting-timeline", "aria-label": "Troubleshooting timeline", "data-troubleshooting-timeline": "ready" }, e("summary", null, "Troubleshooting timeline"), e("small", null, `Session ${troubleshootingTimeline.sessionId}`), e("ol", null, ...troubleshootingTimeline.entries.slice(0, 24).map((entry) => e("li", { key: `${entry.sequence}-${entry.eventId ?? entry.action}` }, e("span", null, `${entry.sequence}. ${entry.category} · ${entry.action}`), e("small", null, entry.detail ?? entry.outcome ?? "Actual event"))))) : null,

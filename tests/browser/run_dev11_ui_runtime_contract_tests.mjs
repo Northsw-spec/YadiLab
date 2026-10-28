@@ -15,8 +15,8 @@ let assertions = 0;
 const check = (value, message) => { assertions += 1; assert.ok(value, message); };
 const equal = (actual, expected, message) => { assertions += 1; assert.equal(actual, expected, message); };
 
-equal(packageJson.version, "1.8.0-dev.13", "IMPORT-003 successor version descends from verified Dev11");
-check(main.includes('data-yadilab-build-version": "1.8.0-dev.13"') && main.includes('"v1.8.0-dev.13"'), "IMPORT-003 version marker is visible in the app shell");
+equal(packageJson.version, "1.8.0-dev.14", "IMPORT-004 successor version descends from verified Dev11");
+check(main.includes('data-yadilab-build-version": "1.8.0-dev.14"') && main.includes('"v1.8.0-dev.14"'), "IMPORT-004 version marker is visible in the app shell");
 
 // Interaction contracts: topology stays first, right-button pan is explicit,
 // blank left-drag remains selection-only in Builder, and context menus cannot

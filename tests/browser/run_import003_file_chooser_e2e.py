@@ -21,8 +21,8 @@ with sync_playwright() as p:
     page.add_script_tag(content=(ROOT / 'ui/dist/assets/app.js').read_text(), type='module')
     main = page.locator('[data-network-import-primary]')
     main.wait_for(timeout=15000)
-    assert page.locator('[data-yadilab-build-version]').inner_text() == 'v1.8.0-dev.13'
-    assert page.locator('[data-development-checkpoint]').get_attribute('data-development-checkpoint') == 'IMPORT-003'
+    assert page.locator('[data-yadilab-build-version]').inner_text() == 'v1.8.0-dev.14'
+    assert page.locator('[data-development-checkpoint]').get_attribute('data-development-checkpoint') == 'IMPORT-004'
     assert page.locator('[data-network-import-panel]').count() == 0
 
     # Real click -> browser's native file chooser, without a second button press.
@@ -64,5 +64,5 @@ with sync_playwright() as p:
     assert xlsx.get_attribute('data-network-import-preview') == 'READY', xlsx.inner_text()
     assert '.xlsx' in xlsx.inner_text().lower()
     assert not errors, errors
-    print('PASS IMPORT-003 Chromium real click -> filechooser, CSV 4 devices/3 links, visible dialog, cancel safety, blocked bad links, XLSX preview; runtime activation not tested on opaque offline origin')
+    print('PASS IMPORT-004 Chromium real click -> filechooser, CSV 4 devices/3 links, visible dialog, cancel safety, blocked bad links, XLSX preview; runtime activation not tested on opaque offline origin')
     browser.close()

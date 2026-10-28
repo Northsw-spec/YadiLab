@@ -675,3 +675,9 @@ details[open] > summary::after { transform: translateY(-50%) rotate(90deg); }
 .network-import-overlay .network-import-panel:focus { outline: 2px solid #5ebfe7; outline-offset: -2px; }
 .network-import-overlay .network-import-heading > button { min-width: 5rem; }
 .main-actions-primary-import input[data-network-import-quick-file] { display: none; }
+
+/* IMPORT-004: make imported topology probe actions obvious, while preserving the source-only Builder path. */
+.network-import-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; margin-top: .6rem; }
+.network-import-actions button { min-height: 2.7rem; padding: .55rem .9rem; }
+.network-import-actions [data-network-import-runtime] { background: #174e54; color: #effcfb; border: 1px solid #6eb7ad; font-weight: 700; }
+.network-import-runtime-button { margin: .35rem 0 .4rem; background: #174e54; color: #effcfb; border: 1px solid #6eb7ad; border-radius: 8px; padding: .65rem .9rem; font-weight: 700; }

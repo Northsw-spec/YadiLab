@@ -17,8 +17,8 @@ const WINDOWS_TYPES = ["windows.domain_controller", "windows.rd_gateway", "windo
 const LINUX_TYPES = ["linux.host", "linux.server", "linux.workstation"] as const;
 
 function osForType(type: string): ObservationOs | undefined {
-  if ((WINDOWS_TYPES as readonly string[]).includes(type) || type.startsWith("windows.")) return "windows";
-  if ((LINUX_TYPES as readonly string[]).includes(type) || type.startsWith("linux.")) return "linux";
+  if (type === "endpoint.windows" || (WINDOWS_TYPES as readonly string[]).includes(type) || type.startsWith("windows.")) return "windows";
+  if (type === "endpoint.linux" || (LINUX_TYPES as readonly string[]).includes(type) || type.startsWith("linux.")) return "linux";
   return undefined;
 }
 
