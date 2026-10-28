@@ -8,6 +8,9 @@ on:
       - 'ui/src/browser/network-topology-import.ts'
       - 'ui/app/main.mjs'
       - 'ui/app/graphml-preview-panel.mjs'
+      - 'ui/app/nmap-observation-panel.mjs'
+      - 'ui/src/browser/nmap-xml-file-preview.ts'
+      - 'tests/browser/run_nmap_xml_observation_ui_tests.mjs'
       - 'tests/browser/run_graphml_preview_ui_tests.mjs'
       - 'tests/browser/run_network_topology_checkpoint_tests.mjs'
       - 'docs/architecture/IMPORT_FORMATS_PREP_001_ADR_AND_BASELINE.md'
@@ -53,6 +56,10 @@ jobs:
         run: |
           tsc -p tests/tsconfig.enterprise-import.json
           node tests/enterprise-import/run_graphml_review_mapping_tests.mjs
+      - name: Nmap XML observed-evidence UI and hostile browser file checks
+        run: |
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_nmap_xml_observation_ui_tests.mjs
       - name: GraphML browser bridge and SSR safety contract
         run: |
           tsc -p tests/tsconfig.browser.json
