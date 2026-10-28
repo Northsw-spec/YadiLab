@@ -45,6 +45,10 @@ jobs:
         run: |
           tsc -p tests/tsconfig.enterprise-import.json
           node tests/enterprise-import/run_graphml_readonly_preview_tests.mjs
+      - name: GraphML explicit mapping and adversarial review contract
+        run: |
+          tsc -p tests/tsconfig.enterprise-import.json
+          node tests/enterprise-import/run_graphml_review_mapping_tests.mjs
       - name: GraphML browser bridge and SSR safety contract
         run: |
           tsc -p tests/tsconfig.browser.json
