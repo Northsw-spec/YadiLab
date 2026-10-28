@@ -55,9 +55,15 @@ const hostileHtml = renderToStaticMarkup(React.createElement(GraphmlPreviewDetai
 eq(hostileHtml.includes("<img src=x"), false, "Imported label must never create a DOM image");
 eq(hostileHtml.includes("&lt;img"), true, "React escapes untrusted graph labels");
 const uiPanelSrc = fs.readFileSync("ui/app/graphml-preview-panel.mjs", "utf8");
-eq(/\bsetWorkspace\b/.test(uiPanelSrc), false, "Dialog cannot mutate workspace");
-eq(/\bonActivate\b/.test(uiPanelSrc), false, "Dialog cannot activate GraphML");
-eq(/dangerouslySetInnerHTML/.test(uiPanelSrc), false, "No raw HTML injection");
+// Scan executable text only. A documentation comment mentioning a forbidden
+// API must not produce a false FAIL. The negative controls below still prove
+// that an actual callback or unsafe HTML call would be rejected.
+const executablePanelSrc = uiPanelSrc.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
+const noMutationCallbacks = (src) => !/\bsetWorkspace\b|\bonActivate\b/.test(src);
+eq(noMutationCallbacks(executablePanelSrc), true, "Dialog cannot mutate workspace or activate GraphML");
+eq(noMutationCallbacks(executablePanelSrc + "\nsetWorkspace(null)"), false, "Mutation negative control");
+eq(noMutationCallbacks(executablePanelSrc + "\nonActivate()"), false, "Activation negative control");
+eq(/dangerouslySetInnerHTML/.test(executablePanelSrc), false, "No raw HTML injection");
 const app = fs.readFileSync("ui/app/main.mjs", "utf8");
 assert.match(app, /data-inspect-graphml": "PREVIEW_ONLY"/); assertions++;
 assert.match(app, /e\(GraphmlReadOnlyPanel, \{ inspectFile: previewGraphmlFileReadOnly, onClose: \(\) => setGraphmlPreviewOpen\(false\) \}\)/); assertions++;
