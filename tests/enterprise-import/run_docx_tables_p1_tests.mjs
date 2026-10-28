@@ -88,11 +88,10 @@ await blocked(await pack({"word/document.xml":doc([table([[ "x".repeat(4097) ]])
 await blocked(await pack({"word/document.xml":doc(Array.from({length:21},()=>table([["v"]]))) }),"DOCX_TOO_MANY_TABLES");
 await blocked(await pack({"word/document.xml":doc([table(Array.from({length:201},()=>["x"]))])}),"DOCX_ROW_COUNT_UNSUPPORTED");
 await blocked(await pack({"word/document.xml":doc([table([Array.from({length:17},()=> "x")])])}),"DOCX_COLUMN_COUNT_UNSUPPORTED");
-// Must not override active JSON/CSV/XLSX/ODS registration just because DOCX exists.
-await assert.rejects(async()=> {
- const selected=selectEnterpriseImportAdapter({bytes:raw,mediaType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",displayName:"devices.docx"});
- if (selected===undefined) throw new Error("not active");
- throw new Error("Unexpected active DOCX adapter");
-}, /not active/);
+// DOCX P1 remains unregistered: active enterprise import selection must reject its MIME.
+assert.throws(
+  () => selectEnterpriseImportAdapter("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+  e => e instanceof EnterpriseImportError && e.code === "IMPORT_UNSUPPORTED_MEDIA_TYPE",
+);
 assertions++;
 console.log(`PASS DOCX structural P1: ${assertions} independent exact/negative, no-content and no-Engine assertions`);
