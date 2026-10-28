@@ -38,6 +38,7 @@ import { mapReviewedGraphmlToBuilder, GRAPHML_MANUAL_ROLE_OPTIONS } from "../../
 import { GraphmlReadOnlyPanel } from "./graphml-preview-panel.mjs";
 import { previewNmapXmlFileReadOnly } from "../src/browser/nmap-xml-file-preview.js";
 import { NmapObservationPanel } from "./nmap-observation-panel.mjs";
+import { reviewNmapObservationAssociations } from "../../enterprise-import/src/nmap-association-review.js";
 import networkFaultPack from "../../fault-packs/builtin/network-core.json";
 import windowsFaultPack from "../../fault-packs/builtin/windows-core.json";
 import linuxFaultPack from "../../fault-packs/builtin/linux-core.json";
@@ -3889,6 +3890,29 @@ function App() {
     networkImportOpen ? e(NetworkTopologyImportPanel, { compilerOptions, setDiagnostics, initialSelection: networkImportSelection, onClose: () => { setNetworkImportOpen(false); setNetworkImportSelection(null); }, onActivate: (next, openProbes) => { beginScenarioTransition(); setImportedProbeAutoOpen(Boolean(openProbes)); setWorkspace(next); setNetworkImportOpen(false); setNetworkImportSelection(null); } }) : null,
     nmapObservationOpen ? e(NmapObservationPanel, {
       inspectFile: previewNmapXmlFileReadOnly,
+      model: workspace.mode === "builder" ? {
+        scenarioId: workspace.source.scenarioId,
+        sourceRevision: workspace.sourceRevision,
+        resources: workspace.source.resources.map((resource) => ({ id: resource.id, label: resource.label })),
+      } : null,
+      onExportAssociation: async (scanPreview, decision) => {
+        const currentModel = workspace.mode === "builder" ? {
+          scenarioId: workspace.source.scenarioId,
+          sourceRevision: workspace.sourceRevision,
+          resources: workspace.source.resources.map((resource) => ({ id: resource.id, label: resource.label })),
+        } : null;
+        const reviewed = reviewNmapObservationAssociations(scanPreview, currentModel, decision);
+        if (reviewed.status !== "READY_FOR_EXPORT" || !reviewed.sidecar) {
+          throw new Error(`Nmap association blocked: ${reviewed.diagnostics.map((d) => d.code).join(", ")}`);
+        }
+        // Sidecar ONLY. Do not call setWorkspace, change Engine, link resources
+        // or mutate the canonical ScenarioSource from scan-time observations.
+        downloadJson({
+          filename: `nmap-associations-${scanPreview.sourceSha256.slice(0, 12)}.json`,
+          mime: "application/json",
+          text: JSON.stringify(reviewed.sidecar, null, 2),
+        });
+      },
       onClose: () => setNmapObservationOpen(false),
     }) : null,
     graphmlPreviewOpen ? e(GraphmlReadOnlyPanel, { inspectFile: previewGraphmlFileReadOnly,

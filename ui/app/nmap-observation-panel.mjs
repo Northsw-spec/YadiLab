@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { NmapAssociationReview } from "./nmap-association-review.mjs";
 
 const e = React.createElement;
 const MAX_DISPLAY_HOSTS = 80;
@@ -48,7 +49,7 @@ export function NmapObservationDetails({ result }) {
       ? e("p", null, `Only first ${MAX_DISPLAY_HOSTS} of ${preview.hosts.length} hosts shown.`)
       : null,
     e("p", { "data-nmap-activation-status": "BLOCKED" },
-      "Inspection only: no matching to existing assets, Builder import, Engine changes, network scan, or verification results."),
+      "Observation inspection only. Optional separate evidence associations may be exported after explicit review; Builder, Engine, topology and scan results remain unchanged."),
   );
 }
 
@@ -57,7 +58,7 @@ export function NmapObservationDetails({ result }) {
  * mutation, scenario activation, or probe execution. Cancelling/closing
  * invalidates in-flight file reads. Browser tests assert the real behavior.
  */
-export function NmapObservationPanel({ inspectFile, onClose }) {
+export function NmapObservationPanel({ inspectFile, onClose, model = null, onExportAssociation }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -114,6 +115,8 @@ export function NmapObservationPanel({ inspectFile, onClose }) {
       error ? e("p", { role: "alert", className: "helper-status blocked",
         "data-nmap-error": "BLOCKED" }, error) : null,
       e(NmapObservationDetails, { result }),
+      result ? e(NmapAssociationReview, { key: `${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
+        result, model, busy, onExport: onExportAssociation }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-nmap-close": "true",
           onClick: () => { request.current++; onClose(); } }, "Close without changes"))));
