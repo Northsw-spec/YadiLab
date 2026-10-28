@@ -70,15 +70,15 @@ jobs:
           /tmp/yadilab-parrot-ini-venv/bin/python tests/acceptance/run_ansible_ini_p2_real_browser.py --url http://127.0.0.1:18985/ --evidence-dir /tmp/parrot-ini-ubuntu-evidence/p2
           /tmp/yadilab-parrot-ini-venv/bin/python tests/acceptance/run_ansible_ini_p3_real_browser.py --url http://127.0.0.1:18985/ --evidence-dir /tmp/parrot-ini-ubuntu-evidence/p3
           python3 - <<'PY'
-import json
-from pathlib import Path
-for stage in ("p2", "p3"):
-    filename = "ansible-ini-p2-chromium.json" if stage == "p2" else "ansible-ini-p3-chromium.json"
-    report = json.loads((Path("/tmp/parrot-ini-ubuntu-evidence") / stage / filename).read_text())
-    assert report["actualParrotHost"] is False, "Ubuntu CI must not claim Parrot acceptance"
-    assert report["osId"] == "ubuntu", "Unexpected CI host OS identity"
-print("PASS Ubuntu CI evidence explicitly NOT Parrot native")
-PY
+          import json
+          from pathlib import Path
+          for stage in ("p2", "p3"):
+              filename = "ansible-ini-p2-chromium.json" if stage == "p2" else "ansible-ini-p3-chromium.json"
+              report = json.loads((Path("/tmp/parrot-ini-ubuntu-evidence") / stage / filename).read_text())
+              assert report["actualParrotHost"] is False, "Ubuntu CI must not claim Parrot acceptance"
+              assert report["osId"] == "ubuntu", "Unexpected CI host OS identity"
+          print("PASS Ubuntu CI evidence explicitly NOT Parrot native")
+          PY
       - name: Upload Ubuntu-only evidence (NOT Parrot acceptance)
         if: always()
         uses: actions/upload-artifact@v4
