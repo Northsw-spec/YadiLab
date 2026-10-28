@@ -143,6 +143,86 @@ def case_invalid_sources(browser,url):
         page.close()
 
 
+def export_builder_source(page):
+    menu = page.locator(".workspace-menu", has=page.locator("summary", has_text="Import / Export"))
+    require(menu.count() == 1, "Import / Export menu not found")
+    if menu.get_attribute("open") is None:
+        menu.locator("summary").click()
+    export = menu.get_by_role("button", name="Exportera källfil")
+    export.wait_for(state="visible", timeout=15000)
+    with page.expect_download(timeout=15000) as downloaded:
+        export.click()
+    return json.loads(Path(downloaded.value.path()).read_text())
+
+
+def case_reviewed_sidecar(browser, url):
+    page, base, errors, external = setup(browser, url)
+    try:
+        before = export_builder_source(page)
+        require(before["scenarioId"] == base, "Builder source does not match loaded scenario")
+        require(any(x["id"] == "rds01" for x in before["resources"]),
+                "Existing target resource rds01 is missing; cannot run independent test")
+        inspect(page)
+        select(page, "valid-nested.yml")
+        page.locator('[data-ansible-association-review="REVIEW_REQUIRED"]').wait_for(timeout=15000)
+        require(page.locator('[data-ansible-associate-host="0"]').input_value() == "",
+                "Ansible inventory host was associated without explicit user choice")
+        require(page.locator('[data-ansible-association-export]').is_disabled(),
+                "Association export must initially be disabled")
+        page.locator('[data-ansible-associate-host="0"]').select_option("rds01")
+        require(page.locator('[data-ansible-association-export]').is_disabled(),
+                "Association without unverified-identity consent was allowed")
+        page.locator('[data-ansible-association-ack]').check()
+        require(page.locator('[data-ansible-association-export]').is_enabled(),
+                "Explicitly reviewed association cannot be exported")
+        with page.expect_download(timeout=20000) as downloaded:
+            page.locator('[data-ansible-association-export]').click()
+        sidecar = json.loads(Path(downloaded.value.path()).read_text())
+        require(sidecar["formatId"] == "yadilab.ansible-inventory-associations", "Wrong sidecar format")
+        require(sidecar["schemaVersion"] == "1.0.0", "Wrong sidecar schema")
+        require(sidecar["status"] == "REVIEWED_ASSOCIATIONS_ONLY", "Sidecar was promoted to Engine")
+        require(sidecar["engineVerified"] is False and sidecar["physicalTopologyVerified"] is False,
+                "Source declarations must NOT become verified infrastructure truth")
+        require(sidecar["source"]["sha256"] == hashlib.sha256(
+            (FIXTURES / "valid-nested.yml").read_bytes()).hexdigest(),
+            "Original YAML source SHA-256 was lost")
+        require(sidecar["source"]["semanticTrack"] == "CONFIG_DOCUMENTED",
+                "Ansible inventory was classified as verified topology")
+        require(sidecar["targetModel"]["scenarioId"] == base,
+                "Destination Builder model identity mismatched")
+        require(len(sidecar["associations"]) == 1, "Unreviewed inventory hosts were associated")
+        association = sidecar["associations"][0]
+        require(association["hostOrdinal"] == 0 and association["inventoryName"] == "control01",
+                "Wrong original inventory host")
+        require(association["reportedConnectionAddress"] == "192.0.2.10",
+                "Declared connection address was changed")
+        require(association["addressTruth"] == "REPORTED_NOT_VERIFIED", "IP was falsely verified")
+        require(association["hostLocators"] == [{
+            "kind": "ansible-yaml-host", "sourceSha256": sidecar["source"]["sha256"],
+            "groupPath": "all", "hostKey": "control01"
+        }], "Original typed host YAML locator was not preserved")
+        require(association["targetResourceId"] == "rds01", "Wrong selected modeled resource")
+        require(association["assertion"] == "USER_ASSERTED_ASSOCIATION_NOT_VERIFIED",
+                "Unverified-identity assertion missing")
+        for key in ["connections", "resources", "engineState", "vars", "tasks"]:
+            require(key not in sidecar, "ScenarioSource/Ansible secrets leaked to sidecar: " + key)
+        page.locator('[data-ansible-associate-host="1"]').select_option("rds01")
+        require(page.locator('[data-ansible-association-conflict="BLOCKED"]').count() == 1,
+                "Two hosts assigned to same resource were not rejected")
+        require(page.locator('[data-ansible-association-export]').is_disabled(),
+                "Duplicate resource conflict did not disable export")
+        unchanged(page,base,errors,external)
+        page.locator('[data-ansible-close="true"]').click()
+        page.locator('[data-ansible-panel]').wait_for(state="detached")
+        after = export_builder_source(page)
+        require(after == before, "Inventory review mutated the original Builder scenario")
+        unchanged(page,base,errors,external)
+        return {"case":"reviewed_sidecar_export_and_conflict","status":"PASS",
+                "originalBuilderUnchanged":True,"associations":1,"autoLinks":0}
+    finally:
+        page.close()
+
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--url",required=True)
@@ -159,7 +239,7 @@ def main():
         if hasattr(os,"geteuid") and os.geteuid()==0: flags.append("--no-sandbox")
         browser=playwright.chromium.launch(headless=True,args=flags)
         try:
-            for check in (case_nested_cancel,case_redaction_and_repeated_membership,case_invalid_sources):
+            for check in (case_nested_cancel,case_redaction_and_repeated_membership,case_invalid_sources,case_reviewed_sidecar):
                 outcome=check(browser,args.url)
                 results.append(outcome)
                 print("PASS ANSIBLE-YAML-P2 real Chromium:",outcome["case"],flush=True)
