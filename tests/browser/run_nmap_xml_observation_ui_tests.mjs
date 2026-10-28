@@ -5,6 +5,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { previewNmapXmlFileReadOnly } from "../../dist-browser-test/ui/src/browser/nmap-xml-file-preview.js";
 import { NmapObservationPanel, NmapObservationDetails } from "../../ui/app/nmap-observation-panel.mjs";
+import { NmapAssociationReview } from "../../ui/app/nmap-association-review.mjs";
 
 let checks = 0;
 const eq = (a,b,label) => { assert.deepEqual(a,b,label); checks++; };
@@ -72,6 +73,41 @@ eq(escaped.includes("<script>alert(2)</script>"),false,"No injected script");
 eq(escaped.includes("&lt;img"),true,"React must escape observed hostnames");
 eq(escaped.includes("&lt;script&gt;"),true,"React must escape service hints");
 
+const model = { scenarioId:"existing_site", sourceRevision:3,
+  resources:[{id:"firewall01",label:"Firewall"},{id:"rds01",label:"RDS server"}] };
+const assoc = renderToStaticMarkup(React.createElement(NmapAssociationReview,{
+  result, model, onExport: async () => {},
+}));
+for (const token of [
+  'data-nmap-association-review="REVIEW_REQUIRED"',
+  'data-nmap-associate-host="0"',
+  'data-nmap-associate-host="1"',
+  'data-nmap-association-ack="true"',
+  'data-nmap-association-export="true"',
+  'Do not associate (default)',
+  'rds01',
+  'unverified associations',
+]) { assert.ok(assoc.includes(token),"Missing reviewed association control: "+token); checks++; }
+eq(assoc.includes('disabled=""'),true,"No links/ack must disable sidecar export by default");
+const runtimeDisabled = renderToStaticMarkup(React.createElement(NmapAssociationReview,{
+  result, model:null, onExport: async () => {},
+}));
+eq(runtimeDisabled.includes('data-nmap-association-review="BUILDER_REQUIRED"'),true);
+eq(runtimeDisabled.includes('data-nmap-associate-host="0"'),false);
+const modelHtmlAttack = renderToStaticMarkup(React.createElement(NmapAssociationReview,{
+  result, model:{...model,resources:[{id:"rds01",label:'<img src=x onerror=alert(9)>'}]},
+  onExport:async () => {},
+}));
+eq(modelHtmlAttack.includes("<img src"),false,"Imported model label must not create HTML");
+eq(modelHtmlAttack.includes("&lt;img"),true,"React must escape model labels");
+const associationUi = fs.readFileSync("ui/app/nmap-association-review.mjs","utf8");
+eq(/\bsetWorkspace\s*\(|dangerouslySetInnerHTML/.test(associationUi),false,
+  "Review has no workspace mutation or unsafe HTML APIs");
+const mainAssociation = fs.readFileSync("ui/app/main.mjs","utf8");
+assert.match(mainAssociation,/reviewNmapObservationAssociations\(scanPreview, currentModel, decision\)/); checks++;
+assert.match(mainAssociation,/downloadJson\(\{[\s\S]*?filename: `nmap-associations-/); checks++;
+assert.match(mainAssociation,/sourceRevision: workspace\.sourceRevision/); checks++;
+eq(mainAssociation.includes('onExportAssociation: async'),true);
 const dialogSource = fs.readFileSync("ui/app/nmap-observation-panel.mjs","utf8");
 const executable = dialogSource.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,"");
 const forbidden = /\bsetWorkspace\s*\(|\bonConfirm\s*[:=]|\bonActivate\s*[:=]|dangerouslySetInnerHTML/;
