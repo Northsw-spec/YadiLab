@@ -48,9 +48,16 @@ def assert_base(page, base_id):
 
 
 def export_scenario(page):
+    # The menu may still be open after closing the GraphML dialog.
+    # Clicking an already-open details summary would CLOSE it and hide export.
+    menu = page.locator(".workspace-menu", has=page.locator("summary", has_text="Import / Export"))
+    require(menu.count() == 1, "expected exactly one Import / Export menu")
+    if menu.get_attribute("open") is None:
+        menu.locator("summary").click()
+    export = menu.get_by_role("button", name="Exportera källfil")
+    export.wait_for(state="visible", timeout=10000)
     with page.expect_download(timeout=20000) as download:
-        page.locator(".workspace-menu > summary", has_text="Import / Export").click()
-        page.get_by_role("button", name="Exportera källfil").click()
+        export.click()
     return json.loads(Path(download.value.path()).read_text())
 
 
@@ -210,7 +217,9 @@ def main():
             for test in (case_cancel, case_malicious,
                          lambda b, u: case_confirm(b, u, False),
                          lambda b, u: case_confirm(b, u, True), case_directed):
-                results.append(test(browser, args.url))
+                outcome = test(browser, args.url)
+                results.append(outcome)
+                print("PASS real Chromium GraphML:", outcome["case"], flush=True)
         finally:
             browser.close()
     report = {"status": "PASS", "testType": "real Chromium UI + actual compiled YadiLab bundle",
