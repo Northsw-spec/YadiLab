@@ -263,7 +263,9 @@ function evaluateNeighbor(
   const candidateTraces: NeighborCandidateTrace[] = [];
   let malformed = false;
   for (let index = 0; index < rawNeighbors.length; index += 1) {
-    const raw = rawNeighbors[index];
+    // Explicitly typed to avoid TS7022 circular inference in the strict browser typecheck;
+    // no runtime behavior, routing semantics or neighbor decisions change.
+    const raw: unknown = rawNeighbors[index];
     const entryId = explicitIds[index]!;
     if (!isRecord(raw)) {
       malformed = true;
