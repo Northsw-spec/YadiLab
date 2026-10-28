@@ -42,6 +42,8 @@ import { previewAnsibleYamlFileReadOnly } from "../src/browser/ansible-yaml-file
 import { AnsibleInventoryPanel } from "./ansible-inventory-panel.mjs";
 import { previewAnsibleIniFileReadOnly } from "../src/browser/ansible-ini-file-preview.js";
 import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
+import { previewDocxFileStructure } from "../src/browser/docx-file-structural-preview.js";
+import { DocxTableStructurePanel } from "./docx-structure-panel.mjs";
 import { reviewAnsibleIniInventoryAssociations } from "../../enterprise-import/src/ansible-ini-association-review.js";
 import { reviewAnsibleInventoryAssociations } from "../../enterprise-import/src/ansible-association-review.js";
 import { reviewNmapObservationAssociations } from "../../enterprise-import/src/nmap-association-review.js";
@@ -3111,7 +3113,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   );
 }
 
-function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, onInspectNmap, onInspectAnsible, onInspectAnsibleIni, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, onInspectNmap, onInspectAnsible, onInspectAnsibleIni, onInspectDocx, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   const networkPickerRef = useRef(null);
   // Opening the native picker happens synchronously within the user's click,
@@ -3171,6 +3173,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, o
         e("button", { type: "button", "data-inspect-nmap": "EVIDENCE_ONLY", onClick: onInspectNmap }, "Inspect Nmap XML (observations only)"),
         e("button", { type: "button", "data-inspect-ansible": "CONFIG_DOCUMENTED", onClick: onInspectAnsible }, "Inspect Ansible YAML (read-only inventory)"),
         e("button", { type: "button", "data-inspect-ansible-ini": "CONFIG_DOCUMENTED", onClick: onInspectAnsibleIni }, "Inspect Ansible INI (read-only inventory)"),
+        e("button", { type: "button", "data-inspect-docx": "CONFIG_DOCUMENTED", onClick: onInspectDocx }, "Inspect Word DOCX (structure only)"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: exportSource }, "Exportera källfil") : e("button", { type: "button", onClick: exportProgress }, "Exportera framsteg"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: () => exportPackage("student"), disabled: workspace.compile.status !== "valid" }, "Exportera elevpaket") : fileAction("Läs in framsteg", `${branding.progressExtension},application/json`, (event) => loadProgress(event.target.files?.[0]), "load-progress"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: () => exportPackage("author"), disabled: workspace.compile.status !== "valid" }, "Exportera författarpaket") : e("button", { type: "button", onClick: exportTroubleshootingSession }, "Exportera sessionsbackup"),
@@ -3330,6 +3333,7 @@ function App() {
   const [nmapObservationOpen, setNmapObservationOpen] = useState(false);
   const [ansibleInventoryOpen, setAnsibleInventoryOpen] = useState(false);
   const [ansibleIniOpen, setAnsibleIniOpen] = useState(false);
+  const [docxStructureOpen, setDocxStructureOpen] = useState(false);
   const [importedProbeAutoOpen, setImportedProbeAutoOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -3886,7 +3890,7 @@ function App() {
   return e("div", { className: "app-frame", "data-app-runtime": "ready", "data-runtime-scenario-id": workspace.mode === "runtime" ? workspace.scenario.scenarioId : workspace.source.scenarioId, "data-runtime-scenario-hash": workspace.mode === "runtime" ? workspace.scenario.sourceHash : "builder" },
     e("header", { className: "app-header" },
       e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
-      e(MainActions, { onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
+      e(MainActions, { onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
     selectedGuidedLab ? e("section", { className: "curriculum-strip", "data-curriculum-wave": "guided_troubleshooting_wave1" },
@@ -3924,6 +3928,10 @@ function App() {
         });
       },
       onClose: () => setAnsibleInventoryOpen(false),
+    }) : null,
+    docxStructureOpen ? e(DocxTableStructurePanel, {
+      inspectFile: previewDocxFileStructure,
+      onClose: () => setDocxStructureOpen(false),
     }) : null,
     ansibleIniOpen ? e(AnsibleIniInventoryPanel, {
       inspectFile: previewAnsibleIniFileReadOnly,
