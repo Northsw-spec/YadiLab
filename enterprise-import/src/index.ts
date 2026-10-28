@@ -31,3 +31,7 @@ export type { GraphmlReadOnlyPreview, GraphmlPreviewNode, GraphmlPreviewEdge, Gr
 // Explicit GraphML review-to-Builder mapping: no automatic inferred links.
 export { GRAPHML_MANUAL_ROLE_OPTIONS, mapReviewedGraphmlToBuilder } from "./graphml-review-mapping.js";
 export type { GraphmlManualReview, GraphmlManualRole, GraphmlBuilderMapping, GraphmlMappedOrigin } from "./graphml-review-mapping.js";
+
+// Read-only Nmap scan-time observations. NOT an active importer or Engine source.
+export { NMAP_EVIDENCE_PROFILE, previewNmapXmlObservations } from "./nmap-xml-preview.js";
+export type { NmapReadOnlyEvidence, NmapObservedHost, NmapObservedPort, NmapEvidenceLocator } from "./nmap-xml-preview.js";
