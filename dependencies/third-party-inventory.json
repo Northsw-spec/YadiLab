@@ -3,7 +3,7 @@
   "schemaVersion": "1.0.0",
   "status": "bundle-resolved",
   "completeResolvedBundleInventory": true,
-  "sourcePolicySha256": "1e5764965bea89498e269049cef9b8d01dde005723529daea507b686ef1d5868",
+  "sourcePolicySha256": "6a8f9a1262af6dc6fb5ab75bc2d6faf635b9aa62ddd86f2cfbc0c26f8d3a08ff",
   "bundledRuntimeComponents": [
     {
       "name": "@xyflow/react",
@@ -138,6 +138,12 @@
       "packageRoot": "node_modules/use-sync-external-store"
     },
     {
+      "name": "yaml",
+      "version": "2.8.3",
+      "license": "ISC",
+      "packageRoot": "node_modules/yaml"
+    },
+    {
       "name": "zustand",
       "version": "4.5.7",
       "license": "MIT",
@@ -200,6 +206,13 @@
       "scope": "runtime",
       "license": "MIT",
       "purpose": "Browser DOM renderer."
+    },
+    {
+      "name": "yaml",
+      "version": "2.8.3",
+      "scope": "runtime",
+      "license": "ISC",
+      "purpose": "Local, no-code-execution YAML 1.2 AST parsing for bounded read-only static Ansible inventory inspection."
     }
   ]
 }
