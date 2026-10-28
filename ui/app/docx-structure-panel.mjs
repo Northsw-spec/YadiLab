@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { DocxCellDisclosureReview } from "./docx-cell-disclosure-review.mjs";
 const e = React.createElement;
 const DISPLAY_TABLES = 20;
 const DISPLAY_ROWS = 30;
@@ -45,12 +46,13 @@ export function DocxTableStructureDetails({ result }) {
       "Read-only structure inspection. No DOCX-to-topology mapping or simulation activation. Close without changes."));
 }
 
-export function DocxTableStructurePanel({ inspectFile, onClose }) {
+export function DocxTableStructurePanel({ inspectFile, reviewFile, onClose }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const currentRequest = useRef(0);
   const focus = useRef(null);
+  const localFile = useRef(null);
   useEffect(() => { focus.current?.focus(); return () => { currentRequest.current++; }; }, []);
   useEffect(() => {
     const escape = (event) => {
@@ -62,6 +64,7 @@ export function DocxTableStructurePanel({ inspectFile, onClose }) {
   const choose = async (file) => {
     if (!file) return;
     const request = ++currentRequest.current;
+    localFile.current = file;
     setResult(null); setError(""); setBusy(true);
     try {
       const next = await inspectFile(file);
@@ -70,6 +73,7 @@ export function DocxTableStructurePanel({ inspectFile, onClose }) {
       if (request === currentRequest.current) {
         const code = typeof cause?.code === "string" && /^(DOCX_|IMPORT_ARCHIVE_|IMPORT_WORKBOOK_ARCHIVE_|IMPORT_XML_)[A-Z_]+$/.test(cause.code)
           ? cause.code : "DOCX_INSPECTION_BLOCKED";
+        localFile.current = null;
         setError(code);
       }
     } finally {
@@ -85,7 +89,7 @@ export function DocxTableStructurePanel({ inspectFile, onClose }) {
           e("h2", null, "Inspect Word DOCX — structure only"),
           e("p", null, "Local offline analysis. No document text is shown or imported.")),
         e("button", { type: "button", disabled: busy, "aria-label": "Close Word DOCX inspection",
-          onClick: () => { currentRequest.current++; onClose(); } }, "Close")),
+          onClick: () => { currentRequest.current++; localFile.current = null; onClose(); } }, "Close")),
       e("label", { className: "file-button" }, busy ? "Reading DOCX structure…" : "Choose .docx file",
         e("input", { type: "file", accept: ".docx", hidden: true, disabled: busy,
           "data-docx-file": "true", onChange: (event) => {
@@ -96,7 +100,19 @@ export function DocxTableStructurePanel({ inspectFile, onClose }) {
       error ? e("p", { role: "alert", className: "helper-status blocked",
         "data-docx-error": "BLOCKED" }, error) : null,
       e(DocxTableStructureDetails, { result }),
+      result && typeof reviewFile === "function" ? e(DocxCellDisclosureReview, {
+        key: result.preview.sourceSha256 + ":" + result.filename,
+        preview: result.preview,
+        onRevealCell: async (locator, acknowledged) => {
+          const request = currentRequest.current;
+          const selectedFile = localFile.current;
+          if (!selectedFile) throw new Error("DOCX_CELL_FILE_UNAVAILABLE");
+          const answer = await reviewFile(selectedFile, result.preview.sourceSha256, locator, acknowledged);
+          if (request !== currentRequest.current) throw new Error("DOCX_CELL_STALE_REQUEST");
+          return answer;
+        },
+      }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-docx-close": "true",
-          onClick: () => { currentRequest.current++; onClose(); } }, "Close without changes"))));
+          onClick: () => { currentRequest.current++; localFile.current = null; onClose(); } }, "Close without changes"))));
 }
