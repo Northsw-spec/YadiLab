@@ -1,0 +1,47 @@
+name: DOCX P1 structural offline preview and regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'AGENTS.md'
+      - 'docs/architecture/DOCX_TABLES_P1_FROZEN_ORACLES.md'
+      - 'enterprise-import/src/docx-tables-structural-preview.ts'
+      - 'tests/enterprise-import/run_docx_tables_p1_tests.mjs'
+      - '.github/workflows/docx-tables-p1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docx-structural-offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Exact locked dependencies
+        run: npm ci
+      - name: Compile strict TypeScript and run actual DOCX ZIP adversarial tests
+        run: |
+          set -Eeuo pipefail
+          tsc -p tests/tsconfig.enterprise-import.json
+          node tests/enterprise-import/run_docx_tables_p1_tests.mjs
+      - name: Existing import format regressions and enterprise adapters
+        run: |
+          set -Eeuo pipefail
+          node tests/enterprise-import/run_ansible_ini_readonly_preview_tests.mjs
+          node tests/enterprise-import/run_ansible_ini_association_review_tests.mjs
+          node tests/enterprise-import/run_ansible_yaml_readonly_preview_tests.mjs
+          node tests/enterprise-import/run_nmap_xml_preview_tests.mjs
+          node tests/enterprise-import/run_graphml_readonly_preview_tests.mjs
+          node tests/enterprise-import/run_planned_format_profile_tests.mjs
+          npm run test:enterprise-import
+      - name: Exact release metadata source checks
+        run: npm run test:release-identity
