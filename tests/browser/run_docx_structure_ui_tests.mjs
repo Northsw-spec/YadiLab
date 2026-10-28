@@ -78,7 +78,8 @@ await blocks({...file("bad.docx"),arrayBuffer:async()=>new ArrayBuffer(16*1024*1
 await blocks(file("broken.docx",enc.encode("notzip")),"IMPORT_WORKBOOK_ARCHIVE_INVALID");
 const brokenDoc={...pkg,"word/document.xml":pkg["word/document.xml"].replace("<w:body>","<!DOCTYPE w:document [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><w:body>")};
 await blocks(file("malicious.docx",await zip(brokenDoc)),"IMPORT_XML_DTD_FORBIDDEN");
-for(const forbidden of ["setWorkspace(", "dangerouslySetInnerHTML", "fetch(", "onActivate", "onExportAssociation"]) {
+// P4 permits a separately reviewed zero-cell-content sidecar callback, but NEVER direct workspace/Engine/network mutation.
+for(const forbidden of ["setWorkspace(", "dangerouslySetInnerHTML", "fetch(", "onActivate", "applyRuntimeOperation(", "setRuntimeSelection("]) {
   eq((await import("node:fs")).readFileSync("ui/app/docx-structure-panel.mjs","utf8").includes(forbidden),false);
 }
 const fs=await import("node:fs");

@@ -45,6 +45,7 @@ import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
 import { previewDocxFileStructure, reviewDocxFileCell } from "../src/browser/docx-file-structural-preview.js";
 import { DocxTableStructurePanel } from "./docx-structure-panel.mjs";
 import { reviewAnsibleIniInventoryAssociations } from "../../enterprise-import/src/ansible-ini-association-review.js";
+import { reviewDocxCellAssociation } from "../../enterprise-import/src/docx-association-review.js";
 import { reviewAnsibleInventoryAssociations } from "../../enterprise-import/src/ansible-association-review.js";
 import { reviewNmapObservationAssociations } from "../../enterprise-import/src/nmap-association-review.js";
 import networkFaultPack from "../../fault-packs/builtin/network-core.json";
@@ -3932,6 +3933,31 @@ function App() {
     docxStructureOpen ? e(DocxTableStructurePanel, {
       inspectFile: previewDocxFileStructure,
       reviewFile: reviewDocxFileCell,
+      model: workspace.mode === "builder" ? {
+        scenarioId: workspace.source.scenarioId,
+        sourceRevision: workspace.sourceRevision,
+        resources: workspace.source.resources.map(r => ({ id: r.id, label: r.label })),
+      } : null,
+      onExportAssociation: (reviewedCell, decision) => {
+        // Revalidate against CURRENT Builder, not snapshot chosen in the UI.
+        const currentModel = workspace.mode === "builder" ? {
+          scenarioId: workspace.source.scenarioId,
+          sourceRevision: workspace.sourceRevision,
+          resources: workspace.source.resources.map(r => ({ id: r.id, label: r.label })),
+        } : null;
+        const reviewed = reviewDocxCellAssociation(reviewedCell, currentModel, decision);
+        if (reviewed.status !== "READY_FOR_EXPORT" || !reviewed.sidecar) {
+          const blocked = new Error("DOCX_ASSOC_EXPORT_BLOCKED");
+          blocked.code = reviewed.diagnostics[0]?.code ?? "DOCX_ASSOC_EXPORT_BLOCKED";
+          throw blocked;
+        }
+        // Zero cell content, sidecar only, NEVER a Builder/Engine operation.
+        downloadJson({
+          filename: `docx-reviewed-reference-${reviewed.sidecar.source.sha256.slice(0, 12)}.json`,
+          mime: "application/json",
+          text: JSON.stringify(reviewed.sidecar, null, 2),
+        });
+      },
       onClose: () => setDocxStructureOpen(false),
     }) : null,
     ansibleIniOpen ? e(AnsibleIniInventoryPanel, {
