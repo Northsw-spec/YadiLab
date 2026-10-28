@@ -27,3 +27,7 @@ export { normalizeNetworkInventoryDocument } from "./network-inventory.js";
 // Read-only GraphML candidate preview. Does NOT register an import adapter or activate a scenario.
 export { GRAPHML_PREVIEW_PROFILE, previewGraphmlReadOnly } from "./graphml-preview.js";
 export type { GraphmlReadOnlyPreview, GraphmlPreviewNode, GraphmlPreviewEdge, GraphmlSourceLocator } from "./graphml-preview.js";
+
+// Explicit GraphML review-to-Builder mapping: no automatic inferred links.
+export { GRAPHML_MANUAL_ROLE_OPTIONS, mapReviewedGraphmlToBuilder } from "./graphml-review-mapping.js";
+export type { GraphmlManualReview, GraphmlManualRole, GraphmlBuilderMapping, GraphmlMappedOrigin } from "./graphml-review-mapping.js";
