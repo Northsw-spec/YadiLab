@@ -58,6 +58,9 @@ jobs:
           node scripts/verify_browser_release.mjs
           node scripts/verify_release_identity.mjs
           git diff --exit-code -- dependencies/third-party-inventory.json THIRD_PARTY_NOTICES.md
+          echo "Git checkout changes after a read-only build (must be empty for release):"
+          git status --short --untracked-files=all
+          git diff --name-status
           test -z "$(git status --porcelain)"
       - name: Print manifest evidence
         run: |
