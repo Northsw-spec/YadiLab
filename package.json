@@ -126,12 +126,13 @@
     "test:release-identity": "node tests/browser/run_release_identity_tests.mjs"
   },
   "dependencies": {
-    "ajv": "8.17.1",
-    "@zip.js/zip.js": "2.18.2",
     "@xyflow/react": "12.11.6",
+    "@zip.js/zip.js": "2.18.2",
+    "ajv": "8.17.1",
+    "elkjs": "0.12.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "elkjs": "0.12.0"
+    "yaml": "2.8.3"
   },
   "devDependencies": {
     "typescript": "5.9.2",

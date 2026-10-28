@@ -42,3 +42,7 @@ export type {
   NmapModelSnapshot, NmapModeledResource, NmapManualAssociationDecision,
   NmapReviewedAssociation, NmapAssociationSidecar, NmapAssociationResult,
 } from "./nmap-association-review.js";
+
+// Strict Ansible YAML static inventory evidence preview. NOT an active adapter.
+export { ANSIBLE_YAML_PREVIEW_PROFILE, previewAnsibleStaticInventory } from "./ansible-yaml-preview.js";
+export type { AnsibleStaticInventoryPreview, AnsibleHostObservation, AnsibleInventoryLocator } from "./ansible-yaml-preview.js";

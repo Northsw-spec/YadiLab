@@ -4,6 +4,11 @@ on:
     branches: [main]
     paths:
       - 'enterprise-import/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tests/fixtures/import/ansible-yaml/**'
+      - 'tests/enterprise-import/run_ansible_yaml_readonly_preview_tests.mjs'
+      - 'docs/architecture/ANSIBLE_YAML_PREP_001_ORACLES.md'
       - 'ui/src/browser/import-*.ts'
       - 'ui/src/browser/network-topology-import.ts'
       - 'ui/app/main.mjs'
@@ -46,6 +51,10 @@ jobs:
         run: |
           tsc -p tests/tsconfig.enterprise-import.json
           node tests/enterprise-import/run_planned_format_profile_tests.mjs
+      - name: Ansible YAML static inventory strict-parser and secret-redaction gates
+        run: |
+          tsc -p tests/tsconfig.enterprise-import.json
+          node tests/enterprise-import/run_ansible_yaml_readonly_preview_tests.mjs
       - name: Nmap read-only observations and hostile XML gates
         run: |
           tsc -p tests/tsconfig.enterprise-import.json
