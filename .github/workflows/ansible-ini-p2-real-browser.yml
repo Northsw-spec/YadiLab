@@ -1,0 +1,65 @@
+name: Ansible INI P2 actual Chromium read-only acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ui/src/browser/ansible-ini-file-preview.ts'
+      - 'ui/app/ansible-ini-inspection-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_ansible_ini_inventory_ui_tests.mjs'
+      - 'tests/acceptance/run_ansible_ini_p2_real_browser.py'
+      - 'enterprise-import/src/ansible-ini-preview.ts'
+      - '.github/workflows/ansible-ini-p2-real-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compiled-chromium-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout GitHub branch source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Exact lockfile dependencies
+        run: npm ci
+      - name: Install isolated Chromium and pinned Playwright
+        run: |
+          python3 -m venv /tmp/yadilab-ini-p2-venv
+          /tmp/yadilab-ini-p2-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/yadilab-ini-p2-venv/bin/python -m playwright install --with-deps chromium
+      - name: Test source/SSR contracts and build actual bundled YadiLab
+        run: |
+          npm run test:release-identity
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_ansible_ini_inventory_ui_tests.mjs
+          node tests/browser/run_ansible_yaml_inventory_ui_tests.mjs
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Drive real compiled React application via Chromium
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18981 --bind 127.0.0.1 --directory ui/dist >/tmp/yadilab-ini-p2-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            if curl --fail --silent http://127.0.0.1:18981/browser-build-manifest.json >/dev/null; then break; fi
+            sleep 0.2
+          done
+          curl --fail --silent http://127.0.0.1:18981/browser-build-manifest.json >/dev/null
+          /tmp/yadilab-ini-p2-venv/bin/python tests/acceptance/run_ansible_ini_p2_real_browser.py             --url http://127.0.0.1:18981/ --evidence-dir /tmp/ansible-ini-p2-browser-evidence
+      - name: Upload authentic Chromium acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-ini-p2-browser-evidence
+          path: /tmp/ansible-ini-p2-browser-evidence/
+          if-no-files-found: ignore
