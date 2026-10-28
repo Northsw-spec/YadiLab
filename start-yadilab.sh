@@ -6,9 +6,15 @@ DIST="$ROOT/distribution/linux-x86_64"
 LAUNCHER="$DIST/app-launcher"
 PORT=${YADILAB_PORT:-18236}
 URL="http://127.0.0.1:$PORT/"
-APP_VERSION=1.8.0-dev.14
-CHECKPOINT=IMPORT-004
-MARKER=yadilab-v${APP_VERSION}
+# The signed-off distribution (checksummed below) carries the release identity.
+# Never maintain another hardcoded version/checkpoint in the launcher.
+MARKER_FILE="$DIST/web/build-marker.json"
+read_marker() {
+  local key="$1" value
+  value=$(sed -n -E "s/^[[:space:]]*\"${key}\":[[:space:]]*\"([^\"]+)\"[,]?$/\1/p" "$MARKER_FILE")
+  [[ $(printf '%s\n' "$value" | wc -l) -eq 1 ]] || return 1
+  printf '%s' "$value"
+}
 RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp}
 [[ -d "$RUNTIME_DIR" && -w "$RUNTIME_DIR" ]] || RUNTIME_DIR=/tmp
 PIDFILE="$RUNTIME_DIR/yadilab-$PORT.pid"
@@ -35,13 +41,22 @@ verify_marker() {
   grep -Fq '"formatId": "yadilab.browser-build-marker"' <<<"$response" &&
     grep -Fq "\"version\": \"$APP_VERSION\"" <<<"$response" &&
     grep -Fq "\"marker\": \"$MARKER\"" <<<"$response" &&
-    grep -Fq "\"checkpoint\": \"$CHECKPOINT\"" <<<"$response"
+    grep -Fq "\"checkpoint\": \"$CHECKPOINT\"" <<<"$response" &&
+    grep -Fq "\"sourceCommit\": \"$SOURCE_COMMIT\"" <<<"$response"
 }
 
 [[ "$PORT" =~ ^[0-9]+$ ]] && (( PORT >= 1024 && PORT <= 65535 )) || fail "ogiltig port: $PORT"
 [[ -x "$LAUNCHER" ]] || fail "körbar launcher saknas: $LAUNCHER"
-[[ -r "$DIST/web/build-marker.json" ]] || fail "final build marker saknas i distributionen"
+[[ -r "$MARKER_FILE" ]] || fail "final build marker saknas i distributionen"
 (cd "$DIST" && sha256sum -c SHA256SUMS.txt >/dev/null 2>&1) || fail "distributionens checksummor stämmer inte"
+APP_VERSION=$(read_marker version) || fail "ogiltigt versionsfält i build-marker"
+CHECKPOINT=$(read_marker checkpoint) || fail "ogiltigt checkpointfält i build-marker"
+SOURCE_COMMIT=$(read_marker sourceCommit) || fail "käll-commit saknas i build-marker"
+MARKER=$(read_marker marker) || fail "marker-fält saknas"
+[[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || fail "ogiltigt appversionsformat"
+[[ "$CHECKPOINT" =~ ^[A-Z]+-[0-9]{3,}$ ]] || fail "ogiltigt checkpoint-format"
+[[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]] || fail "ogiltig Git-commitidentitet"
+[[ "$MARKER" == "yadilab-v${APP_VERSION}" ]] || fail "inkonsekvent build-marker"
 
 if [[ -r "$PIDFILE" ]]; then
   old_pid=$(<"$PIDFILE")

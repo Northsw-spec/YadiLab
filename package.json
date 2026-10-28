@@ -1,6 +1,6 @@
 {
   "name": "visual-infrastructure-lab-app",
-  "version": "1.8.0-dev.14",
+  "version": "1.8.0-dev.15",
   "private": true,
   "type": "module",
   "scripts": {
@@ -122,7 +122,8 @@
     "test:scenario-studio": "rm -rf dist-browser-test && tsc -p tests/tsconfig.browser.json && node tests/browser/run_dev1_scenario_studio_tests.mjs && node tests/browser/run_dev1_scenario_studio_adversarial.mjs",
     "test:network-topology-import": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_network_topology_import_checkpoint.mjs && tsc -p tests/tsconfig.browser.json && node tests/browser/run_network_topology_checkpoint_tests.mjs",
     "test:import003-ui": "node tests/browser/run_import003_oneclick_version_tests.mjs",
-    "test:imported-probes": "npm run test:network-topology-import && node tests/browser/run_import004_probe_runtime_tests.mjs"
+    "test:imported-probes": "npm run test:network-topology-import && node tests/browser/run_import004_probe_runtime_tests.mjs",
+    "test:release-identity": "node tests/browser/run_release_identity_tests.mjs"
   },
   "dependencies": {
     "ajv": "8.17.1",
@@ -138,5 +139,9 @@
   },
   "bin": {
     "app": "./dist/cli/src/main.js"
+  },
+  "yadilabRelease": {
+    "checkpoint": "VERSION-005",
+    "description": "Single-source release identity and fail-closed provenance gates"
   }
 }

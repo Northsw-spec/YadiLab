@@ -21,7 +21,9 @@ with sync_playwright() as p:
     page.add_script_tag(content=(ROOT / 'ui/dist/assets/app.js').read_text(), type='module')
     main = page.locator('[data-network-import-primary]')
     main.wait_for(timeout=15000)
-    assert page.locator('[data-yadilab-build-version]').inner_text() == 'v1.8.0-dev.14'
+    import json
+    version=json.loads((ROOT/'package.json').read_text())['version']
+    assert page.locator('[data-yadilab-build-version]').inner_text() == f'v{version}'
     assert page.locator('[data-development-checkpoint]').get_attribute('data-development-checkpoint') == 'IMPORT-004'
     assert page.locator('[data-network-import-panel]').count() == 0
 

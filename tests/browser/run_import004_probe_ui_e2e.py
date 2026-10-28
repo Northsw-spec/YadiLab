@@ -28,7 +28,9 @@ with sync_playwright() as p:
     page.add_style_tag(content=(ROOT/'ui/app/app.css').read_text())
     page.add_script_tag(content=(ROOT/'ui/dist/assets/app.js').read_text(),type='module')
     page.locator('[data-network-import-primary]').wait_for(timeout=25000)
-    assert page.locator('[data-yadilab-build-version]').inner_text()=='v1.8.0-dev.14'
+    import json
+    current_version=json.loads((ROOT/'package.json').read_text())['version']
+    assert page.locator('[data-yadilab-build-version]').inner_text()==f'v{current_version}'
     with page.expect_file_chooser(timeout=10000) as picker:
         page.locator('[data-network-import-primary]').click()
     picker.value.set_files(str(ROOT/'examples/enterprise-import/network-devices-example.csv'))

@@ -17,6 +17,8 @@ import "@xyflow/react/dist/style.css";
 import "./app.css";
 import catalog from "../../catalog/builtin-catalog.json";
 import branding from "../../app-config/branding.json";
+import releasePackage from "../../package.json";
+const releaseIdentity = { version: releasePackage.version, checkpoint: releasePackage.yadilabRelease.checkpoint, description: releasePackage.yadilabRelease.description, sourceCommit: __YADILAB_SOURCE_COMMIT__ };
 import welcomeScenario from "./welcome-scenario.json";
 import { enterpriseOfficeScenarios, enterpriseScenarioById } from "./enterprise-office-scenario.mjs";
 import { verifiedDeliveryExplanation, verifiedDeliveryProbePresets, verifiedDeliveryScenarioById, verifiedDeliveryScenarios } from "./verified-delivery-scenarios.mjs";
@@ -3863,7 +3865,7 @@ function App() {
 
   return e("div", { className: "app-frame", "data-app-runtime": "ready", "data-runtime-scenario-id": workspace.mode === "runtime" ? workspace.scenario.scenarioId : workspace.source.scenarioId, "data-runtime-scenario-hash": workspace.mode === "runtime" ? workspace.scenario.sourceHash : "builder" },
     e("header", { className: "app-header" },
-      e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": "1.8.0-dev.14" }, "v1.8.0-dev.14"), e("small", { "data-development-checkpoint": "IMPORT-004" }, "IMPORT-004 · Imported topology probes")),
+      e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
       e(MainActions, { onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),

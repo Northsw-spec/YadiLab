@@ -1,0 +1,71 @@
+name: YadiLab release identity and Linux build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-attested:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Reject inconsistent version metadata or spoofed release labels
+        run: npm run test:release-identity
+      - name: Source regression tests
+        run: |
+          npm run test:network-topology-import
+          npm run test:imported-probes
+          npm run test:dev11-ui
+      - name: Build browser from exact clean Git checkout
+        env:
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+        run: npm run build:browser
+      - name: Verify browser integrity and embedded Git identity
+        env:
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          node scripts/verify_browser_release.mjs
+          node scripts/verify_release_identity.mjs
+          npm run test:import003-ui
+      - name: Build and hash Linux distribution
+        env:
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          npm run build:launcher
+          (cd distribution/linux-x86_64 && sha256sum -c SHA256SUMS.txt)
+      - name: Launch attested app and verify HTTP release marker
+        env:
+          YADILAB_TEST_ONCE: '1'
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+        run: bash start-yadilab.sh
+      - name: Package built Linux app
+        run: |
+          mkdir -p artifact/YadiLab_VERSION005_Linux_x86_64
+          cp -a distribution artifact/YadiLab_VERSION005_Linux_x86_64/
+          cp start-yadilab.sh artifact/YadiLab_VERSION005_Linux_x86_64/
+          cp docs/VERSION005_RELEASE_IDENTITY.md artifact/YadiLab_VERSION005_Linux_x86_64/
+          (cd artifact && zip -qr ../YadiLab_VERSION005_Linux_x86_64.zip YadiLab_VERSION005_Linux_x86_64)
+          sha256sum YadiLab_VERSION005_Linux_x86_64.zip > YadiLab_VERSION005_Linux_x86_64.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YadiLab_VERSION005_Linux_x86_64
+          path: |
+            YadiLab_VERSION005_Linux_x86_64.zip
+            YadiLab_VERSION005_Linux_x86_64.zip.sha256
+          if-no-files-found: error

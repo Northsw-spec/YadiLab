@@ -7,8 +7,10 @@ OUT="$ROOT/distribution/linux-x86_64"
 MODE=shell
 if [[ -e "$ROOT/ui/dist" || -L "$ROOT/ui/dist" ]]; then
   node "$ROOT/scripts/verify_browser_release.mjs" "$ROOT/ui/dist"
+  node "$ROOT/scripts/verify_release_identity.mjs" "$ROOT/ui/dist"
   MODE=browser
 fi
+[[ "$MODE" == browser ]] || { echo "FAIL: attested browser bundle required for Linux release" >&2; exit 77; }
 node "$ROOT/scripts/generate_pwa_manifest.mjs"
 node "$ROOT/scripts/generate_web_shell.mjs"
 mkdir -p "$ROOT/distribution"
@@ -29,6 +31,7 @@ if [[ "$MODE" == browser ]]; then
   cp "$ROOT/ui/dist/third-party-inventory.json" "$STAGE/third-party-inventory.json"
   # Independently re-verify copied bytes; do not trust a pre-copy check alone.
   node "$ROOT/scripts/verify_browser_release.mjs" "$STAGE/web"
+  node "$ROOT/scripts/verify_release_identity.mjs" "$STAGE/web"
 else
   node "$ROOT/scripts/generate_third_party_notices.mjs" >/dev/null
   cp -a "$ROOT/ui/public/." "$STAGE/web/"

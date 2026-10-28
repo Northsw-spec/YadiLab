@@ -8,10 +8,10 @@ import { evaluateBuildReadiness, scanRemoteRuntimeReferences } from "./dependenc
 import { buildResolvedBundleInventory, writeInventoryArtifacts } from "./third-party-notices-lib.mjs";
 import { attestInstalledBrowserToolchain } from "./browser-toolchain-attestation-node.mjs";
 import { renderBrowserIndex } from "./browser-index-template.mjs";
+import { readReleaseContract, assertBundledRelease } from "./release-contract.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const packageVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
-if (packageVersion !== "1.8.0-dev.14") throw new Error("Unexpected version: this source is IMPORT-004");
+const release = readReleaseContract(root);
 const readiness = evaluateBuildReadiness(root);
 if (!readiness.ready) {
   console.error(JSON.stringify({ status: "BLOCKED", reason: "dependency-readiness", blockers: readiness.blockers }, null, 2));
@@ -41,7 +41,7 @@ const result = await esbuild.build({
   sourcemap: false,
   metafile: true,
   legalComments: "external",
-  define: { "process.env.NODE_ENV": '"production"' },
+  define: { "process.env.NODE_ENV": '"production"', "__YADILAB_SOURCE_COMMIT__": JSON.stringify(release.sourceCommit) },
   loader: { ".json": "json" },
 });
 
@@ -55,9 +55,11 @@ const publicFiles = ["acceptance.html", "acceptance-probe.js", "manifest.webmani
 for (const file of publicFiles) fs.copyFileSync(path.join(root, "ui/public", file), path.join(temp, file));
 fs.writeFileSync(path.join(temp, "build-marker.json"), `${JSON.stringify({
   formatId: "yadilab.browser-build-marker",
-  version: packageVersion,
-  marker: `yadilab-v${packageVersion}`,
-  checkpoint: "IMPORT-004",
+  version: release.version,
+  marker: `yadilab-v${release.version}`,
+  checkpoint: release.checkpoint,
+  sourceCommit: release.sourceCommit,
+  sourceTree: release.sourceTree,
 }, null, 2)}\n`);
 const branding = JSON.parse(fs.readFileSync(path.join(root, "app-config/branding.json"), "utf8"));
 const cssExists = fs.existsSync(path.join(temp, "assets/app.css"));
@@ -98,6 +100,7 @@ if (remote.length) {
   console.error(JSON.stringify({ status: "FAIL", reason: "remote-runtime-reference", findings: remote }, null, 2));
   process.exit(1);
 }
+assertBundledRelease(temp, release);
 const releasePreflight = verifyBrowserRelease(temp);
 if (!releasePreflight.ok) {
   console.error(JSON.stringify({ status: "FAIL", reason: "browser-release-preflight", diagnostics: releasePreflight.errors }, null, 2));
