@@ -34,6 +34,7 @@ import guidedLinuxSsh from "../../curriculum/builtin/wave1/linux-ssh.json";
 import defaultEnterpriseMapping from "../../examples/enterprise-import/enterprise-import-template.mapping.json";
 import { previewNetworkTopologyFile } from "../src/browser/network-topology-import.js";
 import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
+import { mapReviewedGraphmlToBuilder, GRAPHML_MANUAL_ROLE_OPTIONS } from "../../enterprise-import/src/graphml-review-mapping.js";
 import { GraphmlReadOnlyPanel } from "./graphml-preview-panel.mjs";
 import networkFaultPack from "../../fault-packs/builtin/network-core.json";
 import windowsFaultPack from "../../fault-packs/builtin/windows-core.json";
@@ -3882,7 +3883,33 @@ function App() {
         e("span", null, `Evidenssynlighet ${selectedGuidedLab.difficulty.evidenceVisibility}`),
         e("span", null, `Åtgärdsbegränsningar ${selectedGuidedLab.difficulty.remediationConstraints}`))) : null,
     networkImportOpen ? e(NetworkTopologyImportPanel, { compilerOptions, setDiagnostics, initialSelection: networkImportSelection, onClose: () => { setNetworkImportOpen(false); setNetworkImportSelection(null); }, onActivate: (next, openProbes) => { beginScenarioTransition(); setImportedProbeAutoOpen(Boolean(openProbes)); setWorkspace(next); setNetworkImportOpen(false); setNetworkImportSelection(null); } }) : null,
-    graphmlPreviewOpen ? e(GraphmlReadOnlyPanel, { inspectFile: previewGraphmlFileReadOnly, onClose: () => setGraphmlPreviewOpen(false) }) : null,
+    graphmlPreviewOpen ? e(GraphmlReadOnlyPanel, { inspectFile: previewGraphmlFileReadOnly,
+      manualRoleOptions: GRAPHML_MANUAL_ROLE_OPTIONS,
+      onClose: () => setGraphmlPreviewOpen(false),
+      onConfirm: async (sourcePreview, decisions) => {
+        const mapped = mapReviewedGraphmlToBuilder(sourcePreview, decisions);
+        if (mapped.status !== "READY_FOR_COMPILATION" || !mapped.source) {
+          throw new Error(`GraphML manual mapping blocked: ${mapped.diagnostics.map((d) => d.code).join(", ")}`);
+        }
+        // Preparation is local: the current workspace remains completely intact
+        // unless compilation AND layout have both succeeded.
+        let candidate = await compileBuilderWorkspace(createBuilderWorkspace(mapped.source), compilerOptions);
+        if (candidate.compile.status !== "valid") {
+          throw new Error(`GraphML Builder compilation blocked: ${candidate.compile.diagnostics.map((d) => d.code).join(", ")}`);
+        }
+        const layout = await autoLayoutBuilder(candidate, new ElkLayoutBackend());
+        if (!layout.ok) {
+          throw new Error(`GraphML Builder layout blocked: ${layout.diagnostics.map((d) => d.code).join(", ")}`);
+        }
+        beginScenarioTransition();
+        setImportedProbeAutoOpen(false);
+        setDiagnostics([...layout.diagnostics,
+          { severity: "warning", code: "GRAPHML_MANUAL_MAPPING_NOT_VERIFIED",
+            message: "GraphML graph edges were modeled only by explicit user choice. No physical cable, reachability, protocol result or verification PASS is implied." }]);
+        setWorkspace(layout.workspace);
+        setGraphmlPreviewOpen(false);
+      },
+    }) : null,
     e("main", { className: "workspace-grid" },
       e(ControlCenter, null,
         e(ControlSection, { title: "Verification, experiments & promotion", description: "Evidence, intent, matrix and promotion workflows stay available on demand.", searchTerms: "Troubleshooting Case Network Intent Scenario Experiments Verified Baselines Regression Campaigns Transition Matrix Campaign Bundle Change Sets Verification Suites What-If Matrix Promotion Rollback" },

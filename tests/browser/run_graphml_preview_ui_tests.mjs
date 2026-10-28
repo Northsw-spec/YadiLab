@@ -3,7 +3,7 @@ import fs from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { previewGraphmlFileReadOnly } from "../../dist-browser-test/ui/src/browser/graphml-import-preview.js";
-import { GraphmlPreviewDetails, GraphmlReadOnlyPanel } from "../../ui/app/graphml-preview-panel.mjs";
+import { GraphmlPreviewDetails, GraphmlReadOnlyPanel, GraphmlManualReviewControls } from "../../ui/app/graphml-preview-panel.mjs";
 
 let assertions = 0;
 const eq = (got, want, msg) => { assert.deepEqual(got, want, msg); assertions++; };
@@ -30,7 +30,7 @@ const details = renderToStaticMarkup(React.createElement(GraphmlPreviewDetails, 
 for (const marker of [
   'data-graphml-preview="REVIEW_REQUIRED"',
   'data-graphml-truth-boundary="true"',
-  'data-graphml-activation-status="BLOCKED"',
+  'data-graphml-activation-status="REVIEW_REQUIRED"',
   'data-graphml-nodes="true"',
   'data-graphml-edges="true"',
   "router_1",
@@ -54,6 +54,21 @@ const hostile = { ...result, preview: { ...result.preview, nodes: [
 const hostileHtml = renderToStaticMarkup(React.createElement(GraphmlPreviewDetails, { result: hostile }));
 eq(hostileHtml.includes("<img src=x"), false, "Imported label must never create a DOM image");
 eq(hostileHtml.includes("&lt;img"), true, "React escapes untrusted graph labels");
+const reviewHtml = renderToStaticMarkup(React.createElement(GraphmlManualReviewControls, {
+  result, manualRoleOptions:["resource.generic","network.switch","network.router"], onConfirm: async () => {},
+}));
+for(const marker of [
+  'data-graphml-mapping="REVIEW_REQUIRED"', 'data-graphml-role="0"',
+  'data-graphml-role="1"', 'data-graphml-edge-decision="0"',
+  'data-graphml-edge-ack="true"', 'data-graphml-map-confirm="true"',
+]) { assert.ok(reviewHtml.includes(marker), `Review UI must contain ${marker}`); assertions++; }
+eq(reviewHtml.includes('resource.generic'), true, "Unknown node role defaults generic");
+const wiredMain = fs.readFileSync("ui/app/main.mjs","utf8");
+assert.match(wiredMain, /mapReviewedGraphmlToBuilder\(sourcePreview, decisions\)/); assertions++;
+assert.match(wiredMain, /candidate\.compile\.status !== "valid"/); assertions++;
+assert.match(wiredMain, /if \(!layout\.ok\)/); assertions++;
+assert.match(wiredMain, /setWorkspace\(layout\.workspace\)/); assertions++;
+assert.match(wiredMain, /setImportedProbeAutoOpen\(false\)/); assertions++;
 const uiPanelSrc = fs.readFileSync("ui/app/graphml-preview-panel.mjs", "utf8");
 // Scan executable text only. A documentation comment mentioning a forbidden
 // API must not produce a false FAIL. The negative controls below still prove
@@ -66,12 +81,13 @@ eq(noMutationCallbacks(executablePanelSrc + "\nonActivate()"), false, "Activatio
 eq(/dangerouslySetInnerHTML/.test(executablePanelSrc), false, "No raw HTML injection");
 const app = fs.readFileSync("ui/app/main.mjs", "utf8");
 assert.match(app, /data-inspect-graphml": "PREVIEW_ONLY"/); assertions++;
-assert.match(app, /e\(GraphmlReadOnlyPanel, \{ inspectFile: previewGraphmlFileReadOnly, onClose: \(\) => setGraphmlPreviewOpen\(false\) \}\)/); assertions++;
+assert.match(app, /e\(GraphmlReadOnlyPanel, \{ inspectFile: previewGraphmlFileReadOnly/); assertions++;
+assert.match(app, /onConfirm: async \(sourcePreview, decisions\)/); assertions++;
 assert.match(app, /onInspectGraphml: \(\) => setGraphmlPreviewOpen\(true\)/); assertions++;
 assert.match(app, /accept: "\.xlsx,\.ods,\.csv,\.tsv"/); assertions++;
 
 // Negative control: removing the real dialog invocation must invalidate wiring check.
-const wiring = (src) => /e\(GraphmlReadOnlyPanel, \{ inspectFile: previewGraphmlFileReadOnly, onClose: \(\) => setGraphmlPreviewOpen\(false\) \}\)/.test(src);
+const wiring = (src) => /e\(GraphmlReadOnlyPanel, \{ inspectFile: previewGraphmlFileReadOnly/.test(src);
 eq(wiring(app.replace("e(GraphmlReadOnlyPanel, { inspectFile: previewGraphmlFileReadOnly", "e(GraphmlReadOnlyPanel, { inspectFile: undefined")), false);
 
 await expectedBlocked(named("scan.xml"), "GRAPHML_FILE_EXTENSION_INVALID");

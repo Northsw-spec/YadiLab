@@ -32,13 +32,13 @@ export function GraphmlPreviewDetails({ result }) {
       ? e("ul", { className: "validation-list", "data-graphml-warnings": "true" },
           ...preview.diagnostics.map((d, i) => e("li", { key: i }, `${d.code}: ${d.message}`)))
       : null,
-    e("p", { className: "helper-note", "data-graphml-activation-status": "BLOCKED" },
-      "Preview only. GraphML-to-Builder mapping and topology activation are NOT enabled in this checkpoint."),
+    e("p", { className: "helper-note", "data-graphml-activation-status": "REVIEW_REQUIRED" },
+      "Read-only source inspection. Creating a separate Builder draft requires explicit reviewed mapping below; no Engine network truth is inferred."),
   );
 }
 
 /** Isolated dialog. It never receives setWorkspace or an activation callback. */
-export function GraphmlReadOnlyPanel({ onClose, inspectFile }) {
+export function GraphmlReadOnlyPanel({ onClose, inspectFile, onConfirm, manualRoleOptions = ["resource.generic"] }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -87,9 +87,76 @@ export function GraphmlReadOnlyPanel({ onClose, inspectFile }) {
           }, hidden: true })),
       error ? e("p", { role: "alert", className: "helper-status blocked", "data-graphml-error": "BLOCKED" }, error) : null,
       e(GraphmlPreviewDetails, { result }),
+      result ? e(GraphmlManualReviewControls, { key: result.preview.sourceSha256, result,
+        manualRoleOptions, busy, setBusy, setError, onConfirm }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-graphml-cancel": "true",
           onClick: () => { request.current++; onClose(); } }, "Close without changes")),
     ),
+  );
+}
+
+/**
+ * Explicit mapping, separate from the read-only preview.
+ * Every node starts GENERIC; no edge is modeled until individually selected,
+ * then acknowledged. Only the parent can request a validated Builder change.
+ */
+export function GraphmlManualReviewControls({ result, manualRoleOptions = ["resource.generic"], busy = false, setBusy = () => {}, setError = () => {}, onConfirm }) {
+  const [roles, setRoles] = useState({});
+  const [selectedEdges, setSelectedEdges] = useState([]);
+  const [ack, setAck] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const { preview } = result;
+  const visibleNodes = preview.nodes.slice(0, MAX_VISIBLE_ROWS);
+  const visibleEdges = preview.edges.slice(0, MAX_VISIBLE_ROWS);
+  const validChoices = selectedEdges.every((ordinal) => !preview.edges[ordinal]?.directed);
+  const send = async () => {
+    if (busy || submitting || typeof onConfirm !== "function" || !validChoices || (selectedEdges.length && !ack)) return;
+    setSubmitting(true); setBusy(true); setError("");
+    try {
+      const decisions = {
+        sourceSha256: preview.sourceSha256, graphId: preview.graphId,
+        roles: Object.entries(roles).filter(([, type]) => type !== "resource.generic")
+          .map(([nodeOrdinal, type]) => ({ nodeOrdinal: Number(nodeOrdinal), type })),
+        modeledEdgeOrdinals: [...selectedEdges].sort((a, b) => a - b),
+        acknowledgeModeledConnections: selectedEdges.length > 0 && ack,
+      };
+      await onConfirm(preview, decisions);
+    } catch (cause) {
+      setError(cause?.code ? `${cause.code}: ${cause.message}` : cause instanceof Error ? cause.message : String(cause));
+    } finally { setBusy(false); setSubmitting(false); }
+  };
+  return e("section", { className: "network-import-preview", "data-graphml-mapping": "REVIEW_REQUIRED" },
+    e("h3", null, "Manual mapping to Builder"),
+    e("p", { className: "helper-note" },
+      "Every node defaults to generic. Choose a type ONLY when you know it. Graph edges are NOT physical cables; you must select each edge you choose to model as a network connection."),
+    e("h4", null, "Node type decisions"),
+    e("ul", { className: "validation-list", "data-graphml-role-list": "true" }, ...visibleNodes.map((n, index) =>
+      e("li", { key: n.id },
+        e("label", null, `${n.label ?? n.id} (${n.id}) · `,
+          e("select", { value: roles[index] ?? "resource.generic", disabled: busy || submitting,
+            "data-graphml-role": String(index), onChange: (ev) => setRoles((prev) => ({ ...prev, [index]: ev.target.value })) },
+            ...manualRoleOptions.map((type) => e("option", { key: type, value: type }, type))))))),
+    preview.nodes.length > MAX_VISIBLE_ROWS ? e("p", null, "Remaining nodes keep generic type; additional role mapping is not available in this preview.") : null,
+    e("h4", null, "Optional graph edges to model as network connections"),
+    e("ul", { className: "validation-list", "data-graphml-edge-list": "true" }, ...visibleEdges.map((edge, index) =>
+      e("li", { key: `${edge.id ?? "graph-edge"}-${index}` },
+        e("label", null,
+          e("input", { type: "checkbox", checked: selectedEdges.includes(index),
+            disabled: busy || submitting || edge.directed, "data-graphml-edge-decision": String(index),
+            onChange: (ev) => {
+              setSelectedEdges((prev) => ev.target.checked ? [...prev, index] : prev.filter((x) => x !== index));
+              setAck(false);
+            } }),
+          ` ${edge.id ?? `edge ${index + 1}`}: ${edge.sourceId} — ${edge.targetId}${edge.directed ? " (directed: cannot model as undirected network link)" : ""}`)))),
+    preview.edges.length > MAX_VISIBLE_ROWS ? e("p", null, "Remaining edges are not selectable in this version.") : null,
+    e("label", { className: "helper-note" },
+      e("input", { type: "checkbox", checked: ack, disabled: busy || submitting || selectedEdges.length === 0,
+        "data-graphml-edge-ack": "true", onChange: (ev) => setAck(ev.target.checked) }),
+      " I explicitly choose to MODEL these selected graph edges as network connections. This is NOT independent verification of physical cables, protocols or reachability."),
+    e("p", null, `Selected connections: ${selectedEdges.length} / ${preview.edges.length}. Unselected graph edges will NOT become network connections.`),
+    e("button", { type: "button", "data-graphml-map-confirm": "true",
+      disabled: busy || submitting || typeof onConfirm !== "function" || !validChoices || (selectedEdges.length > 0 && !ack),
+      onClick: () => { void send(); } }, busy || submitting ? "Validating draft…" : "Validate and create reviewed Builder draft"),
   );
 }
