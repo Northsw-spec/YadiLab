@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import os
 import sys
 from playwright.sync_api import sync_playwright
 
@@ -211,8 +212,10 @@ def main():
     results = []
     with sync_playwright() as playwright:
         # Browser downloaded in CI and running as an actual headless Chromium process.
-        browser = playwright.chromium.launch(headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-background-networking"])
+        chromium_args = ["--disable-dev-shm-usage", "--disable-background-networking"]
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            chromium_args.append("--no-sandbox")
+        browser = playwright.chromium.launch(headless=True, args=chromium_args)
         try:
             for test in (case_cancel, case_malicious,
                          lambda b, u: case_confirm(b, u, False),
@@ -222,8 +225,15 @@ def main():
                 print("PASS real Chromium GraphML:", outcome["case"], flush=True)
         finally:
             browser.close()
+    os_release = Path("/etc/os-release")
+    os_identity = "UNKNOWN"
+    if os_release.exists():
+        for line in os_release.read_text().splitlines():
+            if line.startswith("PRETTY_NAME="):
+                os_identity = line.partition("=")[2].strip().strip('"')
+                break
     report = {"status": "PASS", "testType": "real Chromium UI + actual compiled YadiLab bundle",
-              "platform": "GitHub Ubuntu runner (NOT Parrot)", "cases": results}
+              "platform": os_identity, "cases": results}
     path = args.evidence_dir / "graphml-p2c-real-browser-acceptance.json"
     path.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
