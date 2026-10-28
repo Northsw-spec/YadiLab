@@ -1,0 +1,75 @@
+name: Ansible INI Parrot target gate and independent Ubuntu controls
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/run_ansible_ini_parrot_acceptance.sh'
+      - 'tests/acceptance/run_ansible_ini_parrot_gate_contract.sh'
+      - 'tests/acceptance/run_ansible_ini_p2_real_browser.py'
+      - 'tests/acceptance/run_ansible_ini_p3_real_browser.py'
+      - 'docs/acceptance/ANSIBLE_INI_PARROT_001.md'
+      - '.github/workflows/ansible-ini-parrot-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-negative-target-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parrot-only acceptance MUST return BLOCKED on Ubuntu
+        run: |
+          bash -n scripts/run_ansible_ini_parrot_acceptance.sh
+          bash -n tests/acceptance/run_ansible_ini_parrot_gate_contract.sh
+          bash tests/acceptance/run_ansible_ini_parrot_gate_contract.sh
+
+  independent-ubuntu-chromium-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install pinned Playwright and Chromium in isolated venv
+        run: |
+          python3 -m venv /tmp/yadilab-parrot-ini-venv
+          /tmp/yadilab-parrot-ini-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/yadilab-parrot-ini-venv/bin/python -m playwright install --with-deps chromium
+      - name: Domain tests and actual compiled browser release
+        run: |
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          node tests/enterprise-import/run_ansible_ini_association_review_tests.mjs
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real P2/P3 Chromium interactions against localhost (UBUNTU ONLY)
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18985 --bind 127.0.0.1 --directory ui/dist >/tmp/yadilab-parrot-ini-ubuntu-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18985/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18985/browser-build-manifest.json >/dev/null
+          /tmp/yadilab-parrot-ini-venv/bin/python tests/acceptance/run_ansible_ini_p2_real_browser.py --url http://127.0.0.1:18985/ --evidence-dir /tmp/parrot-ini-ubuntu-evidence/p2
+          /tmp/yadilab-parrot-ini-venv/bin/python tests/acceptance/run_ansible_ini_p3_real_browser.py --url http://127.0.0.1:18985/ --evidence-dir /tmp/parrot-ini-ubuntu-evidence/p3
+      - name: Upload Ubuntu-only evidence (NOT Parrot acceptance)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-ini-ubuntu-only-browser-evidence
+          path: /tmp/parrot-ini-ubuntu-evidence/
+          if-no-files-found: ignore
