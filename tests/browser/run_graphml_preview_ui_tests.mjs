@@ -81,7 +81,8 @@ eq(noMutationCallbacks(executablePanelSrc + "\nonActivate()"), false, "Activatio
 eq(/dangerouslySetInnerHTML/.test(executablePanelSrc), false, "No raw HTML injection");
 const app = fs.readFileSync("ui/app/main.mjs", "utf8");
 assert.match(app, /data-inspect-graphml": "PREVIEW_ONLY"/); assertions++;
-assert.match(app, /e\(GraphmlReadOnlyPanel, \{ inspectFile: previewGraphmlFileReadOnly/); assertions++;\nassert.match(app, /onConfirm: async \(sourcePreview, decisions\)/); assertions++;
+assert.match(app, /e\(GraphmlReadOnlyPanel, \{ inspectFile: previewGraphmlFileReadOnly/); assertions++;
+assert.match(app, /onConfirm: async \(sourcePreview, decisions\)/); assertions++;
 assert.match(app, /onInspectGraphml: \(\) => setGraphmlPreviewOpen\(true\)/); assertions++;
 assert.match(app, /accept: "\.xlsx,\.ods,\.csv,\.tsv"/); assertions++;
 
