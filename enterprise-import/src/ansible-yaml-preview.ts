@@ -1,4 +1,4 @@
-import { parseAllDocuments, isAlias, isMap, isScalar, isSeq } from "yaml";
+import { parseAllDocuments, YAMLMap, isAlias, isMap, isScalar, isSeq } from "yaml";
 import { webCryptoImportHashProvider } from "./hash.js";
 import { EnterpriseImportError } from "./types.js";
 
@@ -182,7 +182,7 @@ export async function previewAnsibleStaticInventory(bytes: Uint8Array): Promise<
           if (old && old.address !== reported) {
             fail("ANSIBLE_YAML_HOST_CONFLICT", "A repeated host has conflicting or missing connection address values.");
           }
-          const item = old ?? { ...(reported === undefined ? {} : { address: reported }),
+          const item: { address?: string; groupPaths: string[]; locators: AnsibleInventoryLocator[] } = old ?? { ...(reported === undefined ? {} : { address: reported }),
             groupPaths: [], locators: [] };
           if (!item.groupPaths.includes(path)) {
             item.groupPaths.push(path);
@@ -195,7 +195,7 @@ export async function previewAnsibleStaticInventory(bytes: Uint8Array): Promise<
         for (const child of mapEntries(entry.value, "Child groups")) {
           if (child.value === null || (isScalar(child.value) && child.value.value === null)) {
             // Empty declared child group has no hosts or vars and is kept as a group.
-            visit(child.key, { items: [] }, [...parents, groupName]);
+            visit(child.key, new YAMLMap(), [...parents, groupName]);
           } else {
             visit(child.key, child.value, [...parents, groupName]);
           }
