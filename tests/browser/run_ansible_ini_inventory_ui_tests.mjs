@@ -51,7 +51,9 @@ for(const mark of ['role="dialog"','aria-modal="true"',
  'data-ansible-ini-file="true"','accept=".ini"','data-ansible-ini-close="true"']){
  assert.ok(modal.includes(mark),"Missing panel file control "+mark);checks++;
 }
-eq(/data-ansible-ini-activate|data-ansible-ini-import|data-ansible-ini-associate/.test(modal),false);
+eq(/data-ansible-ini-activate|data-ansible-ini-import/.test(modal),false);
+eq(modal.includes('data-ansible-ini-association-review="BUILDER_REQUIRED"'),true,
+  "Runtime/no-Builder control stays blocked");
 const hierarchy=await previewAnsibleIniFileReadOnly(file("site.ini",read("valid-hierarchy.ini")));
 const hhtml=renderToStaticMarkup(React.createElement(AnsibleIniInventoryDetails,{result:hierarchy}));
 for(const mark of ["site","child groups: routers, servers","rtr01","app01","app02"]){
