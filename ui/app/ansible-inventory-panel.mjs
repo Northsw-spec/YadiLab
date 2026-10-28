@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { AnsibleAssociationReview } from "./ansible-association-review.mjs";
 
 const e = React.createElement;
 const DISPLAY_HOSTS = 80;
@@ -47,7 +48,7 @@ export function AnsibleInventoryDetails({ result }) {
 }
 
 /** Isolated dialog; no setWorkspace, import or Engine callback is accepted. */
-export function AnsibleInventoryPanel({ inspectFile, onClose }) {
+export function AnsibleInventoryPanel({ inspectFile, onClose, model = null, onExportAssociation }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -101,6 +102,10 @@ export function AnsibleInventoryPanel({ inspectFile, onClose }) {
           } })),
       error ? e("p", { role: "alert", className: "helper-status blocked", "data-ansible-error": "BLOCKED" }, error) : null,
       e(AnsibleInventoryDetails, { result }),
+      result ? e(AnsibleAssociationReview, {
+        key: `${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
+        result, model, busy, onExport: onExportAssociation,
+      }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-ansible-close": "true",
           onClick: () => { req.current++; onClose(); } }, "Close without changes"))));
