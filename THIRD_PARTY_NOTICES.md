@@ -26,6 +26,7 @@ Inventory status: **bundle-resolved**.
 - react-dom 19.3.0 — MIT
 - scheduler 0.28.0 — MIT
 - use-sync-external-store 1.7.0 — MIT
+- yaml 2.8.3 — ISC
 - zustand 4.5.7 — MIT
 
 ## Direct dependency policy
@@ -38,3 +39,4 @@ Inventory status: **bundle-resolved**.
 - elkjs 0.12.0 — EPL-2.0 OR GPL-3.0-or-later — runtime
 - react 19.3.0 — MIT — runtime
 - react-dom 19.3.0 — MIT — runtime
+- yaml 2.8.3 — ISC — runtime
