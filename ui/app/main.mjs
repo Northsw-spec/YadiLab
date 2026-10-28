@@ -33,6 +33,8 @@ import guidedLinuxFirewall from "../../curriculum/builtin/wave1/linux-firewall.j
 import guidedLinuxSsh from "../../curriculum/builtin/wave1/linux-ssh.json";
 import defaultEnterpriseMapping from "../../examples/enterprise-import/enterprise-import-template.mapping.json";
 import { previewNetworkTopologyFile } from "../src/browser/network-topology-import.js";
+import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
+import { GraphmlReadOnlyPanel } from "./graphml-preview-panel.mjs";
 import networkFaultPack from "../../fault-packs/builtin/network-core.json";
 import windowsFaultPack from "../../fault-packs/builtin/windows-core.json";
 import linuxFaultPack from "../../fault-packs/builtin/linux-core.json";
@@ -3099,7 +3101,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   );
 }
 
-function MainActions({ onImportNetwork, onImportNetworkFile, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   const networkPickerRef = useRef(null);
   // Opening the native picker happens synchronously within the user's click,
@@ -3155,6 +3157,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, workspace, busy, br
       ),
       e(WorkspaceMenu, { label: "Import / Export" },
         e("button", { type: "button", "data-import-network-action": "true", onClick: openNetworkPicker }, "Import Network from Excel / CSV"),
+        e("button", { type: "button", "data-inspect-graphml": "PREVIEW_ONLY", onClick: onInspectGraphml }, "Inspect GraphML (read-only preview)"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: exportSource }, "Exportera källfil") : e("button", { type: "button", onClick: exportProgress }, "Exportera framsteg"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: () => exportPackage("student"), disabled: workspace.compile.status !== "valid" }, "Exportera elevpaket") : fileAction("Läs in framsteg", `${branding.progressExtension},application/json`, (event) => loadProgress(event.target.files?.[0]), "load-progress"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: () => exportPackage("author"), disabled: workspace.compile.status !== "valid" }, "Exportera författarpaket") : e("button", { type: "button", onClick: exportTroubleshootingSession }, "Exportera sessionsbackup"),
@@ -3310,6 +3313,7 @@ function App() {
   const [importWorkbench, setImportWorkbench] = useState(() => emptyImportWorkbench());
   const [networkImportOpen, setNetworkImportOpen] = useState(false);
   const [networkImportSelection, setNetworkImportSelection] = useState(null);
+  const [graphmlPreviewOpen, setGraphmlPreviewOpen] = useState(false);
   const [importedProbeAutoOpen, setImportedProbeAutoOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -3866,7 +3870,7 @@ function App() {
   return e("div", { className: "app-frame", "data-app-runtime": "ready", "data-runtime-scenario-id": workspace.mode === "runtime" ? workspace.scenario.scenarioId : workspace.source.scenarioId, "data-runtime-scenario-hash": workspace.mode === "runtime" ? workspace.scenario.sourceHash : "builder" },
     e("header", { className: "app-header" },
       e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
-      e(MainActions, { onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
+      e(MainActions, { onInspectGraphml: () => setGraphmlPreviewOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
     selectedGuidedLab ? e("section", { className: "curriculum-strip", "data-curriculum-wave": "guided_troubleshooting_wave1" },
@@ -3878,6 +3882,7 @@ function App() {
         e("span", null, `Evidenssynlighet ${selectedGuidedLab.difficulty.evidenceVisibility}`),
         e("span", null, `Åtgärdsbegränsningar ${selectedGuidedLab.difficulty.remediationConstraints}`))) : null,
     networkImportOpen ? e(NetworkTopologyImportPanel, { compilerOptions, setDiagnostics, initialSelection: networkImportSelection, onClose: () => { setNetworkImportOpen(false); setNetworkImportSelection(null); }, onActivate: (next, openProbes) => { beginScenarioTransition(); setImportedProbeAutoOpen(Boolean(openProbes)); setWorkspace(next); setNetworkImportOpen(false); setNetworkImportSelection(null); } }) : null,
+    graphmlPreviewOpen ? e(GraphmlReadOnlyPanel, { inspectFile: previewGraphmlFileReadOnly, onClose: () => setGraphmlPreviewOpen(false) }) : null,
     e("main", { className: "workspace-grid" },
       e(ControlCenter, null,
         e(ControlSection, { title: "Verification, experiments & promotion", description: "Evidence, intent, matrix and promotion workflows stay available on demand.", searchTerms: "Troubleshooting Case Network Intent Scenario Experiments Verified Baselines Regression Campaigns Transition Matrix Campaign Bundle Change Sets Verification Suites What-If Matrix Promotion Rollback" },
