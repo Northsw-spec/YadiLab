@@ -53,6 +53,10 @@ jobs:
         run: |
           tsc -p tests/tsconfig.browser.json
           node tests/browser/run_graphml_preview_ui_tests.mjs
+      - name: GraphML reviewed source schema and real Builder compilation
+        run: |
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_graphml_builder_compilation_tests.mjs
       - name: Workbook and current quick-import regression
         run: |
           npm run test:workbook
