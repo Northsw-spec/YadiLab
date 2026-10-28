@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'tests/acceptance/run_graphml_p2c_real_browser.py'
+      - 'scripts/run_graphml_parrot_acceptance.sh'
       - '.github/workflows/graphml-p2c-real-browser.yml'
       - 'enterprise-import/src/graphml-*.ts'
       - 'ui/app/graphml-preview-panel.mjs'
@@ -28,6 +29,16 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Parrot acceptance entrypoint must BLOCK on Ubuntu, never fake PASS
+        run: |
+          set -Eeuo pipefail
+          bash -n scripts/run_graphml_parrot_acceptance.sh
+          set +e
+          bash scripts/run_graphml_parrot_acceptance.sh > /tmp/parrot-target-gate.log 2>&1
+          status=$?
+          set -e
+          test "$status" -eq 77
+          grep -q 'BLOCKED GRAPHML-P2C Parrot: TARGET_IS_NOT_PARROT' /tmp/parrot-target-gate.log
       - name: Install exact application dependencies
         run: npm ci
       - name: Install isolated pinned acceptance-only Playwright and Chromium
