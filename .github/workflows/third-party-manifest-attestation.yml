@@ -58,10 +58,12 @@ jobs:
           node scripts/verify_browser_release.mjs
           node scripts/verify_release_identity.mjs
           git diff --exit-code -- dependencies/third-party-inventory.json THIRD_PARTY_NOTICES.md
-          echo "Git checkout changes after a read-only build (must be empty for release):"
-          git status --short --untracked-files=all
-          git diff --name-status
-          test -z "$(git status --porcelain)"
+          echo "Tracked Git changes after the build (must be empty for release):"
+          git status --short --untracked-files=no
+          git diff --exit-code
+          # node_modules/ and ui/dist/ are expected untracked outputs of npm ci/build.
+          # The release identity gate checks TRACKED files; keep that fail-closed.
+          test -z "$(git status --porcelain --untracked-files=no)"
       - name: Print manifest evidence
         run: |
           node -e "let x=require('./dependencies/third-party-inventory.json'); console.log(JSON.stringify({status:x.status,complete:x.completeResolvedBundleInventory,sourcePolicySha256:x.sourcePolicySha256,components:x.bundledRuntimeComponents.length,approvedYaml:x.bundledRuntimeComponents.some(y=>y.name==='yaml'&&y.version==='2.8.3')},null,2))"
