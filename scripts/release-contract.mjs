@@ -76,7 +76,7 @@ export function assertGitBundleInputs(root,metafile) {
     if (normalized.startsWith("<") || normalized.includes("\0")) {
       throw new Error("RELEASE_SOURCE_INPUT_INVALID: invalid bundle input");
     }
-    if (normalized.split("/").includes("node_modules")) continue;
+    if (normalized.startsWith("node_modules/") || normalized.startsWith("./node_modules/")) continue;
     indexedRegularFile(root,tracked,filename);
   }
 }
