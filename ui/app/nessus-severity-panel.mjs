@@ -47,7 +47,7 @@ export function NessusSeverityPanel({ inspectFile, onClose }) {
     }catch(cause){
       if(generation.current===id){
         setError(typeof cause?.code==="string" &&
-          /^(NESSUS_|IMPORT_XML_)[A-Z_]+$/.test(cause.code)
+          /^(NESSUS_|IMPORT_XML_)[A-Z0-9_]+$/.test(cause.code)
           ?cause.code:"NESSUS_PREVIEW_BLOCKED");
       }
     }finally{if(generation.current===id)setBusy(false);}
