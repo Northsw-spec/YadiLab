@@ -1,0 +1,89 @@
+name: ANSIBLE INI P6 saved P4 original-source replay compiled Chromium
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/ansible-ini-association-review.ts'
+      - 'ui/app/ansible-ini-association-review.mjs'
+      - 'ui/app/ansible-ini-inspection-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/enterprise-import/run_ansible_ini_association_review_tests.mjs'
+      - 'tests/browser/run_ansible_ini_association_ui_tests.mjs'
+      - 'tests/browser/run_ansible_ini_p6_host_pagination_tests.mjs'
+      - 'tests/acceptance/run_ansible_ini_p6_real_browser.py'
+      - 'docs/architecture/ANSIBLE_INI_P6_BOUNDED_HOST_PAGINATION_ORACLES.md'
+      - '.github/workflows/ansible-ini-p6-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ansible-ini-p6-host-pagination-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Isolated pinned Playwright and Chromium
+        run: |
+          python3 -m venv /tmp/ansible-ini-p6-venv
+          /tmp/ansible-ini-p6-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/ansible-ini-p6-venv/bin/python -m playwright install --with-deps chromium
+      - name: Exact source identity, strict INI P1-P6 and independent import regression
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/enterprise-import/run_ansible_ini_readonly_preview_tests.mjs
+          node tests/enterprise-import/run_ansible_ini_association_review_tests.mjs
+          node tests/browser/run_ansible_ini_inventory_ui_tests.mjs
+          node tests/browser/run_ansible_ini_association_ui_tests.mjs
+          node tests/browser/run_ansible_ini_p4_original_export_tests.mjs
+          node tests/browser/run_ansible_ini_p5_saved_replay_tests.mjs
+          node tests/browser/run_ansible_ini_p6_host_pagination_tests.mjs
+          node tests/enterprise-import/run_ansible_yaml_readonly_preview_tests.mjs
+          node tests/enterprise-import/run_ansible_association_review_tests.mjs
+          node tests/browser/run_ansible_yaml_inventory_ui_tests.mjs
+          node tests/browser/run_ansible_yaml_p4_original_export_tests.mjs
+          node tests/browser/run_ansible_yaml_p5_saved_replay_tests.mjs
+          node tests/enterprise-import/run_graphml_readonly_preview_tests.mjs
+          node tests/browser/run_nmap_xml_observation_ui_tests.mjs
+          node tests/browser/run_drawio_p5_saved_replay_tests.mjs
+      - name: Compile real YadiLab and verify release identity
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real compiled Chromium INI P2-P6, YAML P4-P5, Nmap and GraphML
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18993 --bind 127.0.0.1 --directory ui/dist >/tmp/ansible-ini-p6-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18993/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18993/browser-build-manifest.json >/dev/null
+          /tmp/ansible-ini-p6-venv/bin/python tests/acceptance/run_ansible_ini_p2_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/ansible-ini-p6-evidence/ini-p2
+          /tmp/ansible-ini-p6-venv/bin/python tests/acceptance/run_ansible_ini_p3_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/ansible-ini-p6-evidence/ini-p3
+          /tmp/ansible-ini-p6-venv/bin/python tests/acceptance/run_ansible_ini_p4_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/ansible-ini-p6-evidence/ini-p4
+          /tmp/ansible-ini-p6-venv/bin/python tests/acceptance/run_ansible_ini_p5_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/ansible-ini-p6-evidence/ini-p5
+          /tmp/ansible-ini-p6-venv/bin/python tests/acceptance/run_ansible_ini_p6_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/ansible-ini-p6-evidence/ini-p6
+          /tmp/ansible-ini-p6-venv/bin/python tests/acceptance/run_ansible_yaml_p4_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/ansible-ini-p6-evidence/yaml-p4
+          /tmp/ansible-ini-p6-venv/bin/python tests/acceptance/run_ansible_yaml_p5_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/ansible-ini-p6-evidence/yaml-p5
+          /tmp/ansible-ini-p6-venv/bin/python tests/acceptance/run_nmap_xml_p2_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/ansible-ini-p6-evidence/nmap
+          /tmp/ansible-ini-p6-venv/bin/python tests/acceptance/run_graphml_p2c_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/ansible-ini-p6-evidence/graphml
+      - name: Preserve genuine Chromium acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-ini-p6-bounded-paging-chromium
+          path: /tmp/ansible-ini-p6-evidence/
+          if-no-files-found: ignore
