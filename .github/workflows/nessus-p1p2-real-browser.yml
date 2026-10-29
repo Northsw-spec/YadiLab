@@ -1,0 +1,69 @@
+name: NESSUS P1/P2 private severity-only real Chromium acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/nessus-v2-preview.ts'
+      - 'ui/src/browser/nessus-v2-file-preview.ts'
+      - 'ui/app/nessus-severity-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_nessus_p1p2_tests.mjs'
+      - 'tests/acceptance/run_nessus_p2_real_browser.py'
+      - 'docs/architecture/NESSUS_P1P2_READONLY_SEVERITY_ORACLES.md'
+      - '.github/workflows/nessus-p1p2-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nessus-real-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locked app dependencies
+        run: npm ci
+      - name: Install pinned actual Chromium in isolated Python venv
+        run: |
+          python3 -m venv /tmp/nessus-test-venv
+          /tmp/nessus-test-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/nessus-test-venv/bin/python -m playwright install --with-deps chromium
+      - name: Source, XML adversarial, privacy, SSR and existing import regressions
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_nessus_p1p2_tests.mjs
+          node tests/browser/run_nmap_xml_observation_ui_tests.mjs
+          node tests/browser/run_odt_p6_report_replay_tests.mjs
+          node tests/browser/run_docx_p6_report_replay_tests.mjs
+      - name: Build and attest genuine compiled YadiLab
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Actual Chromium Nessus and Nmap observed-only file review
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18997 --bind 127.0.0.1 --directory ui/dist >/tmp/nessus-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18997/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18997/browser-build-manifest.json >/dev/null
+          /tmp/nessus-test-venv/bin/python tests/acceptance/run_nessus_p2_real_browser.py --url http://127.0.0.1:18997/ --evidence-dir /tmp/nessus-p1p2-evidence/nessus
+          /tmp/nessus-test-venv/bin/python tests/acceptance/run_nmap_xml_p2_real_browser.py --url http://127.0.0.1:18997/ --evidence-dir /tmp/nessus-p1p2-evidence/nmap
+      - name: Upload actual browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nessus-p1p2-private-actual-chromium
+          path: /tmp/nessus-p1p2-evidence/
+          if-no-files-found: ignore
