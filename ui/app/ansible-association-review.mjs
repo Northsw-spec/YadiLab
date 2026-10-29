@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 
 const e = React.createElement;
-const DISPLAY_LIMIT = 80;
+const REVIEW_PAGE_SIZE = 80;
+const MAX_ASSOCIATIONS = 80;
 
 /**
  * Inventory mapping is a human assertion exported in a separate JSON document.
@@ -9,17 +10,26 @@ const DISPLAY_LIMIT = 80;
  */
 export function AnsibleAssociationReview({ result, model, busy = false, onExport }) {
   const [choices, setChoices] = useState({});
+  const [page, setPage] = useState(0);
+  const [limitError, setLimitError] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [exported, setExported] = useState(false);
   const preview = result.preview;
+  const hostCount = preview.hosts.length;
+  const pages = Math.max(1, Math.ceil(hostCount / REVIEW_PAGE_SIZE));
+  const currentPage = Math.min(Math.max(0, page), pages - 1);
+  const firstOrdinal = currentPage * REVIEW_PAGE_SIZE;
+  const lastOrdinal = Math.min(hostCount, firstOrdinal + REVIEW_PAGE_SIZE) - 1;
+  const visibleHosts = preview.hosts.slice(firstOrdinal, firstOrdinal + REVIEW_PAGE_SIZE);
+  const selectedCount = Object.values(choices).filter(v => v !== "").length;
   const selected = Object.entries(choices)
     .filter(([, resourceId]) => resourceId !== "")
     .map(([ordinal, resourceId]) => ({ hostOrdinal: Number(ordinal), resourceId }))
     .sort((a, b) => a.hostOrdinal - b.hostOrdinal);
   const duplicateTargets = new Set(selected.map(x => x.resourceId)).size !== selected.length;
-  const canExport = Boolean(model && model.resources.length && selected.length && !duplicateTargets &&
+  const canExport = Boolean(model && model.resources.length && selected.length && selected.length <= MAX_ASSOCIATIONS && !duplicateTargets &&
     acknowledged && !busy && !submitting && typeof onExport === "function");
   const submit = async () => {
     if (!canExport) return;
@@ -48,28 +58,45 @@ export function AnsibleAssociationReview({ result, model, busy = false, onExport
       : e("p", { "data-ansible-model-blocked": "true" },
           "Open a Builder scenario to associate inventory declarations. Read-only inspection is available in Runtime."),
     model && model.resources.length
-      ? e("ol", { className: "validation-list", "data-ansible-association-hosts": "true" },
-          ...preview.hosts.slice(0, DISPLAY_LIMIT).map((host, hostOrdinal) =>
-            e("li", { key: `inventory-${hostOrdinal}` },
-              e("label", null, `Declared ${host.inventoryName} (address: ${host.reportedConnectionAddress ?? "UNKNOWN"}) · `,
-                e("select", {
-                  "data-ansible-associate-host": String(hostOrdinal),
-                  disabled: busy || submitting,
-                  value: choices[hostOrdinal] ?? "",
-                  onChange: event => {
-                    setChoices(prev => ({ ...prev, [hostOrdinal]: event.target.value }));
-                    setAcknowledged(false); setExported(false);
+      ? e("div", { "data-ansible-association-pagination": "true" },
+          e("p", { "data-ansible-association-page": String(currentPage + 1),
+            "data-ansible-association-range": `${firstOrdinal}:${lastOrdinal}` },
+            `Source hosts ${firstOrdinal + 1}–${lastOrdinal + 1} of ${hostCount} · Page ${currentPage + 1} of ${pages}. Up to ${MAX_ASSOCIATIONS} total reviewed mappings across pages.`),
+          e("div", { className: "network-import-actions" },
+            e("button", { type: "button", "data-ansible-page-previous": "true",
+              disabled: busy || submitting || currentPage === 0,
+              onClick: () => setPage(p => Math.max(0, p - 1)) }, "Previous hosts"),
+            e("button", { type: "button", "data-ansible-page-next": "true",
+              disabled: busy || submitting || currentPage === pages - 1,
+              onClick: () => setPage(p => Math.min(pages - 1, p + 1)) }, "Next hosts")),
+          e("ol", { className: "validation-list", "data-ansible-association-hosts": "true",
+            start: firstOrdinal + 1 },
+            ...visibleHosts.map((host, index) => {
+              const hostOrdinal = firstOrdinal + index;
+              return e("li", { key: `inventory-${hostOrdinal}` },
+                e("label", null, `Declared ${host.inventoryName} (address: ${host.reportedConnectionAddress ?? "UNKNOWN"}) · `,
+                  e("select", {
+                    "data-ansible-associate-host": String(hostOrdinal),
+                    disabled: busy || submitting,
+                    value: choices[hostOrdinal] ?? "",
+                    onChange: event => {
+                      const target = event.target.value;
+                      if (target !== "" && !choices[hostOrdinal] && selectedCount >= MAX_ASSOCIATIONS) {
+                        setLimitError(true); setAcknowledged(false); setExported(false); return;
+                      }
+                      setLimitError(false);
+                      setChoices(prev => ({ ...prev, [hostOrdinal]: target }));
+                      setAcknowledged(false); setExported(false);
+                    },
                   },
-                },
-                  e("option", { value: "" }, "Do not associate (default)"),
-                  ...model.resources.map(resource =>
-                    e("option", { key: resource.id, value: resource.id },
-                      `${resource.label} [${resource.id}]`)))))))
+                    e("option", { value: "" }, "Do not associate (default)"),
+                    ...model.resources.map(resource =>
+                      e("option", { key: resource.id, value: resource.id },
+                        `${resource.label} [${resource.id}]`)))));
+            })))
       : null,
-    preview.hosts.length > DISPLAY_LIMIT
-      ? e("p", { "data-ansible-association-limit": "true" },
-          `Only first ${DISPLAY_LIMIT} of ${preview.hosts.length} inventory hosts can be reviewed; the remainder stay unassociated.`)
-      : null,
+    limitError ? e("p", { role: "alert", "data-ansible-association-cap": "BLOCKED" },
+      "At most 80 distinct host references may be reviewed. Clear an existing selection first.") : null,
     duplicateTargets
       ? e("p", { role: "alert", "data-ansible-association-conflict": "BLOCKED" },
           "Two inventory hosts cannot be assigned to the same modeled resource in this strict review profile.")
