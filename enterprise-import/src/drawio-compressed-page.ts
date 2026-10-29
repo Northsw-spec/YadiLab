@@ -18,13 +18,11 @@ function decodeBase64(text: string): Uint8Array {
       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) {
     fail("DRAWIO_BASE64_INVALID");
   }
-  let binary: string;
-  try {
-    if (typeof atob !== "function") fail("DRAWIO_BASE64_UNAVAILABLE");
-    binary = atob(text);
-  } catch {
-    fail("DRAWIO_BASE64_INVALID");
-  }
+  if (typeof atob !== "function") fail("DRAWIO_BASE64_UNAVAILABLE");
+  const binary: string = (() => {
+    try { return atob(text); }
+    catch { throw new EnterpriseImportError("DRAWIO_BASE64_INVALID","DRAWIO_BASE64_INVALID"); }
+  })();
   if (binary.length < 1 || binary.length > MAX_COMPRESSED_BYTES) {
     fail("DRAWIO_COMPRESSED_SIZE_INVALID");
   }
@@ -45,15 +43,16 @@ export async function decodeDrawioCompressedPage(
   if (typeof DecompressionStream !== "function" || typeof ReadableStream !== "function") {
     fail("DRAWIO_DEFLATE_UNAVAILABLE");
   }
-  let reader: ReadableStreamDefaultReader<Uint8Array>;
-  try {
-    const source = new ReadableStream<Uint8Array>({
-      start(controller) { controller.enqueue(binary); controller.close(); },
-    });
-    reader = source.pipeThrough(new DecompressionStream("deflate-raw")).getReader();
-  } catch {
-    fail("DRAWIO_DEFLATE_UNAVAILABLE");
-  }
+  const reader = (() => {
+    try {
+      const source = new ReadableStream<BufferSource>({
+        start(controller) { controller.enqueue(binary); controller.close(); },
+      });
+      return source.pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+    } catch {
+      throw new EnterpriseImportError("DRAWIO_DEFLATE_UNAVAILABLE","DRAWIO_DEFLATE_UNAVAILABLE");
+    }
+  })();
 
   const chunks: Uint8Array[] = [];
   let inflated = 0;
@@ -94,9 +93,10 @@ export async function decodeDrawioCompressedPage(
       pieces.push(String.fromCharCode(...chunk.subarray(i, i + 8192)));
     }
   }
-  let decoded: string;
-  try { decoded = decodeURIComponent(pieces.join("")); }
-  catch { fail("DRAWIO_URI_INVALID"); }
+  const decoded: string = (() => {
+    try { return decodeURIComponent(pieces.join("")); }
+    catch { throw new EnterpriseImportError("DRAWIO_URI_INVALID","DRAWIO_URI_INVALID"); }
+  })();
   const xml = new TextEncoder().encode(decoded);
   if (xml.length < 1 || xml.length > MAX_INFLATED_PAGE_BYTES) {
     fail("DRAWIO_DECODED_SIZE_INVALID");
