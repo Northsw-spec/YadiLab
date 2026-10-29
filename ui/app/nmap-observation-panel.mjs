@@ -10,9 +10,15 @@ const MAX_DISPLAY_PORTS_PER_HOST = 24;
  * All untrusted strings are React text nodes (not HTML), with bounded rendering.
  */
 export function NmapObservationDetails({ result }) {
+  const [page, setPage] = useState(0);
   if (!result) return e("p", { "data-nmap-empty": "true" },
     "Choose a Nmap XML (-oX) file to inspect scan-time observations.");
   const { filename, preview } = result;
+  const pages = Math.max(1, Math.ceil(preview.hosts.length / MAX_DISPLAY_HOSTS));
+  const currentPage = Math.min(Math.max(0, page), pages - 1);
+  const firstOrdinal = currentPage * MAX_DISPLAY_HOSTS;
+  const lastOrdinal = Math.min(preview.hosts.length, firstOrdinal + MAX_DISPLAY_HOSTS) - 1;
+  const visibleHosts = preview.hosts.slice(firstOrdinal, firstOrdinal + MAX_DISPLAY_HOSTS);
   return e("section", { className: "network-import-preview", "data-nmap-observations": "EVIDENCE_ONLY" },
     e("h3", null, "Nmap XML observations — ", filename),
     e("p", { "data-nmap-summary": "true" },
@@ -25,9 +31,22 @@ export function NmapObservationDetails({ result }) {
     e("p", { "className": "helper-note", "data-nmap-truth-boundary": "true" },
       "EVIDENCE_OBSERVED only. UP/DOWN and OPEN/CLOSED describe the scan at its recorded time, not current reachability or verified infrastructure. Service names are hints. No physical cables, routes, node types, Engine PASS, or scenario activation are inferred."),
     e("h4", null, "Observed hosts"),
-    e("ol", { className: "validation-list", "data-nmap-hosts": "true" },
-      ...preview.hosts.slice(0, MAX_DISPLAY_HOSTS).map((host, hi) =>
-        e("li", { key: `${hi}-${host.ipv4}`, "data-nmap-host": String(hi) },
+    e("div", { "data-nmap-observation-pagination": "true" },
+      e("p", { "data-nmap-observation-page": String(currentPage + 1),
+               "data-nmap-observation-range": `${firstOrdinal}:${lastOrdinal}` },
+        `Source hosts ${firstOrdinal + 1}–${lastOrdinal + 1} of ${preview.hosts.length} · Page ${currentPage + 1} of ${pages}.`),
+      e("div", { className: "network-import-actions" },
+        e("button", { type: "button", "data-nmap-observation-previous": "true",
+          disabled: currentPage === 0,
+          onClick: () => setPage(p => Math.max(0, p - 1)) }, "Previous observations"),
+        e("button", { type: "button", "data-nmap-observation-next": "true",
+          disabled: currentPage === pages - 1,
+          onClick: () => setPage(p => Math.min(pages - 1, p + 1)) }, "Next observations"))),
+    e("ol", { className: "validation-list", "data-nmap-hosts": "true",
+              start: firstOrdinal + 1 },
+      ...visibleHosts.map((host, i) => {
+        const hi = firstOrdinal + i;
+        return e("li", { key: `${hi}-${host.ipv4}`, "data-nmap-host": String(hi) },
           e("strong", null, `${host.ipv4} — observed ${host.observedStatus.toUpperCase()}`),
           host.hostnames.length
             ? e("p", { "data-nmap-hostnames": String(hi) },
@@ -44,10 +63,8 @@ export function NmapObservationDetails({ result }) {
             : e("p", null, "No port observation reported for this host."),
           host.ports.length > MAX_DISPLAY_PORTS_PER_HOST
             ? e("p", null, `Only first ${MAX_DISPLAY_PORTS_PER_HOST} of ${host.ports.length} port observations shown.`)
-            : null))),
-    preview.hosts.length > MAX_DISPLAY_HOSTS
-      ? e("p", null, `Only first ${MAX_DISPLAY_HOSTS} of ${preview.hosts.length} hosts shown.`)
-      : null,
+            : null);
+      })),
     e("p", { "data-nmap-activation-status": "BLOCKED" },
       "Observation inspection only. Optional separate evidence associations may be exported after explicit review; Builder, Engine, topology and scan results remain unchanged."),
   );
@@ -114,8 +131,8 @@ export function NmapObservationPanel({ inspectFile, onClose, model = null, onExp
           } })),
       error ? e("p", { role: "alert", className: "helper-status blocked",
         "data-nmap-error": "BLOCKED" }, error) : null,
-      e(NmapObservationDetails, { result }),
-      result ? e(NmapAssociationReview, { key: `${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
+      e(NmapObservationDetails, { key: request.current, result }),
+      result ? e(NmapAssociationReview, { key: `${request.current}:${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
         result, model, busy, onExport: onExportAssociation }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-nmap-close": "true",
