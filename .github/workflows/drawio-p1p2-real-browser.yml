@@ -1,0 +1,72 @@
+name: DRAWIO P1 P2 uncompressed structural preview real Chromium
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/drawio-structural-preview.ts'
+      - 'ui/src/browser/drawio-file-preview.ts'
+      - 'ui/app/drawio-structure-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_drawio_p1p2_tests.mjs'
+      - 'tests/acceptance/run_drawio_p2_real_browser.py'
+      - 'docs/architecture/DRAWIO_P1P2_UNCOMPRESSED_STRUCTURAL_ORACLES.md'
+      - '.github/workflows/drawio-p1p2-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  drawio-source-and-real-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Exact locked dependencies
+        run: npm ci
+      - name: Pinned isolated Chromium
+        run: |
+          python3 -m venv /tmp/drawio-p2-venv
+          /tmp/drawio-p2-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/drawio-p2-venv/bin/python -m playwright install --with-deps chromium
+      - name: Independent structural XML and security regressions
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_drawio_p1p2_tests.mjs
+          node tests/browser/run_graphml_preview_ui_tests.mjs
+          node tests/browser/run_nessus_p1p2_tests.mjs
+          node tests/browser/run_nessus_p3_reviewed_references_tests.mjs
+          node tests/browser/run_nmap_xml_observation_ui_tests.mjs
+          node tests/browser/run_odt_p6_report_replay_tests.mjs
+          node tests/browser/run_docx_p6_report_replay_tests.mjs
+      - name: Build exact YadiLab Chromium UI and verify release identity
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Actual Chromium draw.io and Nmap read-only regressions
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18995 --bind 127.0.0.1 --directory ui/dist >/tmp/drawio-p2-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18995/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18995/browser-build-manifest.json >/dev/null
+          /tmp/drawio-p2-venv/bin/python tests/acceptance/run_drawio_p2_real_browser.py --url http://127.0.0.1:18995/ --evidence-dir /tmp/drawio-p1p2-evidence/drawio
+          /tmp/drawio-p2-venv/bin/python tests/acceptance/run_nmap_xml_p2_real_browser.py --url http://127.0.0.1:18995/ --evidence-dir /tmp/drawio-p1p2-evidence/nmap
+      - name: Upload browser acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drawio-p1p2-real-chromium-aggregate
+          path: /tmp/drawio-p1p2-evidence/
+          if-no-files-found: ignore
