@@ -58,7 +58,7 @@ const enc=x=>new TextEncoder().encode(x);
 await rejected(enc("<nmaprun scanner='nmap'/>"),"DRAWIO_ROOT_UNSUPPORTED");
 await rejected(enc("<mxfile/>"),"DRAWIO_PAGE_COUNT_INVALID");
 await rejected(enc(file(page("p",model(root+vert("x"))),page("p",model(root+vert("y"))))),"DRAWIO_DUPLICATE_PAGE");
-await rejected(enc(file(page("p","REDACT_ME_BASE64_DEFLATE"))),"DRAWIO_COMPRESSED_UNSUPPORTED");
+await rejected(enc(file(page("p","REDACT_ME_BASE64_DEFLATE"))),"DRAWIO_BASE64_INVALID");
 await rejected(enc('<mxfile compressed="true">'+page("p",model(root+vert("a")))+"</mxfile>"),"DRAWIO_COMPRESSED_UNSUPPORTED");
 await rejected(enc(file(page("p",model(root+vert("x"))).replace("</diagram>","base64</diagram>"))),"DRAWIO_UNSUPPORTED_TEXT");
 await rejected(enc(file(page("p",model(root+vert("x"))+"<mxGraphModel/>"))),"DRAWIO_CARDINALITY_INVALID");
