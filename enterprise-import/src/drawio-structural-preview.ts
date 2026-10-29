@@ -1,6 +1,7 @@
 import { webCryptoImportHashProvider } from "./hash.js";
 import { EnterpriseImportError } from "./types.js";
 import { parseSafeXml, type XmlNode } from "./xml-lite.js";
+import { decodeDrawioCompressedPage } from "./drawio-compressed-page.js";
 
 export const DRAWIO_PREVIEW_PROFILE="diagrams.drawio.uncompressed-structure.v1" as const;
 const MAX_BYTES=2*1024*1024;
@@ -46,6 +47,8 @@ export interface DrawioStructurePreview {
   readonly pageCount:number;
   readonly vertexCount:number;
   readonly drawnEdgeCount:number;
+  /** Number of raw-DEFLATE pages independently parsed with the same structural rules. */
+  readonly compressedPageCount:number;
   readonly pages:readonly DrawioPageSummary[];
   readonly canActivate:false;
   readonly engineVerified:false;
@@ -72,8 +75,9 @@ export async function previewDrawioStructure(bytes:Uint8Array):Promise<DrawioStr
   let diagrams:readonly XmlNode[]=[];
   if(doc.name==="mxfile"){
     exactChildren(doc,["diagram"]);
-    if(value(doc,"compressed")!==undefined&&value(doc,"compressed")!=="false")
-      fail("DRAWIO_COMPRESSED_UNSUPPORTED");
+    const outerCompression=value(doc,"compressed");
+    if(outerCompression!==undefined && outerCompression!=="false" && outerCompression!=="true")
+      fail("DRAWIO_COMPRESSION_ATTRIBUTE_INVALID");
     diagrams=child(doc,"diagram");
   }else if(doc.name==="mxGraphModel"){
     diagrams=[doc];
@@ -81,16 +85,36 @@ export async function previewDrawioStructure(bytes:Uint8Array):Promise<DrawioStr
   if(diagrams.length<1||diagrams.length>MAX_PAGES)fail("DRAWIO_PAGE_COUNT_INVALID");
   const pageIds=new Set<string>();
   const pages:DrawioPageSummary[]=[];
-  let allVertices=0,allEdges=0;
+  let allVertices=0,allEdges=0,compressedPageCount=0;
+  const inflationBudget={inflatedBytes:0};
   for(const [pageOrdinal,page] of diagrams.entries()){
     let model:XmlNode;
     if(page.name==="diagram"){
       const id=requiredId(page);
       if(pageIds.has(id))fail("DRAWIO_DUPLICATE_PAGE");
       pageIds.add(id);
-      if(page.text.trim()&&page.children.length===0)fail("DRAWIO_COMPRESSED_UNSUPPORTED");
-      exactChildren(page,["mxGraphModel"]);
-      model=singleton(page,"mxGraphModel");
+      if(page.text.trim() && page.children.length){
+        fail("DRAWIO_MIXED_PAGE_CONTENT");
+      }
+      if(page.children.length===0){
+        if(value(doc,"compressed")==="false")fail("DRAWIO_COMPRESSION_MISMATCH");
+        const raw=await decodeDrawioCompressedPage(page.text,inflationBudget);
+        model=(()=>{
+          try{return parseSafeXml(raw,"drawio-decompressed-page");}
+          catch(error){
+            const code=error instanceof EnterpriseImportError &&
+              /^IMPORT_XML_[A-Z0-9_]+$/.test(error.code)
+              ?error.code:"DRAWIO_COMPRESSED_XML_INVALID";
+            throw new EnterpriseImportError(code,code);
+          }
+        })();
+        if(model.name!=="mxGraphModel")fail("DRAWIO_COMPRESSED_ROOT_INVALID");
+        compressedPageCount++;
+      }else{
+        if(value(doc,"compressed")==="true")fail("DRAWIO_COMPRESSED_UNSUPPORTED");
+        exactChildren(page,["mxGraphModel"]);
+        model=singleton(page,"mxGraphModel");
+      }
     }else{
       model=page;
     }
@@ -141,7 +165,7 @@ export async function previewDrawioStructure(bytes:Uint8Array):Promise<DrawioStr
     status:"PREVIEW_ONLY",profileId:DRAWIO_PREVIEW_PROFILE,
     semanticTrack:"TOPOLOGY_DECLARED",sourceSha256,
     pageCount:pages.length,vertexCount:allVertices,drawnEdgeCount:allEdges,
-    pages:Object.freeze(pages),
+    compressedPageCount,pages:Object.freeze(pages),
     canActivate:false,engineVerified:false,physicalTopologyVerified:false,
     modelMutated:false,
   });

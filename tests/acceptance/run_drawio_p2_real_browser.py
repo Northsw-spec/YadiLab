@@ -57,7 +57,7 @@ def run(browser,url):
         require(page.locator('[data-drawio-preview]').count()==0,"Stale valid source survived failure")
         choose(page,"compressed.drawio",b'<mxfile><diagram id="p1">BASE64_DEFLATE_BLOB</diagram></mxfile>')
         expect(page.locator('[data-drawio-error="BLOCKED"]')).to_have_text(
-            "DRAWIO_COMPRESSED_UNSUPPORTED",timeout=15000)
+            "DRAWIO_BASE64_INVALID",timeout=15000)
         require(page.locator('[data-drawio-preview]').count()==0,"Compressed page incorrectly activated")
         choose(page,"xxe.drawio",b'<!DOCTYPE mxfile [<!ENTITY ext SYSTEM "file:///etc/passwd">]><mxfile/>')
         expect(page.locator('[data-drawio-error="BLOCKED"]')).to_have_text(
@@ -79,7 +79,7 @@ def run(browser,url):
                 "status":"PASS","pages":2,"vertices":3,"edges":1,
                 "sourceSha256":hashlib.sha256(valid).hexdigest(),
                 "builderUnchanged":True,"externalRequests":0,
-                "compressedUnsupportedConfirmed":True}
+                "invalidBase64BlockedConfirmed":True}
     finally:
         page.close()
 def main():

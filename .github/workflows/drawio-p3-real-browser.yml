@@ -1,0 +1,75 @@
+name: DRAWIO P3 bounded compressed-page actual Chromium
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/drawio-compressed-page.ts'
+      - 'enterprise-import/src/drawio-structural-preview.ts'
+      - 'ui/app/drawio-structure-panel.mjs'
+      - 'tests/browser/run_drawio_p1p2_tests.mjs'
+      - 'tests/browser/run_drawio_p3_compressed_tests.mjs'
+      - 'tests/acceptance/run_drawio_p2_real_browser.py'
+      - 'tests/acceptance/run_drawio_p3_real_browser.py'
+      - 'docs/architecture/DRAWIO_P3_COMPRESSED_PAGE_SECURITY_ORACLES.md'
+      - '.github/workflows/drawio-p3-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  drawio-p3-raw-deflate-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locked dependencies
+        run: npm ci
+      - name: Isolated actual Chromium
+        run: |
+          python3 -m venv /tmp/drawio-p3-venv
+          /tmp/drawio-p3-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/drawio-p3-venv/bin/python -m playwright install --with-deps chromium
+      - name: Source, independent compressed fixtures, XXE, inflation and regression tests
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_drawio_p1p2_tests.mjs
+          node tests/browser/run_drawio_p3_compressed_tests.mjs
+          node tests/browser/run_graphml_preview_ui_tests.mjs
+          node tests/browser/run_nessus_p1p2_tests.mjs
+          node tests/browser/run_nessus_p3_reviewed_references_tests.mjs
+          node tests/browser/run_nmap_xml_observation_ui_tests.mjs
+          node tests/browser/run_odt_p6_report_replay_tests.mjs
+          node tests/browser/run_docx_p6_report_replay_tests.mjs
+      - name: Build and hash exact compiled YadiLab
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real Chromium P2 P3 compressed XML and Nmap regression
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18994 --bind 127.0.0.1 --directory ui/dist >/tmp/drawio-p3-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18994/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18994/browser-build-manifest.json >/dev/null
+          /tmp/drawio-p3-venv/bin/python tests/acceptance/run_drawio_p2_real_browser.py --url http://127.0.0.1:18994/ --evidence-dir /tmp/drawio-p3-evidence/p2
+          /tmp/drawio-p3-venv/bin/python tests/acceptance/run_drawio_p3_real_browser.py --url http://127.0.0.1:18994/ --evidence-dir /tmp/drawio-p3-evidence/p3
+          /tmp/drawio-p3-venv/bin/python tests/acceptance/run_nmap_xml_p2_real_browser.py --url http://127.0.0.1:18994/ --evidence-dir /tmp/drawio-p3-evidence/nmap
+      - name: Upload actual Chromium evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drawio-p3-compressed-actual-chromium
+          path: /tmp/drawio-p3-evidence/
+          if-no-files-found: ignore
