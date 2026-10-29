@@ -81,7 +81,7 @@ export function OdtStructurePanel({ inspectFile,reviewFile,onClose }) {
       e("div",{className:"network-import-heading"},
         e("div",null,
           e("h2",null,"Inspect OpenDocument ODT — structure only"),
-          e("p",null,"Local, read-only; source cell values are never displayed or imported.")),
+          e("p",null,"Structure is masked by default. Optional one-cell local reveal requires separate consent; nothing is imported.")),
         e("button",{type:"button",disabled:busy,
           "aria-label":"Close ODT inspection",onClick:()=>{
             generation.current++;localFile.current=null;onClose();
