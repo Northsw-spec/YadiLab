@@ -22,6 +22,6 @@ export async function reviewNessusOriginalFileAssociations(
     deny("NESSUS_ASSOC_SOURCE_CHANGED");
   }
   const reviewed=reviewNessusHostReferences(current,model,decision);
-  if(reviewed.status!=="READY_FOR_EXPORT")deny(reviewed.diagnostics[0]?.code??"NESSUS_ASSOC_BLOCKED");
-  return reviewed.sidecar;
+  if(reviewed.status==="READY_FOR_EXPORT")return reviewed.sidecar;
+  return deny(reviewed.diagnostics[0]?.code??"NESSUS_ASSOC_BLOCKED");
 }
