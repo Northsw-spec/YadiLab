@@ -1,0 +1,73 @@
+name: ODT P3 consented original source single-cell real Chromium acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/odt-cell-disclosure.ts'
+      - 'ui/src/browser/odt-file-structural-preview.ts'
+      - 'ui/app/odt-cell-disclosure-review.mjs'
+      - 'ui/app/odt-structure-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_odt_p3_cell_review_tests.mjs'
+      - 'tests/acceptance/run_odt_p3_real_browser.py'
+      - 'docs/architecture/ODT_P3_CONSENTED_CELL_DISCLOSURE_ORACLES.md'
+      - '.github/workflows/odt-p3-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  odt-one-cell-real-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locked Node dependencies
+        run: npm ci
+      - name: Pinned real CI-only Playwright Chromium
+        run: |
+          python3 -m venv /tmp/odt-p3-venv
+          /tmp/odt-p3-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/odt-p3-venv/bin/python -m playwright install --with-deps chromium
+      - name: Independent ODT-P1/P2/P3 ZIP, consent/secret and React SSR; DOCX regression
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/enterprise-import/run_odt_tables_p1_tests.mjs
+          node tests/browser/run_odt_structure_ui_tests.mjs
+          node tests/browser/run_odt_p3_cell_review_tests.mjs
+          node tests/enterprise-import/run_docx_tables_p1_tests.mjs
+          node tests/browser/run_docx_structure_ui_tests.mjs
+      - name: Compile exact clean browser and validate Git identity
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real Chromium ODT P2 structure plus P3 consent and untouched Builder
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18993 --bind 127.0.0.1 --directory ui/dist >/tmp/odt-p3-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18993/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18993/browser-build-manifest.json >/dev/null
+          /tmp/odt-p3-venv/bin/python tests/acceptance/run_odt_p2_real_browser.py \
+            --url http://127.0.0.1:18993/ --evidence-dir /tmp/odt-p3-real-browser/p2
+          /tmp/odt-p3-venv/bin/python tests/acceptance/run_odt_p3_real_browser.py \
+            --url http://127.0.0.1:18993/ --evidence-dir /tmp/odt-p3-real-browser/p3
+      - name: Upload actual real Chromium evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: odt-p3-real-browser-evidence
+          path: /tmp/odt-p3-real-browser/
+          if-no-files-found: ignore

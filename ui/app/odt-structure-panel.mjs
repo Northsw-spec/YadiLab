@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { OdtCellDisclosureReview } from "./odt-cell-disclosure-review.mjs";
 const e=React.createElement;
 const MAX_VISIBLE_TABLES=20,MAX_VISIBLE_ROWS=30,MAX_VISIBLE_CELLS=16;
 
@@ -41,14 +42,14 @@ export function OdtStructureDetails({ result }) {
       "Read-only source inspection. Complex ODT tables may be rejected. No network mapping, import, or simulation activation."));
 }
 
-export function OdtStructurePanel({ inspectFile,onClose }) {
+export function OdtStructurePanel({ inspectFile,reviewFile,onClose }) {
   const [result,setResult]=useState(null),[error,setError]=useState(""),
         [busy,setBusy]=useState(false);
-  const generation=useRef(0),focus=useRef(null);
+  const generation=useRef(0),focus=useRef(null),localFile=useRef(null);
   useEffect(()=>{focus.current?.focus();return()=>{generation.current++;};},[]);
   useEffect(()=>{
     const escape=event=>{
-      if(event.key==="Escape"&&!busy){generation.current++;onClose();}
+      if(event.key==="Escape"&&!busy){generation.current++;localFile.current=null;onClose();}
     };
     document.addEventListener("keydown",escape);
     return()=>document.removeEventListener("keydown",escape);
@@ -56,12 +57,14 @@ export function OdtStructurePanel({ inspectFile,onClose }) {
   const inspect=async file=>{
     if(!file)return;
     const current=++generation.current;
+    localFile.current=file;
     setResult(null);setError("");setBusy(true);
     try{
       const next=await inspectFile(file);
-      if(current===generation.current)setResult(next);
+      if(current===generation.current)setResult({...next,sourceEpoch:current});
     }catch(cause){
       if(current===generation.current){
+        localFile.current=null;
         const code=typeof cause?.code==="string" &&
           /^(ODT_|IMPORT_ARCHIVE_|IMPORT_WORKBOOK_ARCHIVE_|IMPORT_XML_)[A-Z_]+$/.test(cause.code)
           ?cause.code:"ODT_INSPECTION_BLOCKED";
@@ -78,10 +81,10 @@ export function OdtStructurePanel({ inspectFile,onClose }) {
       e("div",{className:"network-import-heading"},
         e("div",null,
           e("h2",null,"Inspect OpenDocument ODT — structure only"),
-          e("p",null,"Local, read-only; source cell values are never displayed or imported.")),
+          e("p",null,"Structure is masked by default. Optional one-cell local reveal requires separate consent; nothing is imported.")),
         e("button",{type:"button",disabled:busy,
           "aria-label":"Close ODT inspection",onClick:()=>{
-            generation.current++;onClose();
+            generation.current++;localFile.current=null;onClose();
           }},"Close")),
       e("label",{className:"file-button"},busy?"Reading ODT structure…":"Choose .odt file",
         e("input",{type:"file",accept:".odt",hidden:true,disabled:busy,
@@ -93,7 +96,21 @@ export function OdtStructurePanel({ inspectFile,onClose }) {
       error?e("p",{role:"alert",className:"helper-status blocked",
         "data-odt-error":"BLOCKED"},error):null,
       e(OdtStructureDetails,{result}),
+      result && typeof reviewFile==="function" ? e(OdtCellDisclosureReview,{
+        key:result.sourceEpoch,
+        preview:result.preview,
+        onRevealCell:async(locator,acknowledged)=>{
+          const epoch=generation.current,source=localFile.current;
+          if(!source)throw Object.assign(new Error("ODT_CELL_SOURCE_UNAVAILABLE"),
+            {code:"ODT_CELL_SOURCE_UNAVAILABLE"});
+          const value=await reviewFile(source,result.preview.sourceSha256,locator,acknowledged);
+          if(epoch!==generation.current || source!==localFile.current) {
+            throw Object.assign(new Error("ODT_CELL_STALE_REQUEST"),{code:"ODT_CELL_STALE_REQUEST"});
+          }
+          return value;
+        },
+      }) : null,
       e("div",{className:"network-import-actions"},
         e("button",{type:"button",disabled:busy,"data-odt-close":"true",
-          onClick:()=>{generation.current++;onClose();}},"Close without changes"))));
+          onClick:()=>{generation.current++;localFile.current=null;onClose();}},"Close without changes"))));
 }

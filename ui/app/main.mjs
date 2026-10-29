@@ -44,7 +44,7 @@ import { previewAnsibleIniFileReadOnly } from "../src/browser/ansible-ini-file-p
 import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
 import { previewDocxFileStructure, reviewDocxFileCell } from "../src/browser/docx-file-structural-preview.js";
 import { DocxTableStructurePanel } from "./docx-structure-panel.mjs";
-import { previewOdtFileStructure } from "../src/browser/odt-file-structural-preview.js";
+import { previewOdtFileStructure, reviewOdtFileCell } from "../src/browser/odt-file-structural-preview.js";
 import { OdtStructurePanel } from "./odt-structure-panel.mjs";
 import { replaySavedDocxReportFiles } from "../src/browser/docx-report-replay-file.js";
 import { DocxReferenceReplayPanel } from "./docx-reference-replay-panel.mjs";
@@ -3941,6 +3941,7 @@ function App() {
     }) : null,
     odtStructureOpen ? e(OdtStructurePanel, {
       inspectFile: previewOdtFileStructure,
+      reviewFile: reviewOdtFileCell,
       onClose: () => setOdtStructureOpen(false),
     }) : null,
     docxReplayOpen ? e(DocxReferenceReplayPanel, {
