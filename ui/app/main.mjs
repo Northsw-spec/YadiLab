@@ -48,6 +48,8 @@ import { previewOdtFileStructure, reviewOdtFileCell } from "../src/browser/odt-f
 import { OdtStructurePanel } from "./odt-structure-panel.mjs";
 import { replaySavedDocxReportFiles } from "../src/browser/docx-report-replay-file.js";
 import { DocxReferenceReplayPanel } from "./docx-reference-replay-panel.mjs";
+import { OdtReferenceReplayPanel } from "./odt-reference-replay-panel.mjs";
+import { replaySavedOdtReportFiles } from "../src/browser/odt-report-replay-file.js";
 import { reviewAnsibleIniInventoryAssociations } from "../../enterprise-import/src/ansible-ini-association-review.js";
 import { reviewDocxCellAssociation } from "../../enterprise-import/src/docx-association-review.js";
 import { reviewOdtCellAssociation } from "../../enterprise-import/src/odt-association-review.js";
@@ -3121,7 +3123,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   );
 }
 
-function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, onInspectNmap, onInspectAnsible, onInspectAnsibleIni, onInspectDocx, onInspectDocxReplay, onInspectOdt, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, onInspectNmap, onInspectAnsible, onInspectAnsibleIni, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   const networkPickerRef = useRef(null);
   // Opening the native picker happens synchronously within the user's click,
@@ -3184,6 +3186,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, o
         e("button", { type: "button", "data-inspect-docx": "CONFIG_DOCUMENTED", onClick: onInspectDocx }, "Inspect Word DOCX (structure only)"),
         e("button", { type: "button", "data-inspect-docx-replay": "CONFIG_DOCUMENTED", onClick: onInspectDocxReplay }, "Inspect saved DOCX references (read-only)"),
         e("button", { type: "button", "data-inspect-odt": "CONFIG_DOCUMENTED", onClick: onInspectOdt }, "Inspect OpenDocument ODT (structure only)"),
+        e("button", { type: "button", "data-inspect-odt-replay": "CONFIG_DOCUMENTED", onClick: onInspectOdtReplay }, "Inspect saved ODT references (read-only)"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: exportSource }, "Exportera källfil") : e("button", { type: "button", onClick: exportProgress }, "Exportera framsteg"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: () => exportPackage("student"), disabled: workspace.compile.status !== "valid" }, "Exportera elevpaket") : fileAction("Läs in framsteg", `${branding.progressExtension},application/json`, (event) => loadProgress(event.target.files?.[0]), "load-progress"),
         workspace.mode === "builder" ? e("button", { type: "button", onClick: () => exportPackage("author"), disabled: workspace.compile.status !== "valid" }, "Exportera författarpaket") : e("button", { type: "button", onClick: exportTroubleshootingSession }, "Exportera sessionsbackup"),
@@ -3345,6 +3348,7 @@ function App() {
   const [ansibleIniOpen, setAnsibleIniOpen] = useState(false);
   const [docxStructureOpen, setDocxStructureOpen] = useState(false);
   const [docxReplayOpen, setDocxReplayOpen] = useState(false);
+  const [odtReplayOpen, setOdtReplayOpen] = useState(false);
   const [odtStructureOpen, setOdtStructureOpen] = useState(false);
   const [importedProbeAutoOpen, setImportedProbeAutoOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState([]);
@@ -3902,7 +3906,7 @@ function App() {
   return e("div", { className: "app-frame", "data-app-runtime": "ready", "data-runtime-scenario-id": workspace.mode === "runtime" ? workspace.scenario.scenarioId : workspace.source.scenarioId, "data-runtime-scenario-hash": workspace.mode === "runtime" ? workspace.scenario.sourceHash : "builder" },
     e("header", { className: "app-header" },
       e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
-      e(MainActions, { onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
+      e(MainActions, { onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
     selectedGuidedLab ? e("section", { className: "curriculum-strip", "data-curriculum-wave": "guided_troubleshooting_wave1" },
@@ -4001,6 +4005,22 @@ function App() {
         });
       },
       onClose: () => setOdtStructureOpen(false),
+    }) : null,
+    odtReplayOpen ? e(OdtReferenceReplayPanel, {
+      model: workspace.mode === "builder" ? {
+        scenarioId: workspace.source.scenarioId,
+        sourceRevision: workspace.sourceRevision,
+        resources: workspace.source.resources.map(r => ({ id: r.id, label: r.label })),
+      } : null,
+      onReplay: (odtFile, reportFile, acknowledged) => {
+        const currentModel = workspace.mode === "builder" ? {
+          scenarioId: workspace.source.scenarioId,
+          sourceRevision: workspace.sourceRevision,
+          resources: workspace.source.resources.map(r => ({ id: r.id, label: r.label })),
+        } : null;
+        return replaySavedOdtReportFiles(odtFile, reportFile, currentModel, acknowledged);
+      },
+      onClose: () => setOdtReplayOpen(false),
     }) : null,
     docxReplayOpen ? e(DocxReferenceReplayPanel, {
       model: workspace.mode === "builder" ? {

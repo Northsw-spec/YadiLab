@@ -1,0 +1,77 @@
+name: ODT P6 original source replay saved P4/P5 actual Chromium acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/odt-report-replay.ts'
+      - 'ui/src/browser/odt-report-replay-file.ts'
+      - 'ui/app/odt-reference-replay-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_odt_p6_report_replay_tests.mjs'
+      - 'tests/acceptance/run_odt_p6_real_browser.py'
+      - 'docs/architecture/ODT_P6_SOURCE_REPORT_REPLAY_ORACLES.md'
+      - '.github/workflows/odt-p6-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  saved-reference-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locked dependencies
+        run: npm ci
+      - name: Pinned isolated real Chromium
+        run: |
+          python3 -m venv /tmp/odt-p6-venv
+          /tmp/odt-p6-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/odt-p6-venv/bin/python -m playwright install --with-deps chromium
+      - name: Independent strict sources and P1-P6 ZIP/security/SSR tests
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/enterprise-import/run_odt_tables_p1_tests.mjs
+          node tests/browser/run_odt_structure_ui_tests.mjs
+          node tests/browser/run_odt_p3_cell_review_tests.mjs
+          node tests/browser/run_odt_p4_association_tests.mjs
+          node tests/browser/run_odt_p5_multi_reference_tests.mjs
+          node tests/browser/run_odt_p6_report_replay_tests.mjs
+          node tests/enterprise-import/run_docx_tables_p1_tests.mjs
+          node tests/browser/run_docx_p6_report_replay_tests.mjs
+      - name: Build and attest actual YadiLab browser
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real Chromium P2-P6 file upload source/report replay and unchanged Builder
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18991 --bind 127.0.0.1 --directory ui/dist >/tmp/odt-p6-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18991/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18991/browser-build-manifest.json >/dev/null
+          /tmp/odt-p6-venv/bin/python tests/acceptance/run_odt_p2_real_browser.py --url http://127.0.0.1:18991/ --evidence-dir /tmp/odt-p6-acceptance/p2
+          /tmp/odt-p6-venv/bin/python tests/acceptance/run_odt_p3_real_browser.py --url http://127.0.0.1:18991/ --evidence-dir /tmp/odt-p6-acceptance/p3
+          /tmp/odt-p6-venv/bin/python tests/acceptance/run_odt_p4_real_browser.py --url http://127.0.0.1:18991/ --evidence-dir /tmp/odt-p6-acceptance/p4
+          /tmp/odt-p6-venv/bin/python tests/acceptance/run_odt_p5_real_browser.py --url http://127.0.0.1:18991/ --evidence-dir /tmp/odt-p6-acceptance/p5
+          /tmp/odt-p6-venv/bin/python tests/acceptance/run_odt_p6_real_browser.py --url http://127.0.0.1:18991/ --evidence-dir /tmp/odt-p6-acceptance/p6
+          /tmp/odt-p6-venv/bin/python tests/acceptance/run_docx_p6_real_browser.py --url http://127.0.0.1:18991/ --evidence-dir /tmp/odt-p6-acceptance/docx-p6
+      - name: Upload real test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: odt-p6-actual-chromium
+          path: /tmp/odt-p6-acceptance/
+          if-no-files-found: ignore
