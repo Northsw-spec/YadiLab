@@ -57,7 +57,7 @@ await denied(new Uint8Array(),"ODT_SOURCE_SIZE_INVALID");
 await denied(new Uint8Array(16*1024*1024+1),"ODT_SOURCE_SIZE_INVALID");
 await denied(new Uint8Array(100),"ODT_PACKAGE_HEADER_INVALID");
 await denied(pack(packageEntries({compressedMimetype:true})),"ODT_MIMETYPE_MUST_BE_STORED");
-await denied(pack([standard[1],standard[0],standard[2]]),"ODT_MIMETYPE_HEADER_INVALID");
+await denied(pack([{...standard[1],stored:true},standard[0],standard[2]]),"ODT_MIMETYPE_HEADER_INVALID");
 await denied(pack(packageEntries({mime:"application/vnd.oasis.opendocument.spreadsheet"})),"ODT_MIMETYPE_VALUE_INVALID");
 await denied(pack(standard.filter(x=>x.path!=="content.xml")),"ODT_REQUIRED_MEMBER_MISSING");
 await denied(pack(standard.filter(x=>x.path!=="META-INF/manifest.xml")),"ODT_REQUIRED_MEMBER_MISSING");
@@ -71,7 +71,7 @@ await denied(pack(packageEntries({contentXml:content([doc]).replace("<text:p>nod
 await denied(pack(packageEntries({contentXml:content([doc]).replace("<text:p>node01</text:p>","<text:p><text:a xlink:href='https://example.invalid'>node01</text:a></text:p>")})),"ODT_ACTIVE_OR_EXTERNAL_CONTENT");
 await denied(pack(packageEntries({contentXml:content([doc]).replace("<table:table-row>","<table:table-row table:number-rows-repeated='2'>")})),"ODT_UNSUPPORTED_ATTRIBUTE");
 await denied(pack(packageEntries({contentXml:content([doc]).replace("<table:table-cell office:value-type=\"string\">","<table:table-cell office:value-type=\"string\" table:number-columns-spanned='2'>")})),"ODT_UNSUPPORTED_ATTRIBUTE");
-await denied(pack(packageEntries({contentXml:content([doc]).replace("<table:table-cell office:value-type=\"string\">","<table:covered-table-cell>")})),"ODT_UNSUPPORTED_MARKUP");
+await denied(pack(packageEntries({contentXml:content([doc]).replace("<table:table-cell office:value-type=\"string\"><text:p>Host</text:p></table:table-cell>","<table:covered-table-cell/>")})),"ODT_UNSUPPORTED_MARKUP");
 await denied(pack(packageEntries({contentXml:content([doc]).replace("<table:table-column/>","<table:table-column table:number-columns-repeated='2'/>")})),"ODT_UNSUPPORTED_ATTRIBUTE");
 await denied(pack(packageEntries({contentXml:content([doc]).replace("<table:table-column/>","<table:table-column/><table:table-cell table:formula='of:=A1'/>")})),"ODT_UNSUPPORTED_MARKUP");
 await denied(pack(packageEntries({contentXml:content([doc]).replace("</table:table-cell>","<table:table><table:table-row><table:table-cell/></table:table-row></table:table></table:table-cell>")})),"ODT_NESTED_OR_WRAPPED_TABLE");
