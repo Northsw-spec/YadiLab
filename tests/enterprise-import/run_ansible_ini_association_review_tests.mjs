@@ -128,6 +128,10 @@ const fakeHost={...preview,hosts:Array.from({length:81},(_,i)=>({
  locators:[{kind:"ansible-ini-host",sourceSha256:preview.sourceSha256,
  lineNumber:i+1,section:"ungrouped",hostKey:"host_"+i}]
 }))};
-deny({...decision,associations:[{hostOrdinal:80,resourceId:"rds01"}]},
+const late=reviewAnsibleIniInventoryAssociations(fakeHost,model,{
+ ...decision,associations:[{hostOrdinal:80,resourceId:"rds01"}]});
+eq(late.status,"READY_FOR_EXPORT");
+eq(late.sidecar.associations[0].hostOrdinal,80);
+deny({...decision,associations:[{hostOrdinal:81,resourceId:"rds01"}]},
  "ANSIBLE_INI_ASSOC_SELECTION_INVALID",model,fakeHost);
 console.log("PASS ANSIBLE-INI-P3: "+assertions+" independent typed provenance, stale/conflict, consent, redaction and no-Engine assertions.");
