@@ -54,7 +54,7 @@ export function DocxReferenceReplayPanel({ model, onReplay, onClose }) {
         "data-docx-replay-panel":"CONFIG_DOCUMENTED"},
       e("div",{className:"network-import-heading"},
         e("div",null,
-          e("h2",null,"Inspect saved DOCX references — source replay"),
+          e("h2",null,"Inspect saved DOCX references — read-only source replay"),
           e("p",null,"Compare an exported P4/P5 JSON report to the ORIGINAL Word file and CURRENT Builder. No topology changes.")),
         e("button",{type:"button",disabled:busy,
           "aria-label":"Close DOCX reference replay",
