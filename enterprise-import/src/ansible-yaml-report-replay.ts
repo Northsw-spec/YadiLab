@@ -108,7 +108,7 @@ function readReport(bytes:Uint8Array):Record<string,unknown>{
     if(error instanceof EnterpriseImportError)throw error;
     return deny("ANSIBLE_YAML_REPLAY_REPORT_INVALID");
   }
-  if(!obj(report))deny("ANSIBLE_YAML_REPLAY_REPORT_INVALID");
+  if(!obj(report))return deny("ANSIBLE_YAML_REPLAY_REPORT_INVALID");
   canonical(report);
   return report;
 }
@@ -141,14 +141,14 @@ export async function replayAnsibleYamlSavedReferences(
   if(report.schemaVersion!=="1.0.0"||report.status!=="REVIEWED_ASSOCIATIONS_ONLY"||
      !obj(source)||!obj(target)||typeof source.sha256!=="string"||
      !HEX.test(source.sha256)||!safeId(target.scenarioId)||
-     !nat(target.sourceRevision))deny("ANSIBLE_YAML_REPLAY_REPORT_INVALID");
+     !nat(target.sourceRevision))return deny("ANSIBLE_YAML_REPLAY_REPORT_INVALID");
   if(!Array.isArray(associations)||associations.length<1||associations.length>80)
-    deny("ANSIBLE_YAML_REPLAY_COUNT_INVALID");
+    return deny("ANSIBLE_YAML_REPLAY_COUNT_INVALID");
   const choices:AnsibleAssociationDecision["associations"][number][]=[];
   for(const item of associations){
     if(!obj(item)||!nat(item.hostOrdinal)||!safeId(item.targetResourceId)||
        item.assertion!=="USER_ASSERTED_ASSOCIATION_NOT_VERIFIED")
-      deny("ANSIBLE_YAML_REPLAY_ASSOCIATION_INVALID");
+      return deny("ANSIBLE_YAML_REPLAY_ASSOCIATION_INVALID");
     choices.push({hostOrdinal:item.hostOrdinal,resourceId:item.targetResourceId});
   }
   const parsed=await previewAnsibleStaticInventory(yamlBytes).catch(
