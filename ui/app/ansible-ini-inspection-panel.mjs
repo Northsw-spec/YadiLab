@@ -52,11 +52,13 @@ export function AnsibleIniInventoryPanel({ inspectFile, onClose, model = null, o
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const currentRequest = useRef(0);
+  const originalFile = useRef(null);
+  const [sourceEpoch,setSourceEpoch] = useState(0);
   const focus = useRef(null);
-  useEffect(() => { focus.current?.focus(); return () => { currentRequest.current++; }; }, []);
+  useEffect(() => { focus.current?.focus(); return () => { currentRequest.current++;originalFile.current=null; }; }, []);
   useEffect(() => {
     const escape = (event) => {
-      if (event.key === "Escape" && !busy) { currentRequest.current++; onClose(); }
+      if (event.key === "Escape" && !busy) { currentRequest.current++;originalFile.current=null; onClose(); }
     };
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
@@ -64,12 +66,15 @@ export function AnsibleIniInventoryPanel({ inspectFile, onClose, model = null, o
   const choose = async (file) => {
     if (!file || busy) return;
     const request = ++currentRequest.current;
+    originalFile.current=file;
+    setSourceEpoch(epoch=>epoch+1);
     setResult(null); setError(""); setBusy(true);
     try {
       const next = await inspectFile(file);
       if (request === currentRequest.current) setResult(next);
     } catch (cause) {
       if (request === currentRequest.current) {
+        originalFile.current=null;
         const expected = cause?.code && /^ANSIBLE_INI_[A-Z_]+$/.test(cause.code);
         setError(expected ? `${cause.code}: ${cause.message}` : "Ansible INI inventory inspection blocked.");
       }
@@ -86,7 +91,7 @@ export function AnsibleIniInventoryPanel({ inspectFile, onClose, model = null, o
           e("h2", null, "Inspect Ansible INI — read only"),
           e("p", null, "Local static declarations only. Unsupported Ansible syntax is blocked, never guessed.")),
         e("button", { type: "button", disabled: busy, "aria-label": "Close Ansible INI inspection",
-          onClick: () => { currentRequest.current++; onClose(); } }, "Close")),
+          onClick: () => { currentRequest.current++;originalFile.current=null; onClose(); } }, "Close")),
       e("label", { className: "file-button" }, busy ? "Reading INI inventory…" : "Choose .ini file",
         e("input", { type: "file", accept: ".ini", hidden: true, disabled: busy,
           "data-ansible-ini-file": "true",
@@ -99,10 +104,19 @@ export function AnsibleIniInventoryPanel({ inspectFile, onClose, model = null, o
           "data-ansible-ini-error": "BLOCKED" }, error) : null,
       e(AnsibleIniInventoryDetails, { result }),
       result ? e(AnsibleIniAssociationReview, {
-        key: `${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
-        result, model, busy, onExportAssociation,
+        key: `${sourceEpoch}:${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
+        result, model, busy,
+        onExportAssociation: async (preview,decision) => {
+          const epoch=currentRequest.current,source=originalFile.current;
+          if(!source||typeof onExportAssociation!=="function"){
+            const error=new Error("ANSIBLE_INI_P4_SOURCE_BLOCKED");
+            error.code="ANSIBLE_INI_P4_SOURCE_BLOCKED";throw error;
+          }
+          return onExportAssociation(source,preview,decision,
+            ()=>currentRequest.current===epoch&&originalFile.current===source);
+        },
       }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-ansible-ini-close": "true",
-          onClick: () => { currentRequest.current++; onClose(); } }, "Close without changes"))));
+          onClick: () => { currentRequest.current++;originalFile.current=null; onClose(); } }, "Close without changes"))));
 }
