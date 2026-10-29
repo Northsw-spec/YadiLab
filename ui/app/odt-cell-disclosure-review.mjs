@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
+import { OdtReviewedCellAssociation } from "./odt-reviewed-cell-association.mjs";
 const e=React.createElement;
 
 /** Ephemeral, locally consented, ONE ODT cell only; never persists or exports. */
-export function OdtCellDisclosureReview({ preview, onRevealCell }) {
+export function OdtCellDisclosureReview({ preview, onRevealCell, model=null, onExportAssociation }) {
   const [selected,setSelected]=useState("");
   const [acknowledged,setAcknowledged]=useState(false);
   const [disclosed,setDisclosed]=useState(null);
@@ -74,6 +75,11 @@ export function OdtCellDisclosureReview({ preview, onRevealCell }) {
     disclosed?e("p",{"data-odt-revealed":"UNVERIFIED"},
       "Selected original cell (DOCUMENTED, NOT VERIFIED): ",
       e("code",{"data-odt-revealed-value":"true"},disclosed.text),
-      e("button",{type:"button","data-odt-hide":"true",onClick:clear},"Hide value")):null
+      e("button",{type:"button","data-odt-hide":"true",onClick:clear},"Hide value")):null,
+    disclosed?e(OdtReviewedCellAssociation,{
+      key:[disclosed.sourceSha256,disclosed.locator.tableOrdinal,
+        disclosed.locator.rowOrdinal,disclosed.locator.cellOrdinal].join(":"),
+      disclosed,model,onExportAssociation,
+    }):null
   );
 }

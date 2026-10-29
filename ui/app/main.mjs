@@ -50,6 +50,7 @@ import { replaySavedDocxReportFiles } from "../src/browser/docx-report-replay-fi
 import { DocxReferenceReplayPanel } from "./docx-reference-replay-panel.mjs";
 import { reviewAnsibleIniInventoryAssociations } from "../../enterprise-import/src/ansible-ini-association-review.js";
 import { reviewDocxCellAssociation } from "../../enterprise-import/src/docx-association-review.js";
+import { reviewOdtCellAssociation } from "../../enterprise-import/src/odt-association-review.js";
 import { reviewDocxMultiReferences } from "../../enterprise-import/src/docx-multi-reference-review.js";
 import { reviewAnsibleInventoryAssociations } from "../../enterprise-import/src/ansible-association-review.js";
 import { reviewNmapObservationAssociations } from "../../enterprise-import/src/nmap-association-review.js";
@@ -3942,6 +3943,30 @@ function App() {
     odtStructureOpen ? e(OdtStructurePanel, {
       inspectFile: previewOdtFileStructure,
       reviewFile: reviewOdtFileCell,
+      model: workspace.mode === "builder" ? {
+        scenarioId:workspace.source.scenarioId,
+        sourceRevision:workspace.sourceRevision,
+        resources:workspace.source.resources.map(r=>({id:r.id,label:r.label})),
+      } : null,
+      onExportAssociation:(reviewedCell,decision)=>{
+        // CURRENT Builder identity checked after original ODT is freshly reviewed.
+        const currentModel=workspace.mode==="builder"?{
+          scenarioId:workspace.source.scenarioId,
+          sourceRevision:workspace.sourceRevision,
+          resources:workspace.source.resources.map(r=>({id:r.id,label:r.label})),
+        }:null;
+        const review=reviewOdtCellAssociation(reviewedCell,currentModel,decision);
+        if(review.status!=="READY_FOR_EXPORT" || !review.sidecar){
+          const err=new Error("ODT_ASSOC_EXPORT_BLOCKED");
+          err.code=review.diagnostics[0]?.code??"ODT_ASSOC_EXPORT_BLOCKED";
+          throw err;
+        }
+        downloadJson({
+          filename:"odt-reviewed-reference-"+review.sidecar.source.sha256.slice(0,12)+".json",
+          mime:"application/json",
+          text:JSON.stringify(review.sidecar,null,2),
+        });
+      },
       onClose: () => setOdtStructureOpen(false),
     }) : null,
     docxReplayOpen ? e(DocxReferenceReplayPanel, {
