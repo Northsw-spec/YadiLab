@@ -23,7 +23,7 @@ export interface NessusSeveritySummary {
 function deny(code: string): never { throw new EnterpriseImportError(code,code); }
 function one(node: XmlNode, key: string, required: boolean): XmlNode | undefined {
   const nodes=childElements(node,key);
-  if(nodes.length>(required?1:1) || (required && nodes.length!==1)) deny("NESSUS_XML_CARDINALITY_INVALID");
+  if(nodes.length>1 || (required && nodes.length!==1)) deny("NESSUS_XML_CARDINALITY_INVALID");
   return nodes[0];
 }
 function digits(raw: string | undefined, low: number, high: number, code: string): number {
@@ -91,7 +91,7 @@ export async function previewNessusSeveritySummary(bytes: Uint8Array): Promise<N
         deny("NESSUS_XML_PROTOCOL_INVALID");
       }
       // Ignore all finding child elements and text: may contain credentials.
-      severity[level]!++;
+      severity[level]=severity[level]!+1;
     }
   }
   const sourceSha256=await webCryptoImportHashProvider.sha256Bytes(bytes);
