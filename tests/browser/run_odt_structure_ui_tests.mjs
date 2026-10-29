@@ -76,7 +76,8 @@ for(const regex of [
  /onClose: \(\) => setOdtStructureOpen\(false\)/,
 ]){assert.match(main,regex);count++;}
 const panel=fs.readFileSync("ui/app/odt-structure-panel.mjs","utf8");
-for(const forbidden of ["setWorkspace(", "onActivate", "onExportAssociation", "dangerouslySetInnerHTML",
+// P4 permits ONLY a separate operator-reviewed zero-value sidecar callback; P2 still forbids direct Builder/Engine/network mutations.
+for(const forbidden of ["setWorkspace(", "onActivate", "applyRuntimeOperation(", "setRuntimeSelection(", "dangerouslySetInnerHTML",
  "localStorage", "indexedDB", "fetch(", "console.log(", "console.error("]){
  eq(panel.includes(forbidden),false);
 }
