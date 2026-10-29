@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 
 const e = React.createElement;
-const DISPLAY_LIMIT = 80;
+const PAGE_SIZE = 80;
 
 /**
  * Read-only source-to-resource association review.
@@ -10,11 +10,17 @@ const DISPLAY_LIMIT = 80;
  */
 export function NmapAssociationReview({ result, model, busy = false, onExport }) {
   const [choices, setChoices] = useState({});
+  const [page, setPage] = useState(0);
   const [acknowledged, setAcknowledged] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [exported, setExported] = useState(false);
   const preview = result.preview;
+  const pages = Math.max(1, Math.ceil(preview.hosts.length / PAGE_SIZE));
+  const currentPage = Math.min(Math.max(0, page), pages - 1);
+  const firstOrdinal = currentPage * PAGE_SIZE;
+  const lastOrdinal = Math.min(preview.hosts.length, firstOrdinal + PAGE_SIZE) - 1;
+  const visibleHosts = preview.hosts.slice(firstOrdinal, firstOrdinal + PAGE_SIZE);
   const selected = Object.entries(choices)
     .filter(([, resourceId]) => resourceId !== "")
     .map(([hostOrdinal, resourceId]) => ({ hostOrdinal: Number(hostOrdinal), resourceId }))
@@ -48,28 +54,38 @@ export function NmapAssociationReview({ result, model, busy = false, onExport })
       ? e("p", { "data-nmap-model": "true" }, `Builder: ${model.scenarioId} · source revision: ${model.sourceRevision} · available resources: ${model.resources.length}`)
       : e("p", { "data-nmap-model-blocked": "true" }, "Open an existing Builder scenario to associate observations; inspection remains available in Runtime."),
     model && model.resources.length
-      ? e("ol", { className: "validation-list", "data-nmap-association-hosts": "true" },
-          ...preview.hosts.slice(0, DISPLAY_LIMIT).map((host, hostOrdinal) =>
-            e("li", { key: `host-${hostOrdinal}` },
-              e("label", null,
-                `Observed ${host.ipv4} (scan status ${host.observedStatus}) · `,
-                e("select", {
-                  "data-nmap-associate-host": String(hostOrdinal),
-                  disabled: busy || submitting, value: choices[hostOrdinal] ?? "",
-                  onChange: (event) => {
-                    const value = event.target.value;
-                    setChoices((prev) => ({ ...prev, [hostOrdinal]: value }));
-                    setAcknowledged(false); setExported(false);
+      ? e("div", { "data-nmap-association-pagination": "true" },
+          e("p", { "data-nmap-association-page": String(currentPage + 1),
+                   "data-nmap-association-range": `${firstOrdinal}:${lastOrdinal}` },
+            `Observed source hosts ${firstOrdinal + 1}–${lastOrdinal + 1} of ${preview.hosts.length} · Page ${currentPage + 1} of ${pages}.`),
+          e("div", { className: "network-import-actions" },
+            e("button", { type: "button", "data-nmap-association-previous": "true",
+              disabled: busy || submitting || currentPage === 0,
+              onClick: () => setPage(p => Math.max(0, p - 1)) }, "Previous source hosts"),
+            e("button", { type: "button", "data-nmap-association-next": "true",
+              disabled: busy || submitting || currentPage === pages - 1,
+              onClick: () => setPage(p => Math.min(pages - 1, p + 1)) }, "Next source hosts")),
+          e("ol", { className: "validation-list", "data-nmap-association-hosts": "true",
+                    start: firstOrdinal + 1 },
+            ...visibleHosts.map((host, index) => {
+              const hostOrdinal = firstOrdinal + index;
+              return e("li", { key: `host-${hostOrdinal}` },
+                e("label", null,
+                  `Observed ${host.ipv4} (scan status ${host.observedStatus}) · `,
+                  e("select", {
+                    "data-nmap-associate-host": String(hostOrdinal),
+                    disabled: busy || submitting, value: choices[hostOrdinal] ?? "",
+                    onChange: (event) => {
+                      const value = event.target.value;
+                      setChoices((prev) => ({ ...prev, [hostOrdinal]: value }));
+                      setAcknowledged(false); setExported(false);
+                    },
                   },
-                },
-                  e("option", { value: "" }, "Do not associate (default)"),
-                  ...model.resources.map((resource) =>
-                    e("option", { key: resource.id, value: resource.id },
-                      `${resource.label} [${resource.id}]`)))))))
-      : null,
-    preview.hosts.length > DISPLAY_LIMIT
-      ? e("p", { "data-nmap-association-limit": "true" },
-          `Only the first ${DISPLAY_LIMIT} of ${preview.hosts.length} observations may be reviewed here. Unshown records remain unassociated.`)
+                    e("option", { value: "" }, "Do not associate (default)"),
+                    ...model.resources.map((resource) =>
+                      e("option", { key: resource.id, value: resource.id },
+                        `${resource.label} [${resource.id}]`)))));
+            })))
       : null,
     duplicates ? e("p", { role: "alert", "data-nmap-association-conflict": "BLOCKED" },
       "Two observed hosts cannot be associated with the same modeled resource in this strict profile.") : null,
