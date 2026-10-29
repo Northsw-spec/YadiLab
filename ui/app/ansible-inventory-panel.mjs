@@ -53,14 +53,16 @@ export function AnsibleInventoryPanel({ inspectFile, onClose, model = null, onEx
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const req = useRef(0);
+  const originalFile = useRef(null);
+  const [selectionEpoch, setSelectionEpoch] = useState(0);
   const focus = useRef(null);
   useEffect(() => {
     focus.current?.focus();
-    return () => { req.current++; };
+    return () => { req.current++; originalFile.current=null; };
   }, []);
   useEffect(() => {
     const escape = (event) => {
-      if (event.key === "Escape" && !busy) { req.current++; onClose(); }
+      if (event.key === "Escape" && !busy) { req.current++; originalFile.current=null; onClose(); }
     };
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
@@ -69,12 +71,15 @@ export function AnsibleInventoryPanel({ inspectFile, onClose, model = null, onEx
   const choose = async (file) => {
     if (!file || busy) return;
     const id = ++req.current;
+    originalFile.current=file;
+    setSelectionEpoch(value=>value+1);
     setResult(null); setError(""); setBusy(true);
     try {
       const parsed = await inspectFile(file);
       if (req.current === id) setResult(parsed);
     } catch (cause) {
       if (req.current === id) {
+        originalFile.current=null;
         setError(cause?.code && cause?.message ? `${cause.code}: ${cause.message}` :
           cause instanceof Error ? cause.message : "Ansible inventory inspection blocked.");
       }
@@ -91,7 +96,7 @@ export function AnsibleInventoryPanel({ inspectFile, onClose, model = null, onEx
           e("h2", null, "Inspect Ansible inventory YAML — read only"),
           e("p", null, "Local, offline and source-preserving: no Ansible execution or network access.")),
         e("button", { type: "button", disabled: busy, "aria-label": "Close Ansible YAML inspection",
-          onClick: () => { req.current++; onClose(); } }, "Close")),
+          onClick: () => { req.current++; originalFile.current=null; onClose(); } }, "Close")),
       e("label", { className: "file-button" }, busy ? "Reading inventory…" : "Choose .yml or .yaml file",
         e("input", { type: "file", accept: ".yml,.yaml", disabled: busy, hidden: true,
           "data-ansible-file": "true",
@@ -103,10 +108,19 @@ export function AnsibleInventoryPanel({ inspectFile, onClose, model = null, onEx
       error ? e("p", { role: "alert", className: "helper-status blocked", "data-ansible-error": "BLOCKED" }, error) : null,
       e(AnsibleInventoryDetails, { result }),
       result ? e(AnsibleAssociationReview, {
-        key: `${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
-        result, model, busy, onExport: onExportAssociation,
+        key: `${selectionEpoch}:${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
+        result, model, busy,
+        onExport: async (preview,decision) => {
+          const epoch=req.current,source=originalFile.current;
+          if(!source||typeof onExportAssociation!=="function"){
+            const error=new Error("ANSIBLE_YAML_ASSOC_SOURCE_BLOCKED");
+            error.code="ANSIBLE_YAML_ASSOC_SOURCE_BLOCKED";throw error;
+          }
+          return onExportAssociation(source,preview,decision,
+            ()=>req.current===epoch&&originalFile.current===source);
+        },
       }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-ansible-close": "true",
-          onClick: () => { req.current++; onClose(); } }, "Close without changes"))));
+          onClick: () => { req.current++; originalFile.current=null; onClose(); } }, "Close without changes"))));
 }

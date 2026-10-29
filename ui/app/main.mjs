@@ -47,6 +47,7 @@ import { reviewDrawioOriginalFileReferences } from "../src/browser/drawio-associ
 import { previewNessusFileReadOnly } from "../src/browser/nessus-v2-file-preview.js";
 import { reviewNessusOriginalFileAssociations } from "../src/browser/nessus-association-file.js";
 import { previewAnsibleYamlFileReadOnly } from "../src/browser/ansible-yaml-file-preview.js";
+import { reviewAnsibleYamlOriginalFileAssociations } from "../src/browser/ansible-yaml-association-file.js";
 import { AnsibleInventoryPanel } from "./ansible-inventory-panel.mjs";
 import { previewAnsibleIniFileReadOnly } from "../src/browser/ansible-ini-file-preview.js";
 import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
@@ -3942,22 +3943,28 @@ function App() {
         sourceRevision: workspace.sourceRevision,
         resources: workspace.source.resources.map(resource => ({ id: resource.id, label: resource.label })),
       } : null,
-      onExportAssociation: async (inventoryPreview, decision) => {
-        // Evaluate current Builder state at click time. Never trust stale UI choices.
-        const currentModel = workspace.mode === "builder" ? {
-          scenarioId: workspace.source.scenarioId,
-          sourceRevision: workspace.sourceRevision,
-          resources: workspace.source.resources.map(resource => ({ id: resource.id, label: resource.label })),
-        } : null;
-        const reviewed = reviewAnsibleInventoryAssociations(inventoryPreview, currentModel, decision);
-        if (reviewed.status !== "READY_FOR_EXPORT" || !reviewed.sidecar) {
-          throw new Error(`Ansible association blocked: ${reviewed.diagnostics.map(d => d.code).join(", ")}`);
+      onExportAssociation: async (originalFile,inventoryPreview,decision,isCurrent) => {
+        const currentModel=()=>{
+          const live=latestDrawioWorkspaceRef.current;
+          return live.mode==="builder" ? {
+            scenarioId:live.source.scenarioId,
+            sourceRevision:live.sourceRevision,
+            resources:live.source.resources.map(resource=>({
+              id:resource.id,label:resource.label,
+            })),
+          } : null;
+        };
+        const sidecar=await reviewAnsibleYamlOriginalFileAssociations(
+          originalFile,inventoryPreview,currentModel,decision,isCurrent);
+        // No yield between the final live/generation gate and download.
+        if(!isCurrent()){
+          const error=new Error("ANSIBLE_YAML_ASSOC_STALE");
+          error.code="ANSIBLE_YAML_ASSOC_STALE";throw error;
         }
-        // Human decision is a separate downloaded report; NEVER ScenarioSource/Engine.
         downloadJson({
-          filename: `ansible-inventory-associations-${inventoryPreview.sourceSha256.slice(0, 12)}.json`,
-          mime: "application/json",
-          text: JSON.stringify(reviewed.sidecar, null, 2),
+          filename: `ansible-inventory-associations-${sidecar.source.sha256.slice(0,12)}.json`,
+          mime:"application/json",
+          text:JSON.stringify(sidecar,null,2),
         });
       },
       onClose: () => setAnsibleInventoryOpen(false),
