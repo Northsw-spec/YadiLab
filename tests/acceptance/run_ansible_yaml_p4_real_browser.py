@@ -57,7 +57,7 @@ def test_case(browser,url):
         for token in ["SYNTHETIC_SECRET_CANARY_NOT_REAL","SYNTHETIC_PRIVATE_PATH",
                       "SYNTHETIC_TOKEN_CANARY_NOT_REAL","ansible_password"]:
             require(token not in html,"Confidential YAML value reached DOM "+token)
-        page.locator('[data-ansible-associate-host="0"]').select_option("fw01")
+        page.locator('[data-ansible-associate-host="0"]').select_option("firewall01")
         page.locator('[data-ansible-association-ack]').check()
         with page.expect_download(timeout=25000) as dl2:
             page.locator('[data-ansible-association-export]').click()
