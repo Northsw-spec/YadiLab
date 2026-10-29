@@ -45,7 +45,7 @@ await blocked(file("source.ini",read("invalid-host-range.ini")),expected,normal,
 await blocked(null,expected,normal,decision,()=>true,"ANSIBLE_INI_P4_SOURCE_BLOCKED");
 await blocked(file(),{...expected,hosts:expected.hosts.slice(1)},normal,decision,()=>true,"ANSIBLE_INI_P4_SOURCE_CHANGED");
 await blocked(file(),{...expected,hosts:expected.hosts.map((h,i)=>i===0?{...h,locators:[]}:h)},normal,decision,()=>true,"ANSIBLE_INI_P4_SOURCE_CHANGED");
-await blocked(file(),{...expected,groupChildren:{}},normal,decision,()=>true,"ANSIBLE_INI_P4_SOURCE_CHANGED");
+await blocked(file(),{...expected,groupChildren:{east:["forged_child"]}},normal,decision,()=>true,"ANSIBLE_INI_P4_SOURCE_CHANGED");
 await blocked(file(),{...expected,canActivate:true},normal,decision,()=>true,"ANSIBLE_INI_P4_SOURCE_INVALID");
 await blocked(file(),expected,normal,{...decision,acknowledgeNotVerified:false},()=>true,"ANSIBLE_INI_P4_ACK_REQUIRED");
 await blocked(file(),expected,()=>null,decision,()=>true,"ANSIBLE_INI_P4_BUILDER_REQUIRED");
