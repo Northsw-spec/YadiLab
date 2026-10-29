@@ -100,8 +100,7 @@ export async function replayDrawioSavedReferences(
     sourceRevision:target.sourceRevision as number,
     acknowledgeNotVerified:true,references,
   });
-  if(result.status==="BLOCKED")deny("DRAWIO_REPLAY_MODEL_MISMATCH");
-  if(result.status!=="READY_FOR_EXPORT")deny("DRAWIO_REPLAY_MODEL_MISMATCH");
+  if(result.status!=="READY_FOR_EXPORT")throw new EnterpriseImportError("DRAWIO_REPLAY_MODEL_MISMATCH","DRAWIO_REPLAY_MODEL_MISMATCH");
   if(canonical(report)!==canonical(result.sidecar))deny("DRAWIO_REPLAY_REPORT_MISMATCH");
   return Object.freeze({
     status:"REFERENCE_REPLAY_MATCH",
