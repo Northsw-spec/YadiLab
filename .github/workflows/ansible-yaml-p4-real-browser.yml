@@ -48,7 +48,7 @@ jobs:
           node tests/browser/run_ansible_ini_inventory_ui_tests.mjs
           node tests/browser/run_ansible_ini_association_ui_tests.mjs
           node tests/browser/run_nmap_xml_observation_ui_tests.mjs
-          node tests/browser/run_graphml_readonly_preview_tests.mjs
+          node tests/enterprise-import/run_graphml_readonly_preview_tests.mjs
       - name: Compile actual YadiLab with reproducible identity
         run: |
           npm run build:browser
