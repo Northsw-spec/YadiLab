@@ -42,7 +42,7 @@ jobs:
           node tests/enterprise-import/run_odt_tables_p1_tests.mjs
           node tests/browser/run_odt_structure_ui_tests.mjs
           node tests/browser/run_odt_p3_cell_review_tests.mjs
-          node tests/browser/run_odt_p4_reviewed_association_tests.mjs
+          node tests/browser/run_odt_p4_association_tests.mjs
           node tests/browser/run_odt_p5_multi_reference_tests.mjs
           node tests/browser/run_odt_p6_report_replay_tests.mjs
           node tests/enterprise-import/run_docx_tables_p1_tests.mjs
