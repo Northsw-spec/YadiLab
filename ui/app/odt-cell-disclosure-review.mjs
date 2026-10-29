@@ -3,7 +3,7 @@ import { OdtReviewedCellAssociation } from "./odt-reviewed-cell-association.mjs"
 const e=React.createElement;
 
 /** Ephemeral, locally consented, ONE ODT cell only; never persists or exports. */
-export function OdtCellDisclosureReview({ preview, onRevealCell, model=null, onExportAssociation }) {
+export function OdtCellDisclosureReview({ preview, onRevealCell, model=null, onExportAssociation,onStageAssociation }) {
   const [selected,setSelected]=useState("");
   const [acknowledged,setAcknowledged]=useState(false);
   const [disclosed,setDisclosed]=useState(null);
@@ -79,7 +79,7 @@ export function OdtCellDisclosureReview({ preview, onRevealCell, model=null, onE
     disclosed?e(OdtReviewedCellAssociation,{
       key:[disclosed.sourceSha256,disclosed.locator.tableOrdinal,
         disclosed.locator.rowOrdinal,disclosed.locator.cellOrdinal].join(":"),
-      disclosed,model,onExportAssociation,
+      disclosed,model,onExportAssociation,onStageAssociation,
     }):null
   );
 }
