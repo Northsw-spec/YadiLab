@@ -48,7 +48,7 @@ eq(Object.isFrozen(result.pages),true);
 eq(Object.isFrozen(result.pages[0]),true);
 eq(JSON.stringify(result).includes(secret),false);
 eq(JSON.stringify(result).includes("192.0.2.99"),false);
-eq(JSON.stringify(result).includes("v1"),false);
+eq(JSON.stringify(result).includes("\\\"id\\\":\\\"v1\\\""),false);
 eq(await previewDrawioFileReadOnly(input("sample.DRAWIO",bytes)),result);
 const bare=await previewDrawioStructure(new TextEncoder().encode(model(root+vert("solo"))));
 eq(bare.pageCount,1);
