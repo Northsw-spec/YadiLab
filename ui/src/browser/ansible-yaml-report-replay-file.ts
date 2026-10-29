@@ -44,7 +44,9 @@ export async function replayAnsibleYamlSavedReportFiles(
   // Enforce the P2 filename, parser and redaction boundary on original source.
   const actual=await previewAnsibleYamlFileReadOnly({
     name:original.name,size:source.byteLength,async arrayBuffer(){
-      return source.buffer.slice(source.byteOffset,source.byteOffset+source.byteLength);
+      const copy=new ArrayBuffer(source.byteLength);
+      new Uint8Array(copy).set(source);
+      return copy;
     },
   }).catch(()=>deny("ANSIBLE_YAML_REPLAY_SOURCE_BLOCKED"));
   if(!isCurrent()||JSON.stringify(getModel())!==baseline)
