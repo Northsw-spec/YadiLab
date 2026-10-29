@@ -1,0 +1,76 @@
+name: DRAWIO P4 reviewed vertex reference actual Chromium
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/drawio-association-review.ts'
+      - 'ui/src/browser/drawio-association-file.ts'
+      - 'ui/app/drawio-association-review.mjs'
+      - 'ui/app/drawio-structure-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_drawio_p4_reviewed_references_tests.mjs'
+      - 'tests/acceptance/run_drawio_p4_real_browser.py'
+      - 'docs/architecture/DRAWIO_P4_REVIEWED_VERTEX_ORDINAL_ORACLES.md'
+      - '.github/workflows/drawio-p4-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  drawio-p4-reviewed-real-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Exact locked project dependencies
+        run: npm ci
+      - name: Isolated pinned real Chromium
+        run: |
+          python3 -m venv /tmp/drawio-p4-venv
+          /tmp/drawio-p4-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/drawio-p4-venv/bin/python -m playwright install --with-deps chromium
+      - name: PREP frozen source/security tests and upstream import regressions
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_drawio_p1p2_tests.mjs
+          node tests/browser/run_drawio_p3_compressed_tests.mjs
+          node tests/browser/run_drawio_p4_reviewed_references_tests.mjs
+          node tests/browser/run_nessus_p1p2_tests.mjs
+          node tests/browser/run_nessus_p3_reviewed_references_tests.mjs
+          node tests/browser/run_nmap_xml_observation_ui_tests.mjs
+          node tests/browser/run_odt_p6_report_replay_tests.mjs
+          node tests/browser/run_docx_p6_report_replay_tests.mjs
+      - name: Compile actual YadiLab and verify integrity
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Chromium manual draw.io P4, P3, P2 and Nmap regressions
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18993 --bind 127.0.0.1 --directory ui/dist >/tmp/drawio-p4-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18993/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18993/browser-build-manifest.json >/dev/null
+          /tmp/drawio-p4-venv/bin/python tests/acceptance/run_drawio_p2_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/drawio-p4-evidence/p2
+          /tmp/drawio-p4-venv/bin/python tests/acceptance/run_drawio_p3_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/drawio-p4-evidence/p3
+          /tmp/drawio-p4-venv/bin/python tests/acceptance/run_drawio_p4_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/drawio-p4-evidence/p4
+          /tmp/drawio-p4-venv/bin/python tests/acceptance/run_nmap_xml_p2_real_browser.py --url http://127.0.0.1:18993/ --evidence-dir /tmp/drawio-p4-evidence/nmap
+      - name: Preserve actual Chromium acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drawio-p4-reviewed-real-chromium
+          path: /tmp/drawio-p4-evidence/
+          if-no-files-found: ignore
