@@ -51,7 +51,7 @@ eq(Object.hasOwn(sidecar,"connections"),false);
 eq(Object.hasOwn(sidecar,"pluginOutput"),false);
 eq(JSON.stringify(preview),rawBefore);
 eq(JSON.stringify(model),modelBefore);
-const bridged=await reviewNessusOriginalFileAssociations(file("actual.nessus",bytes),preview,model,decision);
+const bridged=await reviewNessusOriginalFileAssociations(file("actual.nessus",bytes),preview,()=>model,decision,()=>true);
 eq(bridged,sidecar);
 const sensitive=[secret,"SECRET-HOST","192.0.2.99","13536","19506",
  "TOP-SECRET-CVE-TEXT","SECRET-REPORT","plugin_output","description"];
@@ -81,12 +81,12 @@ blocked({...decision,references:Array.from({length:21},(_,i)=>({hostOrdinal:i,ta
 blocked(decision,"NESSUS_ASSOC_SOURCE_INVALID",model,{...preview,canActivate:true});
 blocked(decision,"NESSUS_ASSOC_SOURCE_INVALID",model,{...preview,severityCounts:[9,9,9,9,9]});
 async function blockedBridge(data,p,d,code,m=model){
- await assert.rejects(reviewNessusOriginalFileAssociations(file("actual.nessus",data),p,m,d),
+ await assert.rejects(reviewNessusOriginalFileAssociations(file("actual.nessus",data),p,()=>m,d,()=>true),
    e=>e?.code===code && !JSON.stringify(e).includes(secret),code);checks++;
 }
-await blockedBridge(enc(xml("MODIFIED_SECRET")),preview,decision,"NESSUS_ASSOC_SOURCE_CHANGED");
+await blockedBridge(enc(xml("MODIFIED_SECRET")),preview,decision,"NESSUS_P5_SOURCE_CHANGED");
 await blockedBridge(enc('<!DOCTYPE NessusClientData_v2 [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><NessusClientData_v2/>'),
- preview,decision,"IMPORT_XML_DTD_FORBIDDEN");
+ preview,decision,"NESSUS_P5_SOURCE_BLOCKED");
 await blockedBridge(bytes,preview,{...decision,acknowledgeNotVerified:false},"NESSUS_ASSOC_ACK_REQUIRED");
 await blockedBridge(bytes,preview,decision,"NESSUS_ASSOC_BUILDER_REQUIRED",null);
 await blockedBridge(bytes,preview,{...decision,sourceRevision:66},"NESSUS_ASSOC_STALE");
