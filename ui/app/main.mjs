@@ -37,6 +37,7 @@ import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-previe
 import { mapReviewedGraphmlToBuilder, GRAPHML_MANUAL_ROLE_OPTIONS } from "../../enterprise-import/src/graphml-review-mapping.js";
 import { GraphmlReadOnlyPanel } from "./graphml-preview-panel.mjs";
 import { previewNmapXmlFileReadOnly } from "../src/browser/nmap-xml-file-preview.js";
+import { reviewNmapOriginalFileAssociations } from "../src/browser/nmap-association-file.js";
 import { NmapObservationPanel } from "./nmap-observation-panel.mjs";
 import { NessusSeverityPanel } from "./nessus-severity-panel.mjs";
 import { DrawioStructurePanel } from "./drawio-structure-panel.mjs";
@@ -4289,22 +4290,29 @@ function App() {
         sourceRevision: workspace.sourceRevision,
         resources: workspace.source.resources.map((resource) => ({ id: resource.id, label: resource.label })),
       } : null,
-      onExportAssociation: async (scanPreview, decision) => {
-        const currentModel = workspace.mode === "builder" ? {
-          scenarioId: workspace.source.scenarioId,
-          sourceRevision: workspace.sourceRevision,
-          resources: workspace.source.resources.map((resource) => ({ id: resource.id, label: resource.label })),
-        } : null;
-        const reviewed = reviewNmapObservationAssociations(scanPreview, currentModel, decision);
-        if (reviewed.status !== "READY_FOR_EXPORT" || !reviewed.sidecar) {
-          throw new Error(`Nmap association blocked: ${reviewed.diagnostics.map((d) => d.code).join(", ")}`);
+      onExportAssociation: async (originalFile, scanPreview, decision, isCurrent) => {
+        const getCurrentModel = () => {
+          const live = latestDrawioWorkspaceRef.current;
+          return live.mode === "builder" ? {
+            scenarioId: live.source.scenarioId,
+            sourceRevision: live.sourceRevision,
+            resources: live.source.resources.map((resource) => ({
+              id: resource.id, label: resource.label,
+            })),
+          } : null;
+        };
+        const sidecar = await reviewNmapOriginalFileAssociations(
+          originalFile, scanPreview, getCurrentModel, decision, isCurrent);
+        // No asynchronous yield after the last source-epoch gate and before
+        // download. This never imports scan hosts or changes Builder/Engine.
+        if (!isCurrent()) {
+          const error = new Error("NMAP_P4_STALE");
+          error.code = "NMAP_P4_STALE"; throw error;
         }
-        // Sidecar ONLY. Do not call setWorkspace, change Engine, link resources
-        // or mutate the canonical ScenarioSource from scan-time observations.
         downloadJson({
-          filename: `nmap-associations-${scanPreview.sourceSha256.slice(0, 12)}.json`,
+          filename: `nmap-associations-${sidecar.source.sha256.slice(0, 12)}.json`,
           mime: "application/json",
-          text: JSON.stringify(reviewed.sidecar, null, 2),
+          text: JSON.stringify(sidecar, null, 2),
         });
       },
       onClose: () => setNmapObservationOpen(false),
