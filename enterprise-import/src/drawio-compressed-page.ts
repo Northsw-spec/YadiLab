@@ -13,7 +13,7 @@ const fail = (code: string): never => { throw new EnterpriseImportError(code, co
 export interface DrawioInflationBudget {
   inflatedBytes: number;
 }
-function decodeBase64(text: string): Uint8Array {
+function decodeBase64(text: string): Uint8Array<ArrayBuffer> {
   if (!text || text.length > MAX_BASE64_CHARS || text.length % 4 !== 0 ||
       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) {
     fail("DRAWIO_BASE64_INVALID");
