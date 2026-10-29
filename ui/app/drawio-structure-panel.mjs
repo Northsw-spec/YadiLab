@@ -4,13 +4,14 @@ const e=React.createElement;
 /** Aggregate-only projection of declared diagram cells, not a physical topology. */
 export function DrawioStructureDetails({preview}){
   if(!preview)return e("p",{"data-drawio-empty":"true"},
-    "Choose an uncompressed .drawio file for local read-only structural inspection.");
+    "Choose a local .drawio file (uncompressed XML or bounded compressed pages).");
   return e("section",{className:"network-import-preview",
       "data-drawio-preview":"PREVIEW_ONLY"},
     e("h3",null,"diagrams.net — structural preview only"),
     e("p",{"data-drawio-summary":"true"},
       "Pages: "+preview.pageCount+" · Drawn vertices: "+preview.vertexCount+
-      " · Drawn edges: "+preview.drawnEdgeCount),
+      " · Drawn edges: "+preview.drawnEdgeCount+
+      " · Compressed pages: "+preview.compressedPageCount),
     e("p",{"data-drawio-source-sha":"true"},"Original source SHA-256: "+preview.sourceSha256),
     e("ul",{className:"validation-list","data-drawio-page-counts":"true"},
       ...preview.pages.map(page=>e("li",{
@@ -64,7 +65,7 @@ export function DrawioStructurePanel({inspectFile,onClose}){
       "data-drawio-panel":"PREVIEW_ONLY"},
       e("div",{className:"network-import-heading"},
         e("div",null,e("h2",null,"Inspect draw.io — read-only structure"),
-          e("p",null,"Local uncompressed XML; compressed diagram pages are not yet supported.")),
+          e("p",null,"Local uncompressed or raw-DEFLATE compressed diagrams; bounded, read-only counts.")),
         e("button",{type:"button",disabled:busy,"aria-label":"Close draw.io preview",
           onClick:()=>{generation.current++;onClose();}},"Close")),
       e("label",{className:"file-button"},busy?"Reading diagram…":"Choose .drawio file",
