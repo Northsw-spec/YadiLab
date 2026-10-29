@@ -3962,7 +3962,7 @@ function App() {
           error.code="ANSIBLE_YAML_ASSOC_STALE";throw error;
         }
         downloadJson({
-          filename:`ansible-inventory-associations-${sidecar.source.sha256.slice(0,12)}.json`,
+          filename: `ansible-inventory-associations-${sidecar.source.sha256.slice(0,12)}.json`,
           mime:"application/json",
           text:JSON.stringify(sidecar,null,2),
         });
