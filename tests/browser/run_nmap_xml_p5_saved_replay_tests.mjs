@@ -72,7 +72,7 @@ for(const n of [2,161,1000]){
     {...report,associations:[{...report.associations[0],observedIpv4:"192.0.2.99"}]},
     {...report,associations:[{...report.associations[0],observedPortCount:123}]},
     {...report,associations:[{...report.associations[0],hostLocator:{
-      ...report.associations[0].hostLocator,sourceSha256:"0".repeat(64)}]},
+      ...report.associations[0].hostLocator,sourceSha256:"0".repeat(64)}}]},
   ]){
     await fails(replayNmapSavedReferences(original,bytes(JSON.stringify(variant)),builder,true),
       "NMAP_REPLAY_REPORT_MISMATCH");
