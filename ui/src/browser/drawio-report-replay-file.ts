@@ -11,9 +11,9 @@ async function read(file:DrawioReplayReadableFile, ext:"drawio"|"json",limit:num
      typeof file.arrayBuffer!=="function")deny("DRAWIO_REPLAY_FILE_INVALID");
   if(file.size!==undefined&&(!Number.isSafeInteger(file.size)||file.size<2||file.size>limit))
     deny("DRAWIO_REPLAY_FILE_SIZE_INVALID");
-  let data:ArrayBuffer;
-  try {data=await file.arrayBuffer();}
-  catch {deny("DRAWIO_REPLAY_FILE_INVALID");}
+  const data:ArrayBuffer=await file.arrayBuffer().catch(()=>{
+    throw new EnterpriseImportError("DRAWIO_REPLAY_FILE_INVALID","DRAWIO_REPLAY_FILE_INVALID");
+  });
   if(!(data instanceof ArrayBuffer)||data.byteLength<2||data.byteLength>limit)
     deny("DRAWIO_REPLAY_FILE_SIZE_INVALID");
   return new Uint8Array(data);
