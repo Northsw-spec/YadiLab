@@ -38,7 +38,7 @@ function reportObject(bytes:Uint8Array):Record<string,unknown>{
   let value:unknown;
   try { value=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes)) as unknown; }
   catch { deny("DRAWIO_REPLAY_REPORT_INVALID"); }
-  if(!rec(value))deny("DRAWIO_REPLAY_REPORT_INVALID");
+  if(!rec(value))throw new EnterpriseImportError("DRAWIO_REPLAY_REPORT_INVALID","DRAWIO_REPLAY_REPORT_INVALID");
   canonical(value);
   return value;
 }
@@ -66,17 +66,18 @@ export async function replayDrawioSavedReferences(
      drawioBytes.length>MAX_DRAWIO_BYTES)deny("DRAWIO_REPLAY_SOURCE_SIZE_INVALID");
   const report=reportObject(reportBytes);
   if(report.formatId!==DRAWIO_REVIEWED_FORMAT)deny("DRAWIO_REPLAY_FORMAT_UNSUPPORTED");
+  const source=report.source, target=report.targetModel, savedRefs=report.associations;
   if(report.schemaVersion!=="1.0.0"||report.status!=="REVIEWED_ASSOCIATIONS_ONLY"||
-     !rec(report.source)||!rec(report.targetModel)||
-     !HEX.test(String(report.source.sha256))||!safeId(report.targetModel.scenarioId)||
-     !nat(report.targetModel.sourceRevision)){
-    deny("DRAWIO_REPLAY_REPORT_INVALID");
+     !rec(source)||!rec(target)||
+     !HEX.test(String(source.sha256))||!safeId(target.scenarioId)||
+     !nat(target.sourceRevision)){
+    throw new EnterpriseImportError("DRAWIO_REPLAY_REPORT_INVALID","DRAWIO_REPLAY_REPORT_INVALID");
   }
-  if(!Array.isArray(report.associations)||report.associations.length<1||
-     report.associations.length>20)deny("DRAWIO_REPLAY_COUNT_INVALID");
+  if(!Array.isArray(savedRefs)||savedRefs.length<1||savedRefs.length>20)
+    throw new EnterpriseImportError("DRAWIO_REPLAY_COUNT_INVALID","DRAWIO_REPLAY_COUNT_INVALID");
 
   const references:DrawioReviewedDecision["references"][number][]=[];
-  for(const item of report.associations){
+  for(const item of savedRefs){
     if(!rec(item)||!rec(item.locator)||item.locator.kind!=="drawio-vertex-ordinal"||
        !HEX.test(String(item.locator.sourceSha256))||
        !nat(item.locator.pageOrdinal)||!nat(item.locator.vertexOrdinal)||
@@ -88,17 +89,18 @@ export async function replayDrawioSavedReferences(
       vertexOrdinal:item.locator.vertexOrdinal,targetResourceId:item.targetResourceId});
   }
 
-  let preview;
-  try { preview=await previewDrawioStructure(drawioBytes); }
-  catch { deny("DRAWIO_REPLAY_SOURCE_BLOCKED"); }
-  if(preview.sourceSha256!==report.source.sha256)deny("DRAWIO_REPLAY_SOURCE_CHANGED");
+  const preview=await previewDrawioStructure(drawioBytes).catch(()=>{
+    throw new EnterpriseImportError("DRAWIO_REPLAY_SOURCE_BLOCKED","DRAWIO_REPLAY_SOURCE_BLOCKED");
+  });
+  if(preview.sourceSha256!==source.sha256)deny("DRAWIO_REPLAY_SOURCE_CHANGED");
 
   const result=reviewDrawioVertexAssociations(preview,model,{
-    sourceSha256:report.source.sha256,
-    scenarioId:report.targetModel.scenarioId,
-    sourceRevision:report.targetModel.sourceRevision,
+    sourceSha256:source.sha256 as string,
+    scenarioId:target.scenarioId as string,
+    sourceRevision:target.sourceRevision as number,
     acknowledgeNotVerified:true,references,
   });
+  if(result.status==="BLOCKED")deny("DRAWIO_REPLAY_MODEL_MISMATCH");
   if(result.status!=="READY_FOR_EXPORT")deny("DRAWIO_REPLAY_MODEL_MISMATCH");
   if(canonical(report)!==canonical(result.sidecar))deny("DRAWIO_REPLAY_REPORT_MISMATCH");
   return Object.freeze({
