@@ -104,7 +104,9 @@ const associationUi = fs.readFileSync("ui/app/nmap-association-review.mjs","utf8
 eq(/\bsetWorkspace\s*\(|dangerouslySetInnerHTML/.test(associationUi),false,
   "Review has no workspace mutation or unsafe HTML APIs");
 const mainAssociation = fs.readFileSync("ui/app/main.mjs","utf8");
-assert.match(mainAssociation,/reviewNmapObservationAssociations\(scanPreview, currentModel, decision\)/); checks++;
+assert.match(mainAssociation,/reviewNmapOriginalFileAssociations\\(/); checks++;
+assert.match(mainAssociation,/const live = latestDrawioWorkspaceRef\\.current/); checks++;
+assert.match(mainAssociation,/onExportAssociation: async \\(originalFile, scanPreview, decision, isCurrent\\)/); checks++;
 assert.match(mainAssociation,/downloadJson\(\{[\s\S]*?filename: `nmap-associations-/); checks++;
 assert.match(mainAssociation,/sourceRevision: workspace\.sourceRevision/); checks++;
 eq(mainAssociation.includes('onExportAssociation: async'),true);
