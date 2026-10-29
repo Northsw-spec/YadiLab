@@ -4265,17 +4265,20 @@ function App() {
         resources: workspace.source.resources.map(r => ({id:r.id,label:r.label})),
       } : null,
       onExportReviewed: async (sourceFile, summary, decision, isCurrent) => {
-        // Source and current model are both revalidated immediately before sidecar export.
-        const currentModel = workspace.mode === "builder" ? {
-          scenarioId: workspace.source.scenarioId,
-          sourceRevision: workspace.sourceRevision,
-          resources: workspace.source.resources.map(r => ({id:r.id,label:r.label})),
-        } : null;
+        const getCurrentModel = () => {
+          const live = latestDrawioWorkspaceRef.current;
+          return live.mode === "builder" ? {
+            scenarioId: live.source.scenarioId,
+            sourceRevision: live.sourceRevision,
+            resources: live.source.resources.map(r => ({id:r.id,label:r.label})),
+          } : null;
+        };
         const sidecar = await reviewNessusOriginalFileAssociations(
-          sourceFile, summary, currentModel, decision);
+          sourceFile, summary, getCurrentModel, decision, isCurrent);
+        // No yield after final file-generation gate and before local JSON download.
         if (!isCurrent()) {
-          const error = new Error("NESSUS_ASSOC_STALE");
-          error.code = "NESSUS_ASSOC_STALE";
+          const error = new Error("NESSUS_P5_STALE");
+          error.code = "NESSUS_P5_STALE";
           throw error;
         }
         // Only metadata, never original ReportHost names, IPs, plugin output or Engine state.
