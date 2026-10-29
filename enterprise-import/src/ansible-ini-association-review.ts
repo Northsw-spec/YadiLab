@@ -1,7 +1,7 @@
 import type { AnsibleIniPreview, AnsibleIniHostLocator } from "./ansible-ini-preview.js";
 
 export const ANSIBLE_INI_ASSOCIATION_FORMAT = "yadilab.ansible-ini-inventory-associations" as const;
-const MAX_UI_HOSTS = 80;
+const MAX_REVIEWED_ASSOCIATIONS = 80;
 const ID = /^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}$/;
 const HOST = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/;
 const HEX = /^[0-9a-f]{64}$/;
@@ -84,8 +84,8 @@ export function reviewAnsibleIniInventoryAssociations(
     return block("ANSIBLE_INI_ASSOC_ACK_REQUIRED", "Explicit acknowledgment of unverified identities is required.");
   }
   if (!Array.isArray(decision.associations) || !decision.associations.length ||
-      decision.associations.length > Math.min(preview.hosts.length, MAX_UI_HOSTS)) {
-    return block("ANSIBLE_INI_ASSOC_SELECTION_INVALID", "Select one visible declared host and existing modeled resource.");
+      decision.associations.length > Math.min(preview.hosts.length, MAX_REVIEWED_ASSOCIATIONS)) {
+    return block("ANSIBLE_INI_ASSOC_SELECTION_INVALID", "Select 1–80 declared source hosts and corresponding existing modeled resources.");
   }
   const resourceIds = new Set<string>();
   for (const r of model.resources) {
@@ -100,9 +100,9 @@ export function reviewAnsibleIniInventoryAssociations(
   for (const choice of decision.associations) {
     if (!choice || !Number.isSafeInteger(choice.hostOrdinal) ||
         choice.hostOrdinal < 0 || choice.hostOrdinal >= preview.hosts.length ||
-        choice.hostOrdinal >= MAX_UI_HOSTS || !resourceIds.has(choice.resourceId) ||
+        !resourceIds.has(choice.resourceId) ||
         visibleOrdinals.has(choice.hostOrdinal) || chosenTargets.has(choice.resourceId)) {
-      return block("ANSIBLE_INI_ASSOC_SELECTION_INVALID", "Source hosts and modeled targets must be distinct and visible.");
+      return block("ANSIBLE_INI_ASSOC_SELECTION_INVALID", "Source hosts must be declared; selected modeled targets and source ordinals must be distinct.");
     }
     const host = preview.hosts[choice.hostOrdinal]!;
     if (!host || !validHost(host.inventoryName) ||
