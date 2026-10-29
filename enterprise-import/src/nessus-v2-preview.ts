@@ -53,7 +53,7 @@ export async function previewNessusSeveritySummary(bytes: Uint8Array): Promise<N
   try { root=parseSafeXml(bytes,"Nessus v2 XML"); }
   catch(error){
     // The generic parser's message can include untrusted XML. Return code only.
-    const code=error instanceof EnterpriseImportError && /^IMPORT_XML_[A-Z_]+$/.test(error.code)
+    const code=error instanceof EnterpriseImportError && /^IMPORT_XML_[A-Z0-9_]+$/.test(error.code)
       ?error.code:"NESSUS_XML_MALFORMED";
     deny(code);
   }
