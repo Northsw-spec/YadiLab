@@ -101,7 +101,7 @@ await block(bytes,encoder.encode(JSON.stringify(report).replace('"source":{',
 await block(bytes,encoder.encode(JSON.stringify(report).replace('"source":{',
  '"source":{"__proto__":{},')),builder,true,"ANSIBLE_YAML_REPLAY_REPORT_INVALID");
 const longArray=Array.from({length:201},()=>null);
-await bad({...report,associations:longArray},"ANSIBLE_YAML_REPLAY_COUNT_INVALID");
+await bad({...report,associations:longArray},"ANSIBLE_YAML_REPLAY_REPORT_INVALID");
 const tooDeep='{"x":'.repeat(20)+'null'+'}'.repeat(20);
 await block(bytes,encoder.encode(tooDeep),builder,true,"ANSIBLE_YAML_REPLAY_REPORT_INVALID");
 
