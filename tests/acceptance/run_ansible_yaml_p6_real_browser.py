@@ -154,9 +154,9 @@ def main():
         browser=pw.chromium.launch(headless=True,args=flags)
         try:cases=[test_late_and_replay(browser,args.url),test_maximum(browser,args.url)]
         finally:browser.close()
-    out={"status":"PASS","kind":"ANSIBLE-INI-P6 real compiled Chromium 161/500 host paging P4/P5",
+    out={"status":"PASS","kind":"ANSIBLE-YAML-P6 real compiled Chromium 161/500 host paging P4/P5",
          "platform":"Ubuntu GitHub Actions Chromium, Parrot NOT_RUN","cases":cases,"builderMutated":False}
-    (args.evidence_dir/"ansible-ini-p6-chromium.json").write_text(json.dumps(out,indent=2)+"\n")
+    (args.evidence_dir/"ansible-yaml-p6-chromium.json").write_text(json.dumps(out,indent=2)+"\n")
     print("PASS ANSIBLE YAML P6 compiled Chromium")
     print(json.dumps(out,indent=2))
 
