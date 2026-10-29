@@ -1,0 +1,71 @@
+name: ODT P1-P2 actual OASIS OpenDocument structure Chromium acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/odt-tables-structural-preview.ts'
+      - 'ui/src/browser/odt-file-structural-preview.ts'
+      - 'ui/app/odt-structure-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/enterprise-import/odt_test_package.mjs'
+      - 'tests/enterprise-import/run_odt_tables_p1_tests.mjs'
+      - 'tests/browser/run_odt_structure_ui_tests.mjs'
+      - 'tests/acceptance/run_odt_p2_real_browser.py'
+      - 'docs/architecture/ODT_P1_P2_FROZEN_STRUCTURAL_ORACLES.md'
+      - '.github/workflows/odt-p1-p2-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  odt-real-compiled-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install lockfile dependencies
+        run: npm ci
+      - name: Install pinned real Chromium for CI only
+        run: |
+          python3 -m venv /tmp/odt-p2-venv
+          /tmp/odt-p2-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/odt-p2-venv/bin/python -m playwright install --with-deps chromium
+      - name: Strict TS, independent ODF stored-ZIP P1, React SSR P2 and DOCX regression
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          node tests/enterprise-import/run_odt_tables_p1_tests.mjs
+          node tests/enterprise-import/run_docx_tables_p1_tests.mjs
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_odt_structure_ui_tests.mjs
+          node tests/browser/run_docx_structure_ui_tests.mjs
+      - name: Build attested actual browser release
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real Chromium ODT upload/safe fail-closed/Builder unchanged
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18992 --bind 127.0.0.1 --directory ui/dist >/tmp/yadilab-odt-http.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18992/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18992/browser-build-manifest.json >/dev/null
+          /tmp/odt-p2-venv/bin/python tests/acceptance/run_odt_p2_real_browser.py \
+            --url http://127.0.0.1:18992/ --evidence-dir /tmp/odt-p2-actual
+      - name: Save factual Ubuntu Chromium evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: odt-p1-p2-actual-browser
+          path: /tmp/odt-p2-actual/
+          if-no-files-found: ignore
