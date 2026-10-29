@@ -172,4 +172,4 @@ for(const path of ["enterprise-import/src/nessus-report-replay.ts",
  }
 }
 eq(JSON.stringify(builder),before);
-console.log("PASS NESSUS XML P5 "+checks+" source-bound exact sidecar replay, duplicate JSON keys, 256 hosts, no Engine");
+console.log("PASS NESSUS P6 "+checks+" source-bound exact sidecar replay, duplicate JSON keys, 256 hosts, no Engine");
