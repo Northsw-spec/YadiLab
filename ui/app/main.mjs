@@ -52,6 +52,8 @@ import { AnsibleYamlSavedReferenceReplayPanel } from "./ansible-yaml-reference-r
 import { reviewAnsibleYamlOriginalFileAssociations } from "../src/browser/ansible-yaml-association-file.js";
 import { AnsibleInventoryPanel } from "./ansible-inventory-panel.mjs";
 import { previewAnsibleIniFileReadOnly } from "../src/browser/ansible-ini-file-preview.js";
+import { replayAnsibleIniSavedReportFiles } from "../src/browser/ansible-ini-report-replay-file.js";
+import { AnsibleIniSavedReferenceReplayPanel } from "./ansible-ini-reference-replay-panel.mjs";
 import { reviewAnsibleIniOriginalFileAssociations } from "../src/browser/ansible-ini-association-file.js";
 import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
 import { previewDocxFileStructure, reviewDocxFileCell } from "../src/browser/docx-file-structural-preview.js";
@@ -3135,7 +3137,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   );
 }
 
-function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, onInspectNmap, onInspectNessus, onInspectDrawio, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, onInspectNmap, onInspectNessus, onInspectDrawio, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   const networkPickerRef = useRef(null);
   // Opening the native picker happens synchronously within the user's click,
@@ -3199,6 +3201,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, o
         e("button", { type: "button", "data-inspect-ansible": "CONFIG_DOCUMENTED", onClick: onInspectAnsible }, "Inspect Ansible YAML (read-only inventory)"),
         e("button", { type: "button", "data-inspect-ansible-yaml-replay": "CONFIG_DOCUMENTED", onClick: onInspectAnsibleYamlReplay }, "Inspect saved Ansible YAML references (read-only replay)"),
         e("button", { type: "button", "data-inspect-ansible-ini": "CONFIG_DOCUMENTED", onClick: onInspectAnsibleIni }, "Inspect Ansible INI (read-only inventory)"),
+        e("button", { type: "button", "data-inspect-ansible-ini-replay": "CONFIG_DOCUMENTED", onClick: onInspectAnsibleIniReplay }, "Inspect saved Ansible INI references (read-only replay)"),
         e("button", { type: "button", "data-inspect-docx": "CONFIG_DOCUMENTED", onClick: onInspectDocx }, "Inspect Word DOCX (structure only)"),
         e("button", { type: "button", "data-inspect-docx-replay": "CONFIG_DOCUMENTED", onClick: onInspectDocxReplay }, "Inspect saved DOCX references (read-only)"),
         e("button", { type: "button", "data-inspect-odt": "CONFIG_DOCUMENTED", onClick: onInspectOdt }, "Inspect OpenDocument ODT (structure only)"),
@@ -3368,6 +3371,7 @@ function App() {
   const [ansibleInventoryOpen, setAnsibleInventoryOpen] = useState(false);
   const [ansibleYamlReplayOpen, setAnsibleYamlReplayOpen] = useState(false);
   const [ansibleIniOpen, setAnsibleIniOpen] = useState(false);
+  const [ansibleIniReplayOpen, setAnsibleIniReplayOpen] = useState(false);
   const [docxStructureOpen, setDocxStructureOpen] = useState(false);
   const [docxReplayOpen, setDocxReplayOpen] = useState(false);
   const [odtReplayOpen, setOdtReplayOpen] = useState(false);
@@ -3929,7 +3933,7 @@ function App() {
     e("header", { className: "app-header" },
       e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
       e(MainActions, { onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectNessus: () => setNessusSeverityOpen(true),
-        onInspectDrawio: () => setDrawioStructureOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
+        onInspectDrawio: () => setDrawioStructureOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectAnsibleIniReplay: () => setAnsibleIniReplayOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
     selectedGuidedLab ? e("section", { className: "curriculum-strip", "data-curriculum-wave": "guided_troubleshooting_wave1" },
@@ -4145,6 +4149,25 @@ function App() {
         });
       },
       onClose: () => setDocxStructureOpen(false),
+    }) : null,
+    ansibleIniReplayOpen ? e(AnsibleIniSavedReferenceReplayPanel, {
+      model: workspace.mode==="builder" ? {
+        scenarioId:workspace.source.scenarioId,
+        sourceRevision:workspace.sourceRevision,
+        resources:workspace.source.resources.map(r=>({id:r.id,label:r.label})),
+      } : null,
+      onReplay: async (original,report,consent,isCurrent) => {
+        const getCurrentModel=()=>{
+          const live=latestDrawioWorkspaceRef.current;
+          return live.mode==="builder" ? {
+            scenarioId:live.source.scenarioId,
+            sourceRevision:live.sourceRevision,
+            resources:live.source.resources.map(r=>({id:r.id,label:r.label})),
+          } : null;
+        };
+        return replayAnsibleIniSavedReportFiles(original,report,getCurrentModel,consent,isCurrent);
+      },
+      onClose:()=>setAnsibleIniReplayOpen(false),
     }) : null,
     ansibleIniOpen ? e(AnsibleIniInventoryPanel, {
       inspectFile: previewAnsibleIniFileReadOnly,
