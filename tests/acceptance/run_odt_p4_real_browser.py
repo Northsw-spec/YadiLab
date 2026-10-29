@@ -84,8 +84,7 @@ def scenario(browser,url,folder):
                     "cellText","Password","ssh_private_key"]:
             require(raw not in content,"Raw ODT cell/source content leaked into JSON: "+raw)
         page.locator('[data-odt-association-exported="true"]').wait_for(timeout=12000)
-        require(export_source(page)==before,
-                "Builder changed after ODT P4 JSON export")
+        # Canonical Builder comparison is performed AFTER closing the ODT modal.
         # Switching the original cell must revoke P3+P4 decisions and hide P4.
         page.locator('[data-odt-select-cell]').select_option("0:1:1")
         require(page.locator('[data-odt-association]').count()==0,
