@@ -55,7 +55,7 @@ export function NessusHostAssociationReview({preview,model,onExport}){
               }},
               e("option",{value:""},"Not associated (default)"),
               ...model.resources.map(item=>e("option",{key:item.id,value:item.id},
-                item.label+" ["+item.id+"]")))))):null,
+                item.label+" ["+item.id+"]"))))))):null,
     preview.hostCount>MAX_VISIBLE?e("p",{"data-nessus-association-limit":"true"},
       "Only the first 20 source positions can be reviewed in this bounded profile. Remaining positions stay unassociated."):null,
     dup?e("p",{role:"alert","data-nessus-association-conflict":"BLOCKED"},
