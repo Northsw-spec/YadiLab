@@ -1,0 +1,89 @@
+name: NESSUS P6 saved sidecar exact original-source and current Builder Chromium
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/nessus-association-review.ts'
+      - 'ui/app/nessus-association-review.mjs'
+      - 'ui/app/nessus-severity-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_nessus_p3_reviewed_references_tests.mjs'
+      - 'tests/browser/run_nessus_p4_bounded_host_pagination_tests.mjs'
+      - 'tests/acceptance/run_nessus_p4_real_browser.py'
+      - 'tests/acceptance/run_nessus_p5_real_browser.py'
+      - 'tests/browser/run_nessus_p5_live_builder_export_tests.mjs'
+      - 'ui/src/browser/nessus-association-file.ts'
+      - 'enterprise-import/src/nessus-report-replay.ts'
+      - 'ui/src/browser/nessus-report-replay-file.ts'
+      - 'ui/app/nessus-reference-replay-panel.mjs'
+      - 'tests/browser/run_nessus_p6_saved_replay_tests.mjs'
+      - 'tests/acceptance/run_nessus_p6_real_browser.py'
+      - 'docs/architecture/NESSUS_P6_SAVED_REFERENCE_REPLAY_ORACLES.md'
+      - 'docs/architecture/NESSUS_P4_BOUNDED_REPORT_HOST_PAGINATION_ORACLES.md'
+      - '.github/workflows/nessus-p6-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nessus-replay-real-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Isolated pinned test-only Chromium (no Nessus application installed)
+        run: |
+          python3 -m venv /tmp/nessus-p6-venv
+          /tmp/nessus-p6-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/nessus-p6-venv/bin/python -m playwright install --with-deps chromium
+      - name: Exact source and independent synthetic original-XML security cases
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/browser/run_nessus_p1p2_tests.mjs
+          node tests/browser/run_nessus_p3_reviewed_references_tests.mjs
+          node tests/browser/run_nessus_p4_bounded_host_pagination_tests.mjs
+          node tests/browser/run_nessus_p5_live_builder_export_tests.mjs
+          node tests/browser/run_nessus_p6_saved_replay_tests.mjs
+          node tests/browser/run_nmap_xml_p5_saved_replay_tests.mjs
+          node tests/browser/run_ansible_ini_p6_host_pagination_tests.mjs
+          node tests/browser/run_ansible_yaml_p6_host_pagination_tests.mjs
+          node tests/browser/run_nmap_xml_observation_ui_tests.mjs
+          node tests/browser/run_odt_p6_report_replay_tests.mjs
+          node tests/browser/run_docx_p6_report_replay_tests.mjs
+      - name: Build and attest exact compiled YadiLab
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real compiled Chromium Nessus P2 P3 P4 and Nmap evidence
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18996 --bind 127.0.0.1 --directory ui/dist >/tmp/nessus-p4-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18996/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18996/browser-build-manifest.json >/dev/null
+          /tmp/nessus-p6-venv/bin/python tests/acceptance/run_nessus_p2_real_browser.py --url http://127.0.0.1:18996/ --evidence-dir /tmp/nessus-p6-evidence/p2
+          /tmp/nessus-p6-venv/bin/python tests/acceptance/run_nessus_p3_real_browser.py --url http://127.0.0.1:18996/ --evidence-dir /tmp/nessus-p6-evidence/p3
+          /tmp/nessus-p6-venv/bin/python tests/acceptance/run_nessus_p4_real_browser.py --url http://127.0.0.1:18996/ --evidence-dir /tmp/nessus-p6-evidence/p4
+          /tmp/nessus-p6-venv/bin/python tests/acceptance/run_nessus_p5_real_browser.py --url http://127.0.0.1:18996/ --evidence-dir /tmp/nessus-p6-evidence/p5
+          /tmp/nessus-p6-venv/bin/python tests/acceptance/run_nessus_p6_real_browser.py --url http://127.0.0.1:18996/ --evidence-dir /tmp/nessus-p6-evidence/p6
+          /tmp/nessus-p6-venv/bin/python tests/acceptance/run_nmap_xml_p2_real_browser.py --url http://127.0.0.1:18996/ --evidence-dir /tmp/nessus-p6-evidence/nmap
+      - name: Preserve real Chromium evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nessus-p6-original-source-current-builder-chromium
+          path: /tmp/nessus-p6-evidence/
+          if-no-files-found: ignore
