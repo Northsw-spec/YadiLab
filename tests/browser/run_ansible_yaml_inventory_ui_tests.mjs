@@ -93,9 +93,9 @@ const assocCode=fs.readFileSync("ui/app/ansible-association-review.mjs","utf8");
 eq(/\bsetWorkspace\s*\(|dangerouslySetInnerHTML|\bonActivate\s*[:=]/.test(assocCode),
  false,"No workspace mutation nor injected HTML in review");
 const source=fs.readFileSync("ui/app/main.mjs","utf8");
-for(const re of [/reviewAnsibleInventoryAssociations\(inventoryPreview, currentModel, decision\)/,
+for(const re of [/reviewAnsibleYamlOriginalFileAssociations\(/,
  /downloadJson\(\{[\s\S]*?filename: `ansible-inventory-associations-/,
- /onExportAssociation: async \(inventoryPreview, decision\)/,
+ /onExportAssociation: async \(originalFile,inventoryPreview,decision,isCurrent\)/,
  /sourceRevision: workspace\.sourceRevision/]) {
  assert.match(source,re);checks++;
 }
