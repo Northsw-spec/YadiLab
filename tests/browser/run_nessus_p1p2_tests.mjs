@@ -69,7 +69,7 @@ await block(enc('<?xml version="1.0"?><?xml-stylesheet href="https://attacker.ex
 await block(new Uint8Array([0xff,0xfe,0xfd]),"IMPORT_XML_INVALID_UTF8");
 await block(new Uint8Array(2*1024*1024+1),"NESSUS_XML_SOURCE_SIZE_INVALID");
 await block(enc(report('<ReportHost name="x"/>' .repeat(257))),"NESSUS_XML_HOST_BUDGET");
-await block(enc(report('<ReportHost name="x">'+item(0).repeat(10001)+'</ReportHost>')),"NESSUS_XML_FINDING_BUDGET");
+await block(enc(report('<ReportHost name="x">'+'<ReportItem severity="0" pluginID="1" port="0" protocol="tcp"/>'.repeat(10001)+'</ReportHost>')),"NESSUS_XML_FINDING_BUDGET");
 for(const name of ["evil.xml","../valid.nessus","a.nessus/../b.nessus","valid.nessus\\bad"]){
  await fileBlock(name,raw,"NESSUS_FILE_EXTENSION_INVALID");
 }
