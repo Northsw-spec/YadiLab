@@ -1,6 +1,6 @@
 import { previewNessusFileReadOnly, type NessusReadableFile } from "./nessus-v2-file-preview.js";
 import { replayNessusSavedReferences, type NessusReplayMatch } from "../../../enterprise-import/src/nessus-report-replay.js";
-import type { NessusModelSnapshot } from "../../../enterprise-import/src/nessus-association-review.js";
+import type { NessusBuilderSnapshot } from "../../../enterprise-import/src/nessus-association-review.js";
 import { EnterpriseImportError } from "../../../enterprise-import/src/types.js";
 
 export interface NessusReplayReadableFile extends NessusReadableFile {}
@@ -24,7 +24,7 @@ async function read(file:NessusReplayReadableFile,extension:"nessus"|"json",limi
 /** Read both explicit source files and use live Builder checks around each await. */
 export async function replayNessusSavedReportFiles(
   original:NessusReplayReadableFile,report:NessusReplayReadableFile,
-  getModel:()=>NessusModelSnapshot|null,
+  getModel:()=>NessusBuilderSnapshot|null,
   consent:boolean,isCurrent:()=>boolean,
 ):Promise<NessusReplayMatch>{
   if(consent!==true)return deny("NESSUS_REPLAY_CONSENT_REQUIRED");
