@@ -41,6 +41,7 @@ import { NmapObservationPanel } from "./nmap-observation-panel.mjs";
 import { NessusSeverityPanel } from "./nessus-severity-panel.mjs";
 import { DrawioStructurePanel } from "./drawio-structure-panel.mjs";
 import { previewDrawioFileReadOnly } from "../src/browser/drawio-file-preview.js";
+import { reviewDrawioOriginalFileReferences } from "../src/browser/drawio-association-file.js";
 import { previewNessusFileReadOnly } from "../src/browser/nessus-v2-file-preview.js";
 import { reviewNessusOriginalFileAssociations } from "../src/browser/nessus-association-file.js";
 import { previewAnsibleYamlFileReadOnly } from "../src/browser/ansible-yaml-file-preview.js";
@@ -3346,6 +3347,8 @@ function App() {
     return () => markApplicationStopped(document);
   }, []);
   const [workspace, setWorkspace] = useState(() => createBuilderWorkspace(welcomeScenario));
+  const latestDrawioWorkspaceRef = useRef(workspace);
+  latestDrawioWorkspaceRef.current = workspace;
   const [importWorkbench, setImportWorkbench] = useState(() => emptyImportWorkbench());
   const [networkImportOpen, setNetworkImportOpen] = useState(false);
   const [networkImportSelection, setNetworkImportSelection] = useState(null);
@@ -4137,6 +4140,35 @@ function App() {
     }) : null,
     drawioStructureOpen ? e(DrawioStructurePanel, {
       inspectFile: previewDrawioFileReadOnly,
+      model: workspace.mode === "builder" ? {
+        scenarioId:workspace.source.scenarioId,
+        sourceRevision:workspace.sourceRevision,
+        resources:workspace.source.resources.map(r=>({id:r.id,label:r.label})),
+      } : null,
+      onExportReviewed: async (originalFile,preview,decision,isCurrent) => {
+        const currentModel=()=>{
+          const current=latestDrawioWorkspaceRef.current;
+          return current.mode==="builder" ? {
+            scenarioId:current.source.scenarioId,
+            sourceRevision:current.sourceRevision,
+            resources:current.source.resources.map(r=>({id:r.id,label:r.label})),
+          } : null;
+        };
+        const sidecar=await reviewDrawioOriginalFileReferences(
+          originalFile,preview,currentModel,decision,isCurrent);
+        if(!isCurrent()||!currentModel()||
+           currentModel().scenarioId!==sidecar.targetModel.scenarioId||
+           currentModel().sourceRevision!==sidecar.targetModel.sourceRevision){
+          const error=new Error("DRAWIO_ASSOC_STALE");
+          error.code="DRAWIO_ASSOC_STALE";throw error;
+        }
+        // Separate metadata-only download: never set workspace or call Engine.
+        downloadJson({
+          filename:"drawio-reviewed-vertices-"+sidecar.source.sha256.slice(0,12)+".json",
+          mime:"application/json",
+          text:JSON.stringify(sidecar,null,2),
+        });
+      },
       onClose: () => setDrawioStructureOpen(false),
     }) : null,
     nessusSeverityOpen ? e(NessusSeverityPanel, {
