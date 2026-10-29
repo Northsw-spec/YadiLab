@@ -60,9 +60,12 @@ eq(sidecar.associations.some(x=>Object.hasOwn(x,"edge")),false);
 eq(Object.hasOwn(sidecar,"connections"),false);
 eq(JSON.stringify(sidecar).includes(secret),false);
 for(const secretValue of [secret,"203.0.113.16","SECRET_PAGE1","SECRET_PAGE2","physical_NO",
- "s1","s2","s3","mxCell","sourceId","targetId","credential"]){
+ "s1","s2","s3","mxCell","credential"]){
  if(secretValue==="s1"||secretValue==="s2"||secretValue==="s3")continue;
  eq(JSON.stringify(sidecar).includes(secretValue),false,"source data leak");
+}
+for(const forbiddenKey of ['"sourceId":','"targetId":','"nodeId":','"diagramId":','"edgeId":']){
+ eq(JSON.stringify(sidecar).includes(forbiddenKey),false,"No source key "+forbiddenKey);
 }
 eq(JSON.stringify(builder),before);
 eq(JSON.stringify(preview),original);
