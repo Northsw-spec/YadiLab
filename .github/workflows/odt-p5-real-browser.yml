@@ -1,0 +1,79 @@
+name: ODT P5 bounded reviewed multi-reference exact-head real Chromium acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'enterprise-import/src/odt-multi-reference-review.ts'
+      - 'ui/app/odt-multi-reference-queue.mjs'
+      - 'ui/app/odt-reviewed-cell-association.mjs'
+      - 'ui/app/odt-cell-disclosure-review.mjs'
+      - 'ui/app/odt-structure-panel.mjs'
+      - 'ui/app/main.mjs'
+      - 'tests/browser/run_odt_p5_multi_reference_tests.mjs'
+      - 'tests/acceptance/run_odt_p5_real_browser.py'
+      - 'docs/architecture/ODT_P5_BOUNDED_MULTI_REFERENCE_ORACLES.md'
+      - '.github/workflows/odt-p5-real-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  odt-multi-real-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Isolated pinned test Chromium
+        run: |
+          python3 -m venv /tmp/odt-p5-venv
+          /tmp/odt-p5-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/odt-p5-venv/bin/python -m playwright install --with-deps chromium
+      - name: Strict TS, independently frozen ODT P1-P5 source ZIP/secret/batch and SSR negatives
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          tsc -p tests/tsconfig.enterprise-import.json
+          tsc -p tests/tsconfig.browser.json
+          node tests/enterprise-import/run_odt_tables_p1_tests.mjs
+          node tests/browser/run_odt_structure_ui_tests.mjs
+          node tests/browser/run_odt_p3_cell_review_tests.mjs
+          node tests/browser/run_odt_p4_association_tests.mjs
+          node tests/browser/run_odt_p5_multi_reference_tests.mjs
+          node tests/enterprise-import/run_docx_tables_p1_tests.mjs
+          node tests/browser/run_docx_structure_ui_tests.mjs
+      - name: Build and attest exact clean browser
+        run: |
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Real compiled Chromium ODT P2-P5 with two consented ODT cells and JSON download
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18995 --bind 127.0.0.1 --directory ui/dist >/tmp/odt-p5-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for n in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18995/browser-build-manifest.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18995/browser-build-manifest.json >/dev/null
+          /tmp/odt-p5-venv/bin/python tests/acceptance/run_odt_p2_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/odt-p5-actual/p2
+          /tmp/odt-p5-venv/bin/python tests/acceptance/run_odt_p3_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/odt-p5-actual/p3
+          /tmp/odt-p5-venv/bin/python tests/acceptance/run_odt_p4_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/odt-p5-actual/p4
+          /tmp/odt-p5-venv/bin/python tests/acceptance/run_odt_p5_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/odt-p5-actual/p5
+      - name: Preserve actual Chromium evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: odt-p5-actual-chromium-evidence
+          path: /tmp/odt-p5-actual/
+          if-no-files-found: ignore

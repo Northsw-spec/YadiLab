@@ -51,6 +51,7 @@ import { DocxReferenceReplayPanel } from "./docx-reference-replay-panel.mjs";
 import { reviewAnsibleIniInventoryAssociations } from "../../enterprise-import/src/ansible-ini-association-review.js";
 import { reviewDocxCellAssociation } from "../../enterprise-import/src/docx-association-review.js";
 import { reviewOdtCellAssociation } from "../../enterprise-import/src/odt-association-review.js";
+import { reviewOdtMultiReferences } from "../../enterprise-import/src/odt-multi-reference-review.js";
 import { reviewDocxMultiReferences } from "../../enterprise-import/src/docx-multi-reference-review.js";
 import { reviewAnsibleInventoryAssociations } from "../../enterprise-import/src/ansible-association-review.js";
 import { reviewNmapObservationAssociations } from "../../enterprise-import/src/nmap-association-review.js";
@@ -3943,6 +3944,38 @@ function App() {
     odtStructureOpen ? e(OdtStructurePanel, {
       inspectFile: previewOdtFileStructure,
       reviewFile: reviewOdtFileCell,
+      onBuildAssociation:(reviewedCell,decision)=>{
+        const currentModel=workspace.mode==="builder"?{
+          scenarioId:workspace.source.scenarioId,
+          sourceRevision:workspace.sourceRevision,
+          resources:workspace.source.resources.map(r=>({id:r.id,label:r.label})),
+        }:null;
+        const reviewed=reviewOdtCellAssociation(reviewedCell,currentModel,decision);
+        if(reviewed.status!=="READY_FOR_EXPORT"||!reviewed.sidecar){
+          const err=new Error("ODT_MULTI_ASSOC_BLOCKED");
+          err.code=reviewed.diagnostics[0]?.code??"ODT_MULTI_ASSOC_BLOCKED";
+          throw err;
+        }
+        return reviewed.sidecar;
+      },
+      onExportMulti:(staged,decision)=>{
+        const currentModel=workspace.mode==="builder"?{
+          scenarioId:workspace.source.scenarioId,
+          sourceRevision:workspace.sourceRevision,
+          resources:workspace.source.resources.map(r=>({id:r.id,label:r.label})),
+        }:null;
+        const reviewed=reviewOdtMultiReferences(staged,currentModel,decision);
+        if(reviewed.status!=="READY_FOR_EXPORT"||!reviewed.sidecar){
+          const err=new Error("ODT_MULTI_EXPORT_BLOCKED");
+          err.code=reviewed.diagnostics[0]?.code??"ODT_MULTI_EXPORT_BLOCKED";
+          throw err;
+        }
+        downloadJson({
+          filename:"odt-reviewed-multi-"+reviewed.sidecar.source.sha256.slice(0,12)+".json",
+          mime:"application/json",
+          text:JSON.stringify(reviewed.sidecar,null,2),
+        });
+      },
       model: workspace.mode === "builder" ? {
         scenarioId:workspace.source.scenarioId,
         sourceRevision:workspace.sourceRevision,

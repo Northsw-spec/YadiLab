@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { OdtCellDisclosureReview } from "./odt-cell-disclosure-review.mjs";
+import { OdtMultiReferenceQueue } from "./odt-multi-reference-queue.mjs";
 const e=React.createElement;
 const MAX_VISIBLE_TABLES=20,MAX_VISIBLE_ROWS=30,MAX_VISIBLE_CELLS=16;
 
@@ -42,9 +43,10 @@ export function OdtStructureDetails({ result }) {
       "Read-only source inspection. Complex ODT tables may be rejected. No network mapping, import, or simulation activation."));
 }
 
-export function OdtStructurePanel({ inspectFile,reviewFile,model=null,onExportAssociation,onClose }) {
+export function OdtStructurePanel({ inspectFile,reviewFile,model=null,onExportAssociation,onBuildAssociation,onExportMulti,onClose }) {
   const [result,setResult]=useState(null),[error,setError]=useState(""),
         [busy,setBusy]=useState(false);
+  const [multiItems,setMultiItems]=useState([]);
   const generation=useRef(0),focus=useRef(null),localFile=useRef(null);
   useEffect(()=>{focus.current?.focus();return()=>{generation.current++;};},[]);
   useEffect(()=>{
@@ -58,6 +60,7 @@ export function OdtStructurePanel({ inspectFile,reviewFile,model=null,onExportAs
     if(!file)return;
     const current=++generation.current;
     localFile.current=file;
+    setMultiItems([]);
     setResult(null);setError("");setBusy(true);
     try{
       const next=await inspectFile(file);
@@ -73,6 +76,75 @@ export function OdtStructurePanel({ inspectFile,reviewFile,model=null,onExportAs
     }finally{
       if(current===generation.current)setBusy(false);
     }
+  };
+  const validateCurrentCell=async(disclosed,decision)=>{
+    const epoch=generation.current,source=localFile.current;
+    if(!source||!result||typeof reviewFile!=="function"||
+        typeof onBuildAssociation!=="function"){
+      throw Object.assign(new Error("ODT_MULTI_UNAVAILABLE"),{code:"ODT_MULTI_UNAVAILABLE"});
+    }
+    const fresh=await reviewFile(source,result.preview.sourceSha256,disclosed.locator,true);
+    if(epoch!==generation.current||source!==localFile.current||
+       fresh.sourceSha256!==disclosed.sourceSha256||
+       fresh.text!==disclosed.text||
+       JSON.stringify(fresh.locator)!==JSON.stringify(disclosed.locator)){
+      throw Object.assign(new Error("ODT_MULTI_STALE_SOURCE"),{code:"ODT_MULTI_STALE_SOURCE"});
+    }
+    return onBuildAssociation(fresh,decision);
+  };
+  const stageReference=async(disclosed,decision)=>{
+    if(!result||!model||result.preview.sourceSha256!==disclosed.sourceSha256){
+      throw Object.assign(new Error("ODT_MULTI_STALE"),{code:"ODT_MULTI_STALE"});
+    }
+    if(multiItems.length>=10)throw Object.assign(new Error("ODT_MULTI_COUNT_INVALID"),{code:"ODT_MULTI_COUNT_INVALID"});
+    const item=await validateCurrentCell(disclosed,decision);
+    const loc=item?.source?.cellLocator;
+    if(!loc||item.source.sha256!==result.preview.sourceSha256){
+      throw Object.assign(new Error("ODT_MULTI_REFERENCE_INVALID"),{code:"ODT_MULTI_REFERENCE_INVALID"});
+    }
+    const key=[loc.tableOrdinal,loc.rowOrdinal,loc.cellOrdinal].join(":");
+    if(multiItems.some(existing=>{
+      const a=existing.source.cellLocator;
+      return [a.tableOrdinal,a.rowOrdinal,a.cellOrdinal].join(":")===key||
+          existing.association.targetResourceId===item.association.targetResourceId;
+    }))throw Object.assign(new Error("ODT_MULTI_DUPLICATE_REFERENCE"),{code:"ODT_MULTI_DUPLICATE_REFERENCE"});
+    // Only P4 metadata, never the disclosed raw ODT cell text, is persisted in React state.
+    setMultiItems(previous=>[...previous,item]);
+  };
+  const exportMulti=async()=>{
+    if(!result||!localFile.current||!model||multiItems.length<2||
+      typeof reviewFile!=="function"||typeof onBuildAssociation!=="function"||
+      typeof onExportMulti!=="function"){
+      throw Object.assign(new Error("ODT_MULTI_UNAVAILABLE"),{code:"ODT_MULTI_UNAVAILABLE"});
+    }
+    const epoch=generation.current,source=localFile.current;
+    const checked=[];
+    for(const item of multiItems){
+      const loc=item.source.cellLocator;
+      const fresh=await reviewFile(source,result.preview.sourceSha256,loc,true);
+      if(epoch!==generation.current||source!==localFile.current||
+         fresh.sourceSha256!==item.source.sha256||
+         JSON.stringify(fresh.locator)!==JSON.stringify(loc)){
+        throw Object.assign(new Error("ODT_MULTI_STALE_SOURCE"),{code:"ODT_MULTI_STALE_SOURCE"});
+      }
+      const verified=await onBuildAssociation(fresh,{
+        sourceSha256:item.source.sha256,scenarioId:item.targetModel.scenarioId,
+        sourceRevision:item.targetModel.sourceRevision,
+        targetResourceId:item.association.targetResourceId,acknowledgeNotVerified:true,
+      });
+      if(JSON.stringify(verified)!==JSON.stringify(item)){
+        throw Object.assign(new Error("ODT_MULTI_STALE"),{code:"ODT_MULTI_STALE"});
+      }
+      checked.push(verified);
+    }
+    if(epoch!==generation.current||source!==localFile.current){
+      throw Object.assign(new Error("ODT_MULTI_STALE_SOURCE"),{code:"ODT_MULTI_STALE_SOURCE"});
+    }
+    return onExportMulti(checked,{
+      sourceSha256:result.preview.sourceSha256,
+      scenarioId:model.scenarioId,sourceRevision:model.sourceRevision,
+      acknowledgeNotVerified:true,
+    });
   };
   return e("div",{className:"network-import-overlay","data-odt-overlay":"true"},
     e("section",{className:"network-import-panel",role:"dialog","aria-modal":"true",
@@ -99,6 +171,7 @@ export function OdtStructurePanel({ inspectFile,reviewFile,model=null,onExportAs
       result && typeof reviewFile==="function" ? e(OdtCellDisclosureReview,{
         key:result.sourceEpoch,
         preview:result.preview,model,
+        onStageAssociation:stageReference,
         onExportAssociation:async(disclosed,decision)=>{
           const current=generation.current,source=localFile.current;
           if(!source || !result || typeof reviewFile!=="function" ||
@@ -129,6 +202,14 @@ export function OdtStructurePanel({ inspectFile,reviewFile,model=null,onExportAs
           return value;
         },
       }) : null,
+      result&&model&&typeof onExportMulti==="function"?e(OdtMultiReferenceQueue,{
+        key:result.sourceEpoch+":"+multiItems.map(i=>
+          [i.source.cellLocator.tableOrdinal,i.source.cellLocator.rowOrdinal,
+           i.source.cellLocator.cellOrdinal,i.association.targetResourceId].join(":")).join("|"),
+        items:multiItems,model,busy,
+        onRemove:index=>setMultiItems(prev=>prev.filter((_,i)=>i!==index)),
+        onExport:exportMulti,
+      }):null,
       e("div",{className:"network-import-actions"},
         e("button",{type:"button",disabled:busy,"data-odt-close":"true",
           onClick:()=>{generation.current++;localFile.current=null;onClose();}},"Close without changes"))));
