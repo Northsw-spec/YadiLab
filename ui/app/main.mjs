@@ -52,6 +52,7 @@ import { AnsibleYamlSavedReferenceReplayPanel } from "./ansible-yaml-reference-r
 import { reviewAnsibleYamlOriginalFileAssociations } from "../src/browser/ansible-yaml-association-file.js";
 import { AnsibleInventoryPanel } from "./ansible-inventory-panel.mjs";
 import { previewAnsibleIniFileReadOnly } from "../src/browser/ansible-ini-file-preview.js";
+import { reviewAnsibleIniOriginalFileAssociations } from "../src/browser/ansible-ini-association-file.js";
 import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
 import { previewDocxFileStructure, reviewDocxFileCell } from "../src/browser/docx-file-structural-preview.js";
 import { DocxTableStructurePanel } from "./docx-structure-panel.mjs";
@@ -4152,22 +4153,26 @@ function App() {
         sourceRevision: workspace.sourceRevision,
         resources: workspace.source.resources.map(resource => ({ id: resource.id, label: resource.label })),
       } : null,
-      onExportAssociation: async (inventoryPreview, decision) => {
-        // Revalidate against CURRENT Builder state at click time, not captured UI choices.
-        const currentModel = workspace.mode === "builder" ? {
-          scenarioId: workspace.source.scenarioId,
-          sourceRevision: workspace.sourceRevision,
-          resources: workspace.source.resources.map(resource => ({ id: resource.id, label: resource.label })),
-        } : null;
-        const reviewed = reviewAnsibleIniInventoryAssociations(inventoryPreview, currentModel, decision);
-        if (reviewed.status !== "READY_FOR_EXPORT" || !reviewed.sidecar) {
-          throw new Error(`Ansible INI association blocked: ${reviewed.diagnostics.map(d => d.code).join(", ")}`);
+      onExportAssociation: async (originalFile,inventoryPreview,decision,isCurrent) => {
+        const currentModel=()=>{
+          const live=latestDrawioWorkspaceRef.current;
+          return live.mode==="builder"?{
+            scenarioId:live.source.scenarioId,
+            sourceRevision:live.sourceRevision,
+            resources:live.source.resources.map(resource=>({id:resource.id,label:resource.label})),
+          }:null;
+        };
+        const sidecar=await reviewAnsibleIniOriginalFileAssociations(
+          originalFile,inventoryPreview,currentModel,decision,isCurrent);
+        if(!isCurrent()){
+          const error=new Error("ANSIBLE_INI_P4_STALE");
+          error.code="ANSIBLE_INI_P4_STALE";throw error;
         }
-        // Sidecar download only: NEVER ScenarioSource, Engine, or modeled connections.
+        // Source-bound unverified metadata only; NEVER mutate Builder or Engine.
         downloadJson({
-          filename: `ansible-ini-inventory-associations-${inventoryPreview.sourceSha256.slice(0, 12)}.json`,
+          filename: `ansible-ini-inventory-associations-${sidecar.source.sha256.slice(0, 12)}.json`,
           mime: "application/json",
-          text: JSON.stringify(reviewed.sidecar, null, 2),
+          text: JSON.stringify(sidecar, null, 2),
         });
       },
       onClose: () => setAnsibleIniOpen(false),
