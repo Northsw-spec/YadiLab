@@ -1,7 +1,7 @@
 import type { AnsibleStaticInventoryPreview, AnsibleInventoryLocator } from "./ansible-yaml-preview.js";
 
 export const ANSIBLE_ASSOCIATION_FORMAT = "yadilab.ansible-inventory-associations" as const;
-const MAX_UI_HOSTS = 80;
+const MAX_REVIEWED_ASSOCIATIONS = 80;
 const ID = /^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}$/;
 const HEX = /^[0-9a-f]{64}$/;
 
@@ -86,8 +86,8 @@ export function reviewAnsibleInventoryAssociations(
     return blocked("ANSIBLE_ASSOC_ACK_REQUIRED", "Acknowledge that inventory entries are not verified asset identities.");
   }
   if (!Array.isArray(decision.associations) || !decision.associations.length ||
-      decision.associations.length > Math.min(preview.hosts.length, MAX_UI_HOSTS)) {
-    return blocked("ANSIBLE_ASSOC_SELECTION_INVALID", "Select a visible inventory host and existing modeled resource.");
+      decision.associations.length > Math.min(preview.hosts.length, MAX_REVIEWED_ASSOCIATIONS)) {
+    return blocked("ANSIBLE_ASSOC_SELECTION_INVALID", "Select 1–80 declared inventory hosts and existing modeled resources.");
   }
   const resourceIds = new Set<string>();
   for (const resource of model.resources) {
@@ -102,10 +102,10 @@ export function reviewAnsibleInventoryAssociations(
   const associations: AnsibleReviewedAssociation[] = [];
   for (const selected of decision.associations) {
     if (!selected || !Number.isSafeInteger(selected.hostOrdinal) || selected.hostOrdinal < 0 ||
-        selected.hostOrdinal >= preview.hosts.length || selected.hostOrdinal >= MAX_UI_HOSTS ||
+        selected.hostOrdinal >= preview.hosts.length ||
         !resourceIds.has(selected.resourceId) ||
         hostOrdinals.has(selected.hostOrdinal) || chosenTargets.has(selected.resourceId)) {
-      return blocked("ANSIBLE_ASSOC_SELECTION_INVALID", "Selected hosts and known target resources must be distinct and visible.");
+      return blocked("ANSIBLE_ASSOC_SELECTION_INVALID", "Selected declared source hosts and known modeled targets must be distinct.");
     }
     const host = preview.hosts[selected.hostOrdinal]!;
     if (!host || !validId(host.inventoryName) ||
