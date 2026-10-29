@@ -90,7 +90,7 @@ export function reviewNessusHostReferences(
   const ordinals=new Set<number>(),targets=new Set<string>(),associations:NessusHostReference[]=[];
   for(const ref of decision.references){
     if(!ref||!rev(ref.hostOrdinal)||
-       ref.hostOrdinal>=Math.min(preview.hostCount,MAX_NESSUS_REVIEWED_HOSTS)||
+       ref.hostOrdinal>=preview.hostCount||
        !safeId(ref.targetResourceId)||!ids.has(ref.targetResourceId)||
        ordinals.has(ref.hostOrdinal)||targets.has(ref.targetResourceId)){
       return blocked("NESSUS_ASSOC_SELECTION_INVALID");
