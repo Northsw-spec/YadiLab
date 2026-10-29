@@ -37,12 +37,8 @@ export async function reviewAnsibleYamlOriginalFileAssociations(
     deny("ANSIBLE_YAML_ASSOC_BUILDER_REQUIRED");
   const before=getCurrentModel();
   if(!before)deny("ANSIBLE_YAML_ASSOC_BUILDER_REQUIRED");
-  let parsed:AnsibleStaticInventoryPreview;
-  try{
-    parsed=(await previewAnsibleYamlFileReadOnly(originalFile)).preview;
-  }catch{
-    deny("ANSIBLE_YAML_ASSOC_SOURCE_BLOCKED");
-  }
+  const parsed=(await previewAnsibleYamlFileReadOnly(originalFile).catch(
+    ()=>deny("ANSIBLE_YAML_ASSOC_SOURCE_BLOCKED"))).preview;
   if(!isCurrent())deny("ANSIBLE_YAML_ASSOC_STALE");
   if(parsed.sourceSha256!==expected.sourceSha256||
      JSON.stringify(parsed)!==JSON.stringify(expected)){
@@ -53,10 +49,11 @@ export async function reviewAnsibleYamlOriginalFileAssociations(
     deny("ANSIBLE_YAML_ASSOC_STALE");
   const reviewed=reviewAnsibleInventoryAssociations(parsed,after,decision);
   if(reviewed.status!=="READY_FOR_EXPORT"||!reviewed.sidecar)
-    deny(reviewed.diagnostics[0]?.code??"ANSIBLE_YAML_ASSOC_BLOCKED");
+    return deny(reviewed.diagnostics[0]?.code??"ANSIBLE_YAML_ASSOC_BLOCKED");
+  const sidecar=reviewed.sidecar;
   if(!isCurrent())deny("ANSIBLE_YAML_ASSOC_STALE");
   const final=getCurrentModel();
   if(!final||JSON.stringify(after)!==JSON.stringify(final))
     deny("ANSIBLE_YAML_ASSOC_STALE");
-  return reviewed.sidecar;
+  return sidecar;
 }
