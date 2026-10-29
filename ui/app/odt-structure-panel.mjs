@@ -42,7 +42,7 @@ export function OdtStructureDetails({ result }) {
       "Read-only source inspection. Complex ODT tables may be rejected. No network mapping, import, or simulation activation."));
 }
 
-export function OdtStructurePanel({ inspectFile,reviewFile,onClose }) {
+export function OdtStructurePanel({ inspectFile,reviewFile,model=null,onExportAssociation,onClose }) {
   const [result,setResult]=useState(null),[error,setError]=useState(""),
         [busy,setBusy]=useState(false);
   const generation=useRef(0),focus=useRef(null),localFile=useRef(null);
@@ -98,7 +98,26 @@ export function OdtStructurePanel({ inspectFile,reviewFile,onClose }) {
       e(OdtStructureDetails,{result}),
       result && typeof reviewFile==="function" ? e(OdtCellDisclosureReview,{
         key:result.sourceEpoch,
-        preview:result.preview,
+        preview:result.preview,model,
+        onExportAssociation:async(disclosed,decision)=>{
+          const current=generation.current,source=localFile.current;
+          if(!source || !result || typeof reviewFile!=="function" ||
+             typeof onExportAssociation!=="function"){
+            throw Object.assign(new Error("ODT_ASSOC_EXPORT_UNAVAILABLE"),
+              {code:"ODT_ASSOC_EXPORT_UNAVAILABLE"});
+          }
+          // Re-read and re-run *all* P3 original ZIP/XML/SHA/secret checks.
+          const fresh=await reviewFile(source,result.preview.sourceSha256,
+            disclosed.locator,true);
+          if(current!==generation.current || source!==localFile.current ||
+             fresh.sourceSha256!==disclosed.sourceSha256 ||
+             fresh.text!==disclosed.text ||
+             JSON.stringify(fresh.locator)!==JSON.stringify(disclosed.locator)){
+            throw Object.assign(new Error("ODT_ASSOC_STALE_SOURCE"),
+              {code:"ODT_ASSOC_STALE_SOURCE"});
+          }
+          return onExportAssociation(fresh,decision);
+        },
         onRevealCell:async(locator,acknowledged)=>{
           const epoch=generation.current,source=localFile.current;
           if(!source)throw Object.assign(new Error("ODT_CELL_SOURCE_UNAVAILABLE"),
