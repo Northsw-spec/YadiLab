@@ -64,14 +64,15 @@ await rejected(enc(file(page("p",model(root+vert("x"))).replace("</diagram>","ba
 await rejected(enc(file(page("p",model(root+vert("x"))+"<mxGraphModel/>"))),"DRAWIO_CARDINALITY_INVALID");
 await rejected(enc(file(page("p",model(root+vert("x"))+"<hacker/>"))),"DRAWIO_UNSUPPORTED_ELEMENT");
 await rejected(enc(file(page("p",model(root+vert("x"))),'<mxlibrary/>')),"DRAWIO_UNSUPPORTED_ELEMENT");
-await rejected(enc(file(page("p",model(root+vert("x")+vert("x"))))),"DRAWIO_DUPLICATE_CELL");
+const diagramCase=(cells)=>enc(file(page("p",model(root+cells))));
+await rejected(diagramCase(vert("x")+vert("x")),"DRAWIO_DUPLICATE_CELL");
 await rejected(enc(file(page("p",model('<mxCell id="1" parent="0"/>'+vert("x"))))),"DRAWIO_MISSING_ROOT_CELLS");
-await rejected(enc(file(page("p",model(root+'<mxCell id="x" vertex="1" parent="group"/>'))),"DRAWIO_PARENT_UNSUPPORTED");
-await rejected(enc(file(page("p",model(root+'<mxCell id="x" edge="1" vertex="1" parent="1"/>'))),"DRAWIO_CELL_TYPE_INVALID");
-await rejected(enc(file(page("p",model(root+vert("a")+edge("e","a","missing")))),"DRAWIO_EDGE_ENDPOINT_INVALID");
-await rejected(enc(file(page("p",model(root+edge("e","a","b")))),"DRAWIO_EDGE_ENDPOINT_INVALID");
-await rejected(enc(file(page("p",model(root+vert("a")+'<UserObject><mxCell id="w" vertex="1" parent="1"/></UserObject>'))),"DRAWIO_UNSUPPORTED_ELEMENT");
-await rejected(enc(file(page("p",model(root+vert("a")+'<mxCell id="b" vertex="1" parent="1"><script>evil</script></mxCell>'))),"DRAWIO_UNSUPPORTED_ELEMENT");
+await rejected(diagramCase('<mxCell id="x" vertex="1" parent="group"/>'),"DRAWIO_PARENT_UNSUPPORTED");
+await rejected(diagramCase('<mxCell id="x" edge="1" vertex="1" parent="1"/>'),"DRAWIO_CELL_TYPE_INVALID");
+await rejected(diagramCase(vert("a")+edge("e","a","missing")),"DRAWIO_EDGE_ENDPOINT_INVALID");
+await rejected(diagramCase(edge("e","a","b")),"DRAWIO_EDGE_ENDPOINT_INVALID");
+await rejected(diagramCase(vert("a")+'<UserObject><mxCell id="w" vertex="1" parent="1"/></UserObject>'),"DRAWIO_UNSUPPORTED_ELEMENT");
+await rejected(diagramCase(vert("a")+'<mxCell id="b" vertex="1" parent="1"><script>evil</script></mxCell>'),"DRAWIO_UNSUPPORTED_ELEMENT");
 await rejected(enc(file(page("p",model(root+vert("a")))).replace("<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
  '<!DOCTYPE mxfile [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>')),"IMPORT_XML_DTD_FORBIDDEN");
 await rejected(enc('<?xml version="1.0"?><?xml-stylesheet href="https://evil.invalid/x"?><mxfile/>'),
@@ -79,8 +80,8 @@ await rejected(enc('<?xml version="1.0"?><?xml-stylesheet href="https://evil.inv
 await rejected(new Uint8Array([0xff,0xfe,0xfd]),"IMPORT_XML_INVALID_UTF8");
 await rejected(new Uint8Array(2*1024*1024+1),"DRAWIO_SOURCE_SIZE_INVALID");
 await rejected(enc(file(...Array.from({length:17},(_,i)=>page("p"+i,model(root+vert("a")))))),"DRAWIO_PAGE_COUNT_INVALID");
-await rejected(enc(file(page("p",model(root+Array.from({length:1001},(_,i)=>vert("v"+i,"")).join(""))))),"DRAWIO_VERTEX_BUDGET");
-await rejected(enc(file(page("p",model(root+vert("v","")+Array.from({length:2001},(_,i)=>edge("e"+i,"v","v")).join(""))))),"DRAWIO_EDGE_BUDGET");
+await rejected(diagramCase(Array.from({length:1001},(_,i)=>vert("v"+i,"")).join("")),"DRAWIO_VERTEX_BUDGET");
+await rejected(diagramCase(vert("v","")+Array.from({length:2001},(_,i)=>edge("e"+i,"v","v")).join("")),"DRAWIO_EDGE_BUDGET");
 for(const name of ["test.xml","../test.drawio","test.drawio/x","test.drawio\\foo","test.drawio.svg"])
   await badFile(name,bytes,"DRAWIO_FILE_EXTENSION_INVALID");
 await badFile("test.drawio",bytes,"DRAWIO_FILE_SIZE_INVALID",2*1024*1024+1);
