@@ -42,7 +42,7 @@ for(const count of [2,21,41,256]){
  for(const token of [secret,"192.0.2.88","19506","DO_NOT_EXPOSE_PRIVATE_PLUGIN","PRIVATE_REPORT_CANARY"]){
    eq(JSON.stringify(report).includes(token),false,"No Nessus private XML in JSON");
  }
- const original=await reviewNessusOriginalFileAssociations(file(raw),p,model,decision);
+ const original=await reviewNessusOriginalFileAssociations(file(raw),p,()=>model,decision,()=>true);
  eq(original,report,"P3 original-file reparse supports late ordinal");
  const ssr=renderToStaticMarkup(React.createElement(NessusHostAssociationReview,{preview:p,model,onExport(){}}));
  eq((ssr.match(/data-nessus-associate-host=/g)||[]).length,Math.min(count,20),"Only page selectors rendered");
@@ -85,8 +85,8 @@ eq(reviewNessusHostReferences(p,model,{...base,references:[
  {hostOrdinal:255,targetResourceId:"res_0"},{hostOrdinal:1,targetResourceId:"res_0"}]}).status,"BLOCKED","Duplicate target");
 eq(JSON.stringify(model),before,"No Builder mutation");
 await assert.rejects(previewNessusSeveritySummary(xml(257)),e=>e?.code==="NESSUS_XML_HOST_BUDGET");checks++;
-await assert.rejects(reviewNessusOriginalFileAssociations(file(xml(255)),p,model,base),
- e=>e?.code==="NESSUS_ASSOC_SOURCE_CHANGED");checks++;
+await assert.rejects(reviewNessusOriginalFileAssociations(file(xml(255)),p,()=>model,base,()=>true),
+ e=>e?.code==="NESSUS_P5_SOURCE_CHANGED");checks++;
 const ui=fs.readFileSync("ui/app/nessus-association-review.mjs","utf8");
 for(const k of ["PAGE_SIZE=20","MAX_REFERENCES=20","data-nessus-page-previous",
  "data-nessus-page-next","data-nessus-association-cap","firstOrdinal+index",
