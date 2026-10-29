@@ -1,0 +1,95 @@
+name: Nmap XML P5 saved exact-source reviewed association replay real Chromium
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tests/acceptance/run_nmap_xml_p2_real_browser.py'
+      - 'tests/acceptance/run_nmap_xml_p3_real_browser.py'
+      - 'tests/acceptance/run_nmap_xml_p4_real_browser.py'
+      - 'tests/acceptance/run_nmap_xml_p5_real_browser.py'
+      - 'tests/browser/run_nmap_xml_p5_saved_replay_tests.mjs'
+      - 'enterprise-import/src/nmap-report-replay.ts'
+      - 'ui/src/browser/nmap-report-replay-file.ts'
+      - 'ui/app/nmap-reference-replay-panel.mjs'
+      - 'docs/architecture/NMAP_XML_P5_SAVED_REPORT_REPLAY_ORACLES.md'
+      - 'tests/browser/run_nmap_xml_p4_original_export_tests.mjs'
+      - 'ui/src/browser/nmap-association-file.ts'
+      - 'docs/architecture/NMAP_XML_P4_ORIGINAL_SOURCE_EXPORT_GATE_ORACLES.md'
+      - 'tests/browser/run_nmap_xml_p3_host_window_tests.mjs'
+      - 'docs/architecture/NMAP_XML_P3_BOUNDED_HOST_WINDOW_ORACLES.md'
+      - 'tests/browser/run_nmap_xml_observation_ui_tests.mjs'
+      - 'ui/src/browser/nmap-xml-file-preview.ts'
+      - 'ui/app/nmap-observation-panel.mjs'
+      - 'ui/app/nmap-association-review.mjs'
+      - 'enterprise-import/src/nmap-association-review.ts'
+      - 'tests/enterprise-import/run_nmap_association_review_tests.mjs'
+      - 'ui/app/main.mjs'
+      - 'enterprise-import/src/nmap-xml-preview.ts'
+      - '.github/workflows/nmap-xml-p5-real-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nmap-real-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact GitHub branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact app dependencies
+        run: npm ci
+      - name: Install isolated pinned Playwright Chromium
+        run: |
+          python3 -m venv /tmp/yadilab-nmap-browser-venv
+          /tmp/yadilab-nmap-browser-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/yadilab-nmap-browser-venv/bin/python -m playwright install --with-deps chromium
+      - name: Verify source, P4 original-file and live Builder security, and build
+        run: |
+          npm run test:release-identity
+          tsc -p tests/tsconfig.browser.json
+          tsc -p tests/tsconfig.enterprise-import.json
+          node tests/browser/run_nmap_xml_observation_ui_tests.mjs
+          node tests/browser/run_nmap_xml_p3_host_window_tests.mjs
+          node tests/browser/run_nmap_xml_p4_original_export_tests.mjs
+          node tests/browser/run_nmap_xml_p5_saved_replay_tests.mjs
+          node tests/browser/run_nessus_p4_bounded_host_pagination_tests.mjs
+          node tests/browser/run_ansible_ini_p6_host_pagination_tests.mjs
+          node tests/browser/run_ansible_yaml_p6_host_pagination_tests.mjs
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+      - name: Exercise actual React UI in Chromium on loopback
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18978 --bind 127.0.0.1 --directory ui/dist >/tmp/yadilab-nmap-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            if curl --fail --silent http://127.0.0.1:18978/browser-build-manifest.json >/dev/null; then break; fi
+            sleep 0.2
+          done
+          curl --fail --silent http://127.0.0.1:18978/browser-build-manifest.json >/dev/null
+          /tmp/yadilab-nmap-browser-venv/bin/python tests/acceptance/run_nmap_xml_p2_real_browser.py \
+            --url http://127.0.0.1:18978/ --evidence-dir /tmp/nmap-xml-p5-browser-evidence/p2
+          /tmp/yadilab-nmap-browser-venv/bin/python tests/acceptance/run_nmap_xml_p3_real_browser.py \
+            --url http://127.0.0.1:18978/ --evidence-dir /tmp/nmap-xml-p5-browser-evidence/p3
+          /tmp/yadilab-nmap-browser-venv/bin/python tests/acceptance/run_nmap_xml_p4_real_browser.py \
+            --url http://127.0.0.1:18978/ --evidence-dir /tmp/nmap-xml-p5-browser-evidence/p4
+          /tmp/yadilab-nmap-browser-venv/bin/python tests/acceptance/run_nmap_xml_p5_real_browser.py \
+            --url http://127.0.0.1:18978/ --evidence-dir /tmp/nmap-xml-p5-browser-evidence/p5
+      - name: Upload actual Chromium acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nmap-xml-p5-chromium-evidence
+          path: /tmp/nmap-xml-p5-browser-evidence/
+          if-no-files-found: ignore
