@@ -40,6 +40,7 @@ import { previewNmapXmlFileReadOnly } from "../src/browser/nmap-xml-file-preview
 import { NmapObservationPanel } from "./nmap-observation-panel.mjs";
 import { NessusSeverityPanel } from "./nessus-severity-panel.mjs";
 import { previewNessusFileReadOnly } from "../src/browser/nessus-v2-file-preview.js";
+import { reviewNessusOriginalFileAssociations } from "../src/browser/nessus-association-file.js";
 import { previewAnsibleYamlFileReadOnly } from "../src/browser/ansible-yaml-file-preview.js";
 import { AnsibleInventoryPanel } from "./ansible-inventory-panel.mjs";
 import { previewAnsibleIniFileReadOnly } from "../src/browser/ansible-ini-file-preview.js";
@@ -4131,6 +4132,32 @@ function App() {
     }) : null,
     nessusSeverityOpen ? e(NessusSeverityPanel, {
       inspectFile: previewNessusFileReadOnly,
+      model: workspace.mode === "builder" ? {
+        scenarioId: workspace.source.scenarioId,
+        sourceRevision: workspace.sourceRevision,
+        resources: workspace.source.resources.map(r => ({id:r.id,label:r.label})),
+      } : null,
+      onExportReviewed: async (sourceFile, summary, decision, isCurrent) => {
+        // Source and current model are both revalidated immediately before sidecar export.
+        const currentModel = workspace.mode === "builder" ? {
+          scenarioId: workspace.source.scenarioId,
+          sourceRevision: workspace.sourceRevision,
+          resources: workspace.source.resources.map(r => ({id:r.id,label:r.label})),
+        } : null;
+        const sidecar = await reviewNessusOriginalFileAssociations(
+          sourceFile, summary, currentModel, decision);
+        if (!isCurrent()) {
+          const error = new Error("NESSUS_ASSOC_STALE");
+          error.code = "NESSUS_ASSOC_STALE";
+          throw error;
+        }
+        // Only metadata, never original ReportHost names, IPs, plugin output or Engine state.
+        downloadJson({
+          filename: "nessus-reviewed-hosts-"+sidecar.source.sha256.slice(0,12)+".json",
+          mime: "application/json",
+          text: JSON.stringify(sidecar,null,2),
+        });
+      },
       onClose: () => setNessusSeverityOpen(false),
     }) : null,
     nmapObservationOpen ? e(NmapObservationPanel, {

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { NessusHostAssociationReview } from "./nessus-association-review.mjs";
 const e=React.createElement;
 
 /** Metadata-only Nessus v2 scan-summary. No raw XML, host/plugin identities or output in DOM. */
@@ -21,18 +22,18 @@ export function NessusSeverityDetails({ result }) {
       "No import, mapping, topology activation or Engine change. Closing discards the summary."));
 }
 
-export function NessusSeverityPanel({ inspectFile, onClose }) {
+export function NessusSeverityPanel({ inspectFile, onClose, model=null, onExportReviewed }) {
   const [result,setResult]=useState(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
-  const generation=useRef(0),focus=useRef(null);
+  const generation=useRef(0),focus=useRef(null),originalFile=useRef(null);
   useEffect(()=>{focus.current?.focus();return()=>{generation.current++;};},[]);
   useEffect(()=>{
-    const key=event=>{if(event.key==="Escape"&&!busy){generation.current++;onClose();}};
+    const key=event=>{if(event.key==="Escape"&&!busy){generation.current++;originalFile.current=null;onClose();}};
     document.addEventListener("keydown",key);
     return()=>document.removeEventListener("keydown",key);
   },[busy,onClose]);
   const inspect=async file=>{
     const id=++generation.current;
-    setResult(null);setError("");
+    setResult(null);setError("");originalFile.current=file;
     if(!file)return;
     setBusy(true);
     try {
@@ -46,6 +47,7 @@ export function NessusSeverityPanel({ inspectFile, onClose }) {
       }
     }catch(cause){
       if(generation.current===id){
+        originalFile.current=null;
         setError(typeof cause?.code==="string" &&
           /^(NESSUS_|IMPORT_XML_)[A-Z0-9_]+$/.test(cause.code)
           ?cause.code:"NESSUS_PREVIEW_BLOCKED");
@@ -59,7 +61,7 @@ export function NessusSeverityPanel({ inspectFile, onClose }) {
       e("div",{className:"network-import-heading"},e("div",null,
         e("h2",null,"Inspect Nessus v2 XML — severity only"),
         e("p",null,"Offline structural summary; source identifiers and plugin details are suppressed.")),
-        e("button",{type:"button",disabled:busy,onClick:()=>{generation.current++;onClose();},
+        e("button",{type:"button",disabled:busy,onClick:()=>{generation.current++;originalFile.current=null;onClose();},
           "aria-label":"Close Nessus inspection"},"Close")),
       e("label",{className:"file-button"},busy?"Inspecting Nessus v2 XML…":"Choose .nessus file",
         e("input",{type:"file",accept:".nessus",hidden:true,disabled:busy,
@@ -71,7 +73,21 @@ export function NessusSeverityPanel({ inspectFile, onClose }) {
           }})),
       error?e("p",{role:"alert","data-nessus-error":"BLOCKED"},error):null,
       e(NessusSeverityDetails,{result}),
+      result?e(NessusHostAssociationReview,{
+        key:result.sourceSha256+":"+generation.current+":"+String(model?.sourceRevision??-1),
+        preview:result,model,
+        onExport:async decision=>{
+          const epoch=generation.current,source=originalFile.current;
+          if(!source||!result||!model||typeof onExportReviewed!=="function"){
+            const error=new Error("NESSUS_ASSOC_UNAVAILABLE");
+            error.code="NESSUS_ASSOC_UNAVAILABLE";throw error;
+          }
+          return onExportReviewed(source,result,decision,()=>{
+            return generation.current===epoch&&originalFile.current===source;
+          });
+        },
+      }):null,
       e("div",{className:"network-import-actions"},
         e("button",{type:"button","data-nessus-close":"true",disabled:busy,
-          onClick:()=>{generation.current++;onClose();}},"Close without changes"))));
+          onClick:()=>{generation.current++;originalFile.current=null;onClose();}},"Close without changes"))));
 }
