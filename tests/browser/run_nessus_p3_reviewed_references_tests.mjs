@@ -109,7 +109,7 @@ const panel=renderToStaticMarkup(React.createElement(NessusSeverityPanel,{
 }));
 eq(panel.includes('data-nessus-summary="EVIDENCE_ONLY"'),false);
 const main=fs.readFileSync("ui/app/main.mjs","utf8");
-assert.match(main,/return onExportReviewed\(source,result,decision/);checks++;
+assert.match(fs.readFileSync("ui/app/nessus-severity-panel.mjs","utf8"),/return onExportReviewed\(source,result,decision/);checks++;
 assert.match(main,/reviewNessusOriginalFileAssociations\(/);checks++;
 assert.match(main,/if \(!isCurrent\(\)\)/);checks++;
 for(const path of ["enterprise-import/src/nessus-association-review.ts",
