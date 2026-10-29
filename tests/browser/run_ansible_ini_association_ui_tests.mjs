@@ -26,11 +26,17 @@ ok(!/setWorkspace\s*\(|dangerouslySetInnerHTML|onActivate\s*[:=]|\bfetch\s*\(/.t
 ok(/reviewAnsibleIniOriginalFileAssociations\(/.test(main),"Revalidate against current Builder");
 ok(/onExportAssociation: async \(originalFile,inventoryPreview,decision,isCurrent\)/.test(main),"Separate download callback");
 ok(/data-ansible-ini-association-conflict/.test(ui),"Duplicate resource conflict in UI");
-ok(/preview\.hosts\.slice\(0, DISPLAY_LIMIT\)/.test(ui),"80-host review cap");
+ok(/visibleHosts\.map\(\(host, index\)/.test(ui),"Bounded ordinal-page mapping");
+ok(/const REVIEW_PAGE_SIZE = 80/.test(ui),"At most 80 rendered host selectors");
+ok(/const MAX_ASSOCIATIONS = 80/.test(ui),"At most 80 distinct operator choices");
 ok(/setAcknowledged\(false\)/.test(ui),"Choice change revokes consent");
 const hidden={...result,preview:{...result.preview,hosts:Array.from({length:90},(_,i)=>({inventoryName:"host_"+i,addressTruth:"UNKNOWN",directGroups:[],locators:[{kind:"ansible-ini-host",sourceSha256:result.preview.sourceSha256,lineNumber:i+1,section:"ungrouped",hostKey:"host_"+i}]}))}};
 const limit=renderToStaticMarkup(React.createElement(AnsibleIniAssociationReview,{result:hidden,model,onExportAssociation:async()=>{}}));
 ok((limit.match(/data-ansible-ini-associate-host=/g)||[]).length===80,"Exactly 80 visible host selectors");
+ok(limit.includes('data-ansible-ini-page-next="true"'),"Next-page control present");
+ok(limit.includes('data-ansible-ini-association-page="1"'),"Initial page always first");
+ok(limit.includes('data-ansible-ini-association-range="0:79"'),"Initial 80 original ordinals");
+ok(!limit.includes('data-ansible-ini-associate-host="80"'),"Next page not rendered before navigation");
 const secret=fs.readFileSync("tests/fixtures/import/ansible-ini/valid-sensitive-vars.ini");
 const sensitive=await previewAnsibleIniFileReadOnly({name:"secret.ini",size:secret.length,async arrayBuffer(){return secret.buffer.slice(secret.byteOffset,secret.byteOffset+secret.byteLength);}});
 const sh=renderToStaticMarkup(React.createElement(AnsibleIniAssociationReview,{result:sensitive,model,onExportAssociation:async()=>{}}));
