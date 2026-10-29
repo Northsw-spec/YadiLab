@@ -23,7 +23,7 @@ function singleton(n:XmlNode,name:string):XmlNode{
 function requiredId(n:XmlNode,attribute="id"):string{
   const id=value(n,attribute);
   if(!id||!SAFE_ID.test(id))fail("DRAWIO_ID_INVALID");
-  return id;
+  return id as string;
 }
 function checkGeometry(cell:XmlNode):void{
   exactChildren(cell,["mxGeometry"]);
@@ -61,14 +61,15 @@ export interface DrawioStructurePreview {
 export async function previewDrawioStructure(bytes:Uint8Array):Promise<DrawioStructurePreview>{
   if(!(bytes instanceof Uint8Array)||bytes.byteLength===0||bytes.byteLength>MAX_BYTES)
     fail("DRAWIO_SOURCE_SIZE_INVALID");
-  let doc:XmlNode;
-  try{doc=parseSafeXml(bytes,"drawio");}
-  catch(error){
-    const code=error instanceof EnterpriseImportError &&
-      /^IMPORT_XML_[A-Z0-9_]+$/.test(error.code)?error.code:"DRAWIO_XML_INVALID";
-    fail(code);
-  }
-  let diagrams:readonly XmlNode[];
+  const doc:XmlNode=(()=>{
+    try{return parseSafeXml(bytes,"drawio");}
+    catch(error){
+      const code=error instanceof EnterpriseImportError &&
+        /^IMPORT_XML_[A-Z0-9_]+$/.test(error.code)?error.code:"DRAWIO_XML_INVALID";
+      throw new EnterpriseImportError(code,code);
+    }
+  })();
+  let diagrams:readonly XmlNode[]=[];
   if(doc.name==="mxfile"){
     exactChildren(doc,["diagram"]);
     if(value(doc,"compressed")!==undefined&&value(doc,"compressed")!=="false")
