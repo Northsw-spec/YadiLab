@@ -60,7 +60,7 @@ def case(browser,url):
         require(page.locator('[data-drawio-association-export]').is_disabled(),
                 "Hidden-window duplicate target exported")
         page.locator('[data-drawio-associate-vertex="1:2"]').select_option(c)
-        expect(page.locator('[data-drawio-association-duplicate]').to_have_count(0)
+        expect(page.locator('[data-drawio-association-duplicate]')).to_have_count(0)
         expect(page.locator('[data-drawio-reference-count="3"]')).to_be_visible()
         page.locator('[data-drawio-association-ack]').check()
         with page.expect_download(timeout=25000) as dl:
@@ -108,7 +108,7 @@ def case(browser,url):
         require(page.locator('[data-drawio-position-next]').is_disabled(),
                 "Max-source next not disabled")
         page.locator('[data-drawio-close]').click()
-        expect(page.locator('[data-drawio-panel]').to_have_count(0)
+        expect(page.locator('[data-drawio-panel]')).to_have_count(0)
         # Genuine earlier P4 sidecar still replays using exact original source.
         open_replay(page)
         select(page,'[data-drawio-replay-original]','extended.drawio',original)
