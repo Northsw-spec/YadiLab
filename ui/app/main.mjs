@@ -37,6 +37,8 @@ import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-previe
 import { mapReviewedGraphmlToBuilder, GRAPHML_MANUAL_ROLE_OPTIONS } from "../../enterprise-import/src/graphml-review-mapping.js";
 import { GraphmlReadOnlyPanel } from "./graphml-preview-panel.mjs";
 import { previewNmapXmlFileReadOnly } from "../src/browser/nmap-xml-file-preview.js";
+import { replayNmapSavedReportFiles } from "../src/browser/nmap-report-replay-file.js";
+import { NmapSavedReferenceReplayPanel } from "./nmap-reference-replay-panel.mjs";
 import { reviewNmapOriginalFileAssociations } from "../src/browser/nmap-association-file.js";
 import { NmapObservationPanel } from "./nmap-observation-panel.mjs";
 import { NessusSeverityPanel } from "./nessus-severity-panel.mjs";
@@ -3138,7 +3140,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   );
 }
 
-function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, onInspectNmap, onInspectNessus, onInspectDrawio, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, onInspectNmap, onInspectNmapReplay, onInspectNessus, onInspectDrawio, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   const networkPickerRef = useRef(null);
   // Opening the native picker happens synchronously within the user's click,
@@ -3196,6 +3198,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, o
         e("button", { type: "button", "data-import-network-action": "true", onClick: openNetworkPicker }, "Import Network from Excel / CSV"),
         e("button", { type: "button", "data-inspect-graphml": "PREVIEW_ONLY", onClick: onInspectGraphml }, "Inspect GraphML (read-only preview)"),
         e("button", { type: "button", "data-inspect-nmap": "EVIDENCE_ONLY", onClick: onInspectNmap }, "Inspect Nmap XML (observations only)"),
+        e("button", { type: "button", "data-inspect-nmap-replay": "EVIDENCE_OBSERVED", onClick: onInspectNmapReplay }, "Inspect saved Nmap XML references (read-only replay)"),
         e("button", { type: "button", "data-inspect-nessus": "EVIDENCE_ONLY", onClick: onInspectNessus }, "Inspect Nessus .nessus (severity summary only)"),
         e("button", { type: "button", "data-inspect-drawio": "PREVIEW_ONLY", onClick: onInspectDrawio }, "Inspect draw.io .drawio (uncompressed structure)"),
         e("button", { type: "button", "data-inspect-drawio-replay": "TOPOLOGY_DECLARED", onClick: onInspectDrawioReplay }, "Inspect saved draw.io references (read-only replay)"),
@@ -3366,6 +3369,7 @@ function App() {
   const [networkImportSelection, setNetworkImportSelection] = useState(null);
   const [graphmlPreviewOpen, setGraphmlPreviewOpen] = useState(false);
   const [nmapObservationOpen, setNmapObservationOpen] = useState(false);
+  const [nmapReplayOpen, setNmapReplayOpen] = useState(false);
   const [nessusSeverityOpen, setNessusSeverityOpen] = useState(false);
   const [drawioStructureOpen, setDrawioStructureOpen] = useState(false);
   const [drawioReplayOpen, setDrawioReplayOpen] = useState(false);
@@ -3933,7 +3937,7 @@ function App() {
   return e("div", { className: "app-frame", "data-app-runtime": "ready", "data-runtime-scenario-id": workspace.mode === "runtime" ? workspace.scenario.scenarioId : workspace.source.scenarioId, "data-runtime-scenario-hash": workspace.mode === "runtime" ? workspace.scenario.sourceHash : "builder" },
     e("header", { className: "app-header" },
       e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
-      e(MainActions, { onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectNessus: () => setNessusSeverityOpen(true),
+      e(MainActions, { onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectNmapReplay: () => setNmapReplayOpen(true), onInspectNessus: () => setNessusSeverityOpen(true),
         onInspectDrawio: () => setDrawioStructureOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectAnsibleIniReplay: () => setAnsibleIniReplayOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
@@ -4282,6 +4286,25 @@ function App() {
         });
       },
       onClose: () => setNessusSeverityOpen(false),
+    }) : null,
+    nmapReplayOpen ? e(NmapSavedReferenceReplayPanel, {
+      model: workspace.mode === "builder" ? {
+        scenarioId: workspace.source.scenarioId,
+        sourceRevision: workspace.sourceRevision,
+        resources: workspace.source.resources.map(resource=>({id:resource.id,label:resource.label})),
+      } : null,
+      onReplay: async (original,report,consent,isCurrent) => {
+        const currentModel=()=>{
+          const live=latestDrawioWorkspaceRef.current;
+          return live.mode==="builder"?{
+            scenarioId:live.source.scenarioId,
+            sourceRevision:live.sourceRevision,
+            resources:live.source.resources.map(resource=>({id:resource.id,label:resource.label})),
+          }:null;
+        };
+        return replayNmapSavedReportFiles(original,report,currentModel,consent,isCurrent);
+      },
+      onClose:()=>setNmapReplayOpen(false),
     }) : null,
     nmapObservationOpen ? e(NmapObservationPanel, {
       inspectFile: previewNmapXmlFileReadOnly,
