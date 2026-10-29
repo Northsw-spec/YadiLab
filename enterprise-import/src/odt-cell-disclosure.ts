@@ -96,7 +96,7 @@ export async function discloseReviewedOdtCell(
     });
   }catch(error){
     if(error instanceof EnterpriseImportError && /^ODT_CELL_/.test(error.code))throw error;
-    deny("ODT_CELL_SOURCE_BLOCKED");
+    return deny("ODT_CELL_SOURCE_BLOCKED");
   }finally{
     if(archive)await archive.close().catch(()=>{});
   }
