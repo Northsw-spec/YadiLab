@@ -98,6 +98,10 @@ const artificial={...preview,hosts:Array.from({length:81},(_,i)=>({
  locators:[{kind:"ansible-yaml-host",sourceSha256:preview.sourceSha256,
  groupPath:"all",hostKey:"host_"+i}],
 }))};
-blocked({...choice,associations:[{hostOrdinal:80,resourceId:"rds01"}]},
+const late=reviewAnsibleInventoryAssociations(artificial,model,{
+ ...choice,associations:[{hostOrdinal:80,resourceId:"rds01"}]});
+eq(late.status,"READY_FOR_EXPORT","Existing source ordinal 80 now selectable in P6");
+eq(late.sidecar.associations[0].hostOrdinal,80);
+blocked({...choice,associations:[{hostOrdinal:81,resourceId:"rds01"}]},
  "ANSIBLE_ASSOC_SELECTION_INVALID",model,artificial);
 console.log("PASS ANSIBLE-YAML-P3: "+checks+" provenance, duplicate, stale, consent, redaction and non-Engine assertions.");
