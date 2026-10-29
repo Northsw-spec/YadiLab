@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright,expect
 from run_ansible_yaml_p2_real_browser import setup,inspect,export_builder_source,unchanged,require
 
 def inventory(count):
-    return ("[servers]\n"+"".join(f"node{i:03d} ansible_host=192.0.2.1\n" for i in range(count))).encode()
+    return ("all:\n  hosts:\n"+"".join(f"    node{i:03d}: null\n" for i in range(count))).encode()
 
 def source_file(page,raw):
     page.locator('[data-ansible-file="true"]').set_input_files({
