@@ -80,6 +80,7 @@ export function NmapObservationPanel({ inspectFile, onClose, model = null, onExp
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const request = useRef(0);
+  const originalFile = useRef(null);
   const focus = useRef(null);
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export function NmapObservationPanel({ inspectFile, onClose, model = null, onExp
     return () => { request.current++; };
   }, []);
   useEffect(() => {
-    const escape = (event) => { if (event.key === "Escape" && !busy) { request.current++; onClose(); } };
+    const escape = (event) => { if (event.key === "Escape" && !busy) { request.current++; originalFile.current = null; onClose(); } };
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
   }, [busy, onClose]);
@@ -95,6 +96,7 @@ export function NmapObservationPanel({ inspectFile, onClose, model = null, onExp
   const choose = async (file) => {
     if (!file || busy) return;
     const id = ++request.current;
+    originalFile.current = file;
     setResult(null);
     setError("");
     setBusy(true);
@@ -103,6 +105,7 @@ export function NmapObservationPanel({ inspectFile, onClose, model = null, onExp
       if (request.current === id) setResult(parsed);
     } catch (cause) {
       if (request.current === id) {
+        originalFile.current = null;
         setError(cause?.code && cause?.message ? `${cause.code}: ${cause.message}`
           : cause instanceof Error ? cause.message : "Nmap XML parsing blocked.");
       }
@@ -119,7 +122,7 @@ export function NmapObservationPanel({ inspectFile, onClose, model = null, onExp
           e("h2", null, "Inspect Nmap XML — observed evidence"),
           e("p", null, "Local, offline, read-only inspection. This does not run Nmap or alter YadiLab's scenario.")),
         e("button", { type: "button", disabled: busy, "aria-label": "Close Nmap XML observations",
-          onClick: () => { request.current++; onClose(); } }, "Close")),
+          onClick: () => { request.current++; originalFile.current = null; onClose(); } }, "Close")),
       e("label", { className: "file-button" },
         busy ? "Reading Nmap XML…" : "Choose Nmap .xml file",
         e("input", { type: "file", accept: ".xml", disabled: busy, hidden: true,
@@ -133,8 +136,17 @@ export function NmapObservationPanel({ inspectFile, onClose, model = null, onExp
         "data-nmap-error": "BLOCKED" }, error) : null,
       e(NmapObservationDetails, { key: request.current, result }),
       result ? e(NmapAssociationReview, { key: `${request.current}:${result.preview.sourceSha256}:${model?.scenarioId ?? "runtime"}:${model?.sourceRevision ?? -1}`,
-        result, model, busy, onExport: onExportAssociation }) : null,
+        result, model, busy,
+        onExport: async (preview, decision) => {
+          const epoch = request.current, original = originalFile.current;
+          if (!original || typeof onExportAssociation !== "function") {
+            const failure = new Error("NMAP_P4_SOURCE_BLOCKED");
+            failure.code = "NMAP_P4_SOURCE_BLOCKED"; throw failure;
+          }
+          return onExportAssociation(original, preview, decision,
+            () => request.current === epoch && originalFile.current === original);
+        } }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-nmap-close": "true",
-          onClick: () => { request.current++; onClose(); } }, "Close without changes"))));
+          onClick: () => { request.current++; originalFile.current = null; onClose(); } }, "Close without changes"))));
 }
