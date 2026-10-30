@@ -1,0 +1,34 @@
+# CONVERGENCE — OSPFv2 MaxAge model-only flush gate (RFC 2328 §14)
+
+## Canonical source
+
+- Protected `main=c16142712c83db7436bfdc08383161463d56f19d`, tree `4a97eaf31207160f23649edf1342a45ced1fa508` at branch creation. Current `AGENTS.md`, `engine/src/ospf-area-lsdb.ts`, `ospf-lsdb-summary.ts` and tests were inspected before coding. GitHub current main is sole source-code authority.
+- [RFC 2328 §14, Aging the Link State Database](https://www.rfc-editor.org/rfc/rfc2328.html#section-14): remove an LSA at MaxAge only when (a) the LSA is **not** on **any** neighbor's Link State retransmission list and (b) **no** neighbor is in Exchange or Loading. A MaxAge copy never becomes an SPF vertex. RFC §14.1 premature aging is a separate origination/flooding procedure; this feature never originates or floods MaxAge.
+
+## Scope and limitations
+
+The code in `engine/src/ospf-maxage-flush-model.ts` is additive and operates **only on the immutable, in-memory, synthetic area LSDB snapshot** introduced in PR #71. It does **not** delete real router LSDB records, consume authenticated OSPF packets, discover actual OSPF neighbors, verify physical completeness of retransmission lists, issue acknowledgments, declare an adjacency Full, infer a validated topology, run SPF or change EngineState reachability.
+
+The witness `OspfMaxAgeInventoryDeclaration` is a **caller-provided statement**, exactly marked `CALLER_DECLARED_SYNTHETIC_INVENTORY`. Even when `allNeighborsDeclared=true` and every `retransmissionListComplete=true`, the model can validate internal consistency but **cannot prove that omitted real neighbors do not exist**. A self-consistent forged zero-neighbor witness is formally indistinguishable from a genuine zero-neighbor witness. Therefore all candidate names are `MODEL_ONLY_ELIGIBLE` / `MODEL_ONLY_BLOCKED` and the mutation event is **`MAXAGE_REMOVED_FROM_SYNTHETIC_SNAPSHOT`**. Do not represent these as independently verified or safely actionable on live equipment.
+
+## Design contracts and fail-closed conditions
+
+- The exact `scenarioId`, `scenarioHash`, `stateRevision`, router owner and caller-assigned OSPF area are inherited from the previously validated LSDB anchor. The witness must repeat this anchor, **exact same virtual `clockMs`**, and the **complete saved LSA entries including raw bytes, checksum, source and receipt timestamps**. This prevents accidental reuse after a same-time LSA install, replacement, or prior removal; it is **not cryptographic authentication** or proof of real input provenance.
+- Every LSDB entry is independently re-parsed and verified with the existing Type 1/2 Fletcher/body validators before the gate can read or update it. Only entries whose **virtual current age equals 3600 seconds** are candidates.
+- Model-only neighbor declaration: 0–32 sorted distinct canonical IPv4 Router IDs, each one with a valid FSM state `DOWN`, `ATTEMPT`, `INIT`, `TWO_WAY`, `EXSTART`, `EXCHANGE`, `LOADING`, or `FULL`; and 0–128 **sorted unique** LSA identity references in a declared complete retransmission list. Missing completeness flags, duplicate neighbors, repeated references, invalid LSA identity, wrong order, stale snapshots, excessive work or missing arrays are rejected. Every reference blocks that LSA even when the neighbor's phase otherwise permits removal. Older versions of the same identity also block conservatively.
+- A single declared neighbor in **Exchange or Loading** blocks removal of **all** MaxAge LSAs in the area; a retransmission identity blocks removal of **that identity**. Both reasons are returned independently. An ExStart neighbor does not itself meet RFC's Exchange/Loading blocker, but the completeness of actual inventory remains unverified. A declared empty inventory is only syntactically valid with an explicit `allNeighborsDeclared=true` assertion — and remains model-only.
+- `evaluateOspfMaxAgeFlush` is read-only and reports every MaxAge candidate, age, `MODEL_ONLY_ELIGIBLE` or `MODEL_ONLY_BLOCKED`, blockers, and exact declared retransmitting Router IDs. A missing/invalid/stale declaration fails closed.
+- `removeOspfAreaMaxAgeModel` accepts an explicit batch of 1–8 **complete canonical identity triples**. It atomically checks the exact witness, identity validity/uniqueness, existence, MaxAge status and every blocker *before* returning a **new synthetic area snapshot** with requested eligible records removed. If any target is non-MaxAge, unknown, held, malformed or duplicated, the entire batch is refused and the original snapshot is returned unchanged. It does not alter clock, Engine revision, source bytes of retained LSAs or other area sessions.
+- The earlier `advanceOspfAreaLsdb` still **never automatically removes** aged entries; the synthetic flush-gate is an explicit standalone API, not a false timer callback or simulated network flood. The witness is not persisted as trusted operational history.
+
+## Mandatory CI
+
+- New adversarial test suite `tests/engine/run_ospf_maxage_flush_tests.mjs`, exposed as `npm run test:ospf-maxage-flush`, is wired into both mandatory `yadilab-required-ci` on the PR SHA and an independent `linux-attested` push release workflow after merging.
+- Exercises: two MaxAge instances and one non-MaxAge; explicit zero/full/down/exstart/exchange/loading declarations; all-neighbor hold, per-identity retransmission hold, two simultaneous blocker reasons, unrelated retransmission references, partial removal while unrelated LSA remains blocked, atomic multi-target rollback, non-MaxAge/unknown/duplicate requests, malformed/incomplete inventories, canonical order and size caps, stale virtual time, stale anchor and bytes after **same-clock** LSA update, Engine source/revision spoof, corrupt Fletcher storage, lost neighbor reports, and 1,000 byte-identical model-only eligibility/removal replays. The tests explicitly demonstrate that syntactically valid, caller-declared inventory **does not confer actual network authenticity**.
+- Record exact checked PR SHA, mandatory four GitHub Actions conclusions, actual assertion log, protected squash merge result, exact merged main and successful independent Linux release/artifact IDs before marking this checkpoint CI_PASS. Ubuntu Actions is sufficient for automatable behavior; do not claim Parrot-native or physical OSPF tests.
+
+## Next independent checkpoints
+
+1. A source-verified OSPF neighbor inventory and link-state retransmission ledger with actual packet/ack provenance to replace the declared-only trust boundary. This checkpoint *does not* provide it.
+2. Read-only **bidirectional Router-LSA and Network-LSA topology coherence** with carefully grounded graph edges, blocked MaxAge sources and explicit unknown/unmodeled conclusions. A parsed link advertisement alone must not be treated as physical reachability.
+3. Only then bounded SPF and Engine route truth with independent adversarial proof, distinct from Full adjacency and live routing.
