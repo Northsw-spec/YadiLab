@@ -199,10 +199,10 @@ eq(state.stateRevision,0,"no Engine revision changes");
 eq(queryReachability(scenario,state,"attacker","rds01","tcp",3389).truth,
   originalTruth.truth,"no topology/routing truth modifications");
 
-const repeated=pass(receiveOspfDdFinishDescription(oneWay.session,state,
+deny(receiveOspfDdFinishDescription(oneWay.session,state,
   dd(baseCfg,4500,{init:true,master:true,more:true,ddSequence:800}),[]),
-  "ExStart attempts without 2-way must reject or remain idle");
-eq(repeated.session.summary.exchange.dd.phase,"IDLE","no resurrection without 2-way");
+  "OSPF_EXCHANGE_NEIGHBOR_NOT_READY");
+eq(oneWay.session.summary.exchange.dd.phase,"IDLE","no resurrection without 2-way");
 
 function replay() {
   let x=prepare(baseCfg,[h1("10.0.0.7"),h1("10.0.0.8")],1);
