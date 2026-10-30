@@ -50,6 +50,7 @@ jobs:
           npm run test:ospf-dd-summary-admission
           npm run test:ospf-lsr-fletcher
           npm run test:ospf-dd-mbit-done
+          npm run test:ospf-loading-coordinator
           npm run test:release-evidence
       - name: Compile and verify exact Git-indexed browser release
         env:
