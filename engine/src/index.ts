@@ -119,6 +119,8 @@ export { OSPF_P2P_FORMAT, OSPF_P2P_VERSION, OSPF_P2P_MAX_EVENTS, OSPF_P2P_MAX_AD
 export type { OspfP2pNeighborState, OspfP2pTraceKind, OspfP2pConfig, OspfP2pHelloObservation, OspfP2pTrace, OspfP2pSession, OspfP2pResult } from "./ospf-p2p-hello.js";
 export { OSPF_DD_FORMAT, OSPF_DD_VERSION, createOspfP2pDdSession, inspectOspfP2pDdSession, advanceOspfP2pDdSession, receiveOspfP2pDdHello, receiveOspfP2pDdDescription } from "./ospf-p2p-dd.js";
 export type { OspfP2pDdConfig, OspfP2pDdObservation, OspfP2pDdReceipt, OspfP2pDdPhase, OspfP2pDdRole, OspfP2pDdTrace, OspfP2pDdSession, OspfP2pDdResult } from "./ospf-p2p-dd.js";
+export { OSPF_EXCHANGE_FORMAT, OSPF_EXCHANGE_VERSION, OSPF_EXCHANGE_MAX_ACCEPTED, OSPF_EXCHANGE_MAX_RETRANSMITS, OSPF_EXCHANGE_MAX_ADVANCE_RETRANSMITS, createOspfP2pExchangeSession, inspectOspfP2pExchangeSession, advanceOspfP2pExchangeSession, receiveOspfP2pExchangeHello, receiveOspfP2pExchangeDescription } from "./ospf-p2p-exchange.js";
+export type { OspfP2pExchangeConfig, OspfP2pExchangeRecord, OspfP2pExchangeSession, OspfP2pExchangeTrace, OspfP2pExchangeEvent, OspfP2pExchangeResult } from "./ospf-p2p-exchange.js";
 export type { SimulationMarkerReceipt, SimulationMarkerCancellation, SimulationTransitionState, SimulationMarkerRequest, SimulationTransitionResult } from "./simulation-transitions.js";
 export type { ScheduledSimulationEvent, SimulationEventPlan, SimulationEventPlanResult, NewSimulationEvent } from "./simulation-clock.js";
 export { queryServiceEnabled, queryListeningPort, queryListenerServiceState, queryHostStackView } from "./service-engine.js";
