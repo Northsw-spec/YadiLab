@@ -45,6 +45,7 @@ jobs:
           npm run test:simulation-transitions
           npm run test:ospf-p2p-hello
           npm run test:ospf-p2p-dd
+          npm run test:ospf-p2p-exchange
           npm run test:release-evidence
       - name: Compile and verify exact Git-indexed browser release
         env:
