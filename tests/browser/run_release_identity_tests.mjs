@@ -69,6 +69,14 @@ try {
   assert.equal(run("rev-parse","HEAD"),fixedHead);
   assert.equal(readReleaseContract(gitRoot).sourceCommit,fixedHead);
   assertGitBundleInputs(gitRoot,{inputs:{"package.json":{}, "node_modules/react/index.js":{}}});
+  // Real esbuild metafile: import attributes are appended to input keys.
+  assertGitBundleInputs(gitRoot,{inputs:{"package.json with { type: 'json' }":{}}});
+  // Recognized import attributes must not turn missing source into verified source.
+  assert.throws(()=>assertGitBundleInputs(gitRoot,{inputs:{"untracked-entry.mjs with { type: 'json' }":{}}}),/RELEASE_SOURCE_UNTRACKED/);
+  // Malformed, unrecognized import attributes must remain denied.
+  assert.throws(()=>assertGitBundleInputs(gitRoot,{inputs:{"package.json with { type: 'javascript' }":{}}}),/RELEASE_SOURCE_UNTRACKED/);
+  // Traversal-shaped npm paths may not bypass source-origin checks.
+  assert.throws(()=>assertGitBundleInputs(gitRoot,{inputs:{"node_modules/../../escape.mjs":{}}}),/RELEASE_SOURCE_OUTSIDE_GIT/);
   assert.throws(()=>assertGitBundleInputs(gitRoot,{inputs:{"untracked-entry.mjs":{}}}),/RELEASE_SOURCE_UNTRACKED/);
   assert.throws(()=>assertGitBundleInputs(gitRoot,{inputs:{"../outside.mjs":{}}}),/RELEASE_SOURCE_OUTSIDE_GIT/);
   assert.throws(()=>assertGitBundleInputs(gitRoot,{inputs:{}}),/RELEASE_SOURCE_INPUTS_MISSING/);

@@ -76,8 +76,17 @@ export function assertGitBundleInputs(root,metafile) {
     if (normalized.startsWith("<") || normalized.includes("\0")) {
       throw new Error("RELEASE_SOURCE_INPUT_INVALID: invalid bundle input");
     }
-    if (normalized.startsWith("node_modules/") || normalized.startsWith("./node_modules/")) continue;
-    indexedRegularFile(root,tracked,filename);
+    // esbuild can append an import-attribute suffix to the *metafile key*
+    // (e.g. app-config/branding.json with { type: 'json' }). That suffix is
+    // not part of the on-disk filename. Strip ONLY this exact, known attribute.
+    const jsonSuffix = " with { type: 'json' }";
+    const inputFile = normalized.endsWith(jsonSuffix)
+      ? normalized.slice(0, -jsonSuffix.length) : normalized;
+    // Resolve before exempting installed locked npm inputs; a traversal via
+    // node_modules/../../ must never bypass the Git-indexed source gate.
+    const {rel} = sourcePath(root, inputFile);
+    if (rel.startsWith("node_modules/")) continue;
+    indexedRegularFile(root,tracked,rel);
   }
 }
 
