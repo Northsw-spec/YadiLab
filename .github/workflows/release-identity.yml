@@ -34,6 +34,7 @@ jobs:
           npm run test:dev11-ui
           npm run test:ospf-p2p-dd
           npm run test:ospf-p2p-exchange
+          npm run test:ospf-lsdb-summary
       - name: Build browser from exact clean Git checkout
         env:
           YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
