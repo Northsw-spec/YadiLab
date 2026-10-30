@@ -48,6 +48,7 @@ jobs:
           npm run test:ospf-p2p-exchange
           npm run test:ospf-lsdb-summary
           npm run test:ospf-dd-summary-admission
+          npm run test:ospf-lsr-fletcher
           npm run test:release-evidence
       - name: Compile and verify exact Git-indexed browser release
         env:
