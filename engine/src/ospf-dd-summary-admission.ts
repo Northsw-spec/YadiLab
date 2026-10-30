@@ -123,6 +123,25 @@ export function inspectOspfDdSummarySession(
   const e = session.exchange.exchange;
   if (!e || e.accepted !== session.pages.length || !session.plan)
     return "OSPF_DD_SUMMARY_LEDGER_INVALID";
+  // Each accepted DD summary is the next observed sequence, not an
+  // arbitrary list of independently supplied page IDs or stale headers.
+  const agreed = session.exchange.dd.negotiated!;
+  for (let n = 0; n < session.pages.length; n += 1) {
+    const p = session.pages[n]!.packet;
+    if (!Number.isSafeInteger(p.atMs) || p.atMs < agreed.observation.atMs
+      || p.atMs > session.exchange.dd.hello.clock.nowMs
+      || (n > 0 && p.atMs < session.pages[n - 1]!.packet.atMs)
+      || !Number.isInteger(p.interfaceMtu) || p.interfaceMtu < 68
+      || p.interfaceMtu > session.exchange.dd.localInterfaceMtu
+      || p.senderRouterId !== session.exchange.dd.hello.config.remoteRouterId
+      || p.areaId !== session.exchange.dd.hello.config.areaId
+      || p.options !== e.options || p.init !== false
+      || p.master !== (e.role === "SLAVE")
+      || typeof p.more !== "boolean"
+      || p.ddSequence !== agreed.agreedSequence + n + 1) {
+      return "OSPF_DD_SUMMARY_LEDGER_INVALID";
+    }
+  }
   if (session.pages.length) {
     const last = session.pages[session.pages.length - 1]!;
     if (!same(sequenceProjection(last.packet), e.lastReceived))
