@@ -29,6 +29,7 @@ jobs:
           npm run test:imported-probes
           npm run test:simulation-clock
           npm run test:simulation-transitions
+          npm run test:ospf-p2p-hello
       - name: Compile and verify exact Git-indexed browser release
         env:
           YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
