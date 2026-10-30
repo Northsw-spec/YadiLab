@@ -9,7 +9,7 @@ jobs:
   yadilab-required-ci:
     name: yadilab-required-ci
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,8 +18,22 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - name: Install exact dependencies
         run: npm ci
+      - name: Validate release dependency policy and adversarial lockfile cases
+        run: |
+          set -Eeuo pipefail
+          node tests/dependencies/run_dependency_tests.mjs
+          node tests/dependencies/run_dependency_adversarial.mjs
+      - name: Full foundational and adversarial Engine/L2/MTU regressions
+        run: npm run test:engine
+      - name: UI runtime, visual journey and Dev11 regression suite
+        run: npm run test:dev11-ui
+      - name: Native launcher Go test suite
+        run: go test ./launcher/...
       - name: Adversarial release source and existing regression gates
         run: |
           set -Eeuo pipefail
@@ -30,6 +44,7 @@ jobs:
           npm run test:simulation-clock
           npm run test:simulation-transitions
           npm run test:ospf-p2p-hello
+          npm run test:release-evidence
       - name: Compile and verify exact Git-indexed browser release
         env:
           YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
@@ -38,6 +53,17 @@ jobs:
           npm run build:browser
           node scripts/verify_browser_release.mjs
           node scripts/verify_release_identity.mjs
+          npm run test:import003-ui
+      - name: Build and smoke-test release Linux launcher before merge
+        env:
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+          YADILAB_TEST_ONCE: '1'
+        run: |
+          set -Eeuo pipefail
+          npm run build:launcher
+          (cd distribution/linux-x86_64 && sha256sum -c SHA256SUMS.txt)
+          bash start-yadilab.sh
+          git diff --exit-code -- THIRD_PARTY_NOTICES.md dependencies/third-party-inventory.json package.json package-lock.json
       - name: Prepare independent real Chromium
         run: |
           set -Eeuo pipefail
