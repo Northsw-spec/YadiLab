@@ -219,7 +219,7 @@ const cases=[
     peer("10.0.0.3","FULL")]}),"OSPF_MAXAGE_NEIGHBOR_ORDER_INVALID"],
   [declaration(s,[],{neighbors:[peer("10.0.0.9","FULL"),
     peer("10.0.0.3","FULL")]}),"OSPF_MAXAGE_NEIGHBOR_ORDER_INVALID"],
-  [declaration(s,[],{neighbors:[peer("10.0.0.0","FULL")]}),
+  [declaration(s,[],{neighbors:[peer("10.0.0.03","FULL")]}),
     "OSPF_MAXAGE_NEIGHBOR_INVALID"],
   [declaration(s,[],{neighbors:[peer("0.0.0.0","FULL")]}),
     "OSPF_MAXAGE_NEIGHBOR_INVALID"],
