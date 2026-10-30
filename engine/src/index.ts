@@ -157,6 +157,19 @@ export type {
   OspfLsaBodyResult,
 } from "./ospf-lsa-body.js";
 export {
+  OSPF_AREA_LSDB_FORMAT, OSPF_AREA_LSDB_VERSION,
+  OSPF_AREA_LSDB_MAX_ENTRIES, OSPF_AREA_LSDB_MAX_BATCH,
+  OSPF_AREA_MIN_LS_ARRIVAL_MS,
+  createOspfAreaLsdbSession, inspectOspfAreaLsdbSession,
+  readOspfAreaLsdb, advanceOspfAreaLsdb, receiveOspfAreaLsaBatch,
+} from "./ospf-area-lsdb.js";
+export type {
+  OspfAreaLsaSource, OspfAreaLsdbAnchor, OspfAreaLsdbEntry,
+  OspfAreaLsdbSession, OspfAreaLsdbObservation,
+  OspfAreaLsdbEventKind, OspfAreaLsdbEvent,
+  OspfAreaLsdbReadEntry, OspfAreaLsdbReadResult, OspfAreaLsdbResult,
+} from "./ospf-area-lsdb.js";
+export {
   OSPF_LSR_FORMAT, OSPF_LSR_VERSION, OSPF_LSR_MAX_PACKET_REQUESTS,
   OSPF_LSR_MAX_UPDATE_LSAS, OSPF_LSR_MAX_RETRIES,
   OSPF_LSR_MAX_ADVANCE_RETRIES, inspectOspfLsRequestSession,
