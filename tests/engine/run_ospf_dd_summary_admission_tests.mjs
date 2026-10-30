@@ -167,7 +167,10 @@ eq(inspectOspfDdSummarySession({...s,plan:{...s.plan,requestIntents:[]}},state),
   "OSPF_DD_SUMMARY_LEDGER_INVALID","forged request list rejected");
 eq(inspectOspfDdSummarySession({...s,pages:[
   {...s.pages[0],headers:[h1("10.0.0.8")]},...s.pages.slice(1)]},state),
-  "OSPF_DD_SUMMARY_LEDGER_INVALID","forged accepted payload blocked");
+  "OSPF_DD_SUMMARY_INVALID","forged header-count mismatch blocked early");
+eq(inspectOspfDdSummarySession({...s,pages:[
+  {...s.pages[0],headers:[h1("10.0.0.8"),s.pages[0].headers[1]]},...s.pages.slice(1)]},state),
+  "OSPF_DD_SUMMARY_LEDGER_INVALID","same-length forged accepted payload blocked by ledger");
 denied(advanceOspfDdSummarySession(s,{...state,stateRevision:1},4500),
   "SIM_CLOCK_STALE_REVISION");
 denied(advanceOspfDdSummarySession(s,{...state,scenarioHash:"wrong"},4500),
