@@ -131,6 +131,16 @@ export type {
   OspfLsaKind, OspfLsaHeader, OspfLsaRequestIntent, OspfLsdbSummaryAnchor,
   OspfLsdbSummaryPlan, OspfLsdbSummaryResult,
 } from "./ospf-lsdb-summary.js";
+export {
+  OSPF_DD_SUMMARY_FORMAT, OSPF_DD_SUMMARY_VERSION,
+  createOspfDdSummarySession, inspectOspfDdSummarySession,
+  advanceOspfDdSummarySession, receiveOspfDdSummaryHello,
+  receiveOspfDdSummaryDescription,
+} from "./ospf-dd-summary-admission.js";
+export type {
+  OspfDdSummaryPage, OspfDdSummarySession,
+  OspfDdSummaryTrace, OspfDdSummaryResult,
+} from "./ospf-dd-summary-admission.js";
 export type { SimulationMarkerReceipt, SimulationMarkerCancellation, SimulationTransitionState, SimulationMarkerRequest, SimulationTransitionResult } from "./simulation-transitions.js";
 export type { ScheduledSimulationEvent, SimulationEventPlan, SimulationEventPlanResult, NewSimulationEvent } from "./simulation-clock.js";
 export { queryServiceEnabled, queryListeningPort, queryListenerServiceState, queryHostStackView } from "./service-engine.js";
