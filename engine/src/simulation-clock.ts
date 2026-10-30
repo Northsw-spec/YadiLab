@@ -56,7 +56,7 @@ function fail(plan: SimulationEventPlan, code: string): SimulationEventPlanResul
 function validSource(state: EngineState): boolean {
   return typeof state?.scenarioId === "string" && state.scenarioId.length > 0
     && typeof state.scenarioHash === "string" && state.scenarioHash.length > 0
-    && integer(state.stateRevision) && !!state.resources;
+    && integer(state.stateRevision) && typeof state.resources === "object" && state.resources !== null && !Array.isArray(state.resources);
 }
 
 /** Create a fresh plan bound to one authoritative Engine snapshot. */
@@ -91,7 +91,8 @@ export function inspectSimulationEventPlan(plan: SimulationEventPlan, state: Eng
   const sequences = new Set<number>();
   let previous: ScheduledSimulationEvent | undefined;
   for (const event of plan.pending) {
-    if (!event || !eventIdPattern.test(event.eventId) || !eventKindPattern.test(event.kind)
+    if (!event || typeof event.eventId !== "string" || typeof event.kind !== "string"
+      || !eventIdPattern.test(event.eventId) || !eventKindPattern.test(event.kind)
       || !integer(event.atMs) || event.atMs < plan.nowMs
       || !integer(event.sequence) || event.sequence >= plan.nextSequence
       || (event.targetResourceId !== undefined && (typeof event.targetResourceId !== "string"
@@ -114,7 +115,8 @@ export function scheduleSimulationEvent(
 ): SimulationEventPlanResult {
   const invalid = inspectSimulationEventPlan(plan, state);
   if (invalid) return fail(plan, invalid);
-  if (!event || !eventIdPattern.test(event.eventId) || !eventKindPattern.test(event.kind)
+  if (!event || typeof event.eventId !== "string" || typeof event.kind !== "string"
+    || !eventIdPattern.test(event.eventId) || !eventKindPattern.test(event.kind)
     || !integer(event.atMs) || event.atMs < plan.nowMs
     || (event.targetResourceId !== undefined && (typeof event.targetResourceId !== "string"
       || !Object.prototype.hasOwnProperty.call(state.resources, event.targetResourceId)))) {

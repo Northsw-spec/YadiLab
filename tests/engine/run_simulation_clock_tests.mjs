@@ -37,6 +37,10 @@ rejected(scheduleSimulationEvent(plan, state, {eventId:"bad",kind:"TIMER",atMs:N
 rejected(scheduleSimulationEvent(plan, state, {eventId:"bad2",kind:"TIMER",atMs:5.5}), "SIM_CLOCK_EVENT_INVALID");
 rejected(scheduleSimulationEvent(plan, state, {eventId:"bad3",kind:"TIMER",atMs:5,targetResourceId:"__unknown__"}), "SIM_CLOCK_EVENT_INVALID");
 rejected(scheduleSimulationEvent(plan, state, {eventId:"bad4",kind:"protocol event",atMs:5}), "SIM_CLOCK_EVENT_INVALID");
+rejected(scheduleSimulationEvent(plan, state, {eventId:123,kind:"TIMER",atMs:5}), "SIM_CLOCK_EVENT_INVALID");
+rejected(scheduleSimulationEvent(plan, state, {kind:"TIMER",atMs:5}), "SIM_CLOCK_EVENT_INVALID");
+rejected(scheduleSimulationEvent(plan, state, {eventId:"good",kind:undefined,atMs:5}), "SIM_CLOCK_EVENT_INVALID");
+equal(inspectSimulationEventPlan({...plan,pending:plan.pending.map((e,i)=>i===0?{...e,eventId:123}:e)},state), "SIM_CLOCK_PLAN_INVALID", "reject non-string restored event identity");
 rejected(cancelSimulationEvent(plan, state, "absent"), "SIM_CLOCK_EVENT_NOT_FOUND");
 rejected(advanceSimulationEventPlan(plan, state, -1), "SIM_CLOCK_TIME_INVALID");
 rejected(advanceSimulationEventPlan(plan, state, 0.5), "SIM_CLOCK_TIME_INVALID");
