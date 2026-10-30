@@ -93,7 +93,7 @@ assert.throws(()=>createOspfLsdbSummaryPlan(state,ex,[h1("10.0.0.1",{lsaType:5})
   /OSPF_LSDB_LOCAL_HEADERS_INVALID/);n++;
 const local = [h2("192.0.2.1",{lsSequenceNumber:10}),old,
   h1("10.0.0.3",{lsSequenceNumber:9}),
-  h2("192.0.2.4",{lsAge:1001,lsChecksum:200})];
+  h2("192.0.2.4",{lsAge:1001,lsChecksum:250})];
 const plan=createOspfLsdbSummaryPlan(state,ex,local);
 eq(plan.localHeaders.map(x=>x.lsaType),[1,1,2,2],"local headers canonical sorted");
 eq(plan.batchIds,[],"starts with no pages");
