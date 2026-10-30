@@ -147,6 +147,16 @@ export {
 } from "./ospf-lsa-binary.js";
 export type { OspfLsaBinaryResult } from "./ospf-lsa-binary.js";
 export {
+  OSPF_LSA_BODY_FORMAT, OSPF_LSA_BODY_VERSION,
+  OSPF_LSA_BODY_MAX_ROUTER_LINKS, OSPF_LSA_BODY_MAX_TOS_PER_LINK,
+  OSPF_LSA_BODY_MAX_ATTACHED_ROUTERS, parseOspfLsaBody,
+} from "./ospf-lsa-body.js";
+export type {
+  OspfRouterLinkKind, OspfRouterTosMetric, OspfRouterLinkBody,
+  OspfRouterLsaBody, OspfNetworkLsaBody, OspfParsedLsaBody,
+  OspfLsaBodyResult,
+} from "./ospf-lsa-body.js";
+export {
   OSPF_LSR_FORMAT, OSPF_LSR_VERSION, OSPF_LSR_MAX_PACKET_REQUESTS,
   OSPF_LSR_MAX_UPDATE_LSAS, OSPF_LSR_MAX_RETRIES,
   OSPF_LSR_MAX_ADVANCE_RETRIES, inspectOspfLsRequestSession,
