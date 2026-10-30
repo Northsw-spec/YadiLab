@@ -1,0 +1,29 @@
+# CONVERGENCE — RFC 2328 DD M-bit completion model
+
+## Authority and source
+
+- Base protected GitHub `main=7c09ac19663429a5247931cf4dcab6f3d8174c4a`; tree `ec3f0ac1026d83f0a26a694bf8dd0b87a36b23f3`.
+- Normative source: RFC 2328 §§10.2, 10.3, 10.6, 10.8. Master generates `ExchangeDone` only when its entire local DD summary was transmitted and acknowledged and received M=0; slave generates `ExchangeDone` after sending the corresponding local M=0 response to a new master M=0 DD. §10.3 then distinguishes `Full` from `Loading` based on the Link State Request list.
+- **Scope boundary:** the new `engine/src/ospf-dd-exchange-done.ts` sidecar emits `DD_EXCHANGE_DONE_MODEL`, **not an authenticated on-wire ExchangeDone** and **never a real Loading/Full neighbor state**. Actual peer packet validation, DD generation, a writable LSDB, LSA installation, flooding, LS Ack, SPF or routing changes are not modeled. Existing core modules remain unchanged.
+
+## Deterministic virtual local DD summary sending
+
+1. Caller creates a model at a fresh `NegotiationDone` snapshot, with no accepted Exchange DD pages, validated local Type 1/2 LSA headers and an explicit local page size of 1–32. Freeze the same local LSA header snapshot as the previously validated summary sidecar. Reject local `MaxAge=3600` summary headers instead of silently listing them (RFC §10.3 assigns these to retransmission handling, which remains unimplemented).
+2. The model constructs virtual local DD summary *TX intents*, never real packets. Master starts with the first deterministic page at sequence `agreed+1`; slave produces a virtual local DD response only on a newly accepted master Exchange DD. The existing ExStart negotiation exchange is not falsely represented as an emitted full DD summary packet. The local M-bit is `true` iff more local headers remain after that page; once exhausted, subsequent necessary DD responses are empty with M=0.
+3. Every newly admitted remote DD passes the existing unmodified sequence, peer identity, MTU, Options, checksum-independent Type 1/2 header and duplicate gates. Duplicates do not advance or duplicate the local page ledger; slave repeats its prior response intent while master ignores the duplicate.
+4. Master completion requires the last already-planned local M=0 DD to be acknowledged by the slave with matching sequence and received M=0. Master must not treat a locally finished summary as completion while remote M=1, or while its own final M=0 message is still unacknowledged. If unfinished, a next local DD intent is created at the new sequence. A mechanical extra `DD_NEW_TX_INTENT` from the legacy sequence-only oracle is explicitly suppressed at the successful final acknowledgement rather than claimed as an actual transmission.
+5. Slave completion requires accepted remote M=0 and a newly planned matching-sequence local response with M=0, at which point virtual `DD_EXCHANGE_DONE_MODEL` is emitted exactly once. Previously observed remote M=0 cannot revert to M=1; this is conservatively rejected. A subsequent nonduplicate DD after local model completion is rejected as unsupported (not misrepresented as an RFC-verified on-wire reset). Duplicate final DD responses are still modeled.
+6. After `DD_EXCHANGE_DONE_MODEL`, if the frozen request-intent list is nonempty, emit `DD_LOADING_REQUIRED_MODEL`. If empty, emit `DD_EMPTY_REQUESTS_UNVERIFIED`, **not** Full. Even a valid empty list does not prove LSA installs, outgoing summary physical transmission, authenticated adjacency, or actual route insertion. This is the required safety boundary before a later independent `LOADING` and `FULL` implementation.
+7. All local TX intents are reconstructed deterministically on state inspection from frozen local header list, page size, negotiated sequence and accepted remote page timestamps. A forged M-bit, header list, sequence, timestamp, counter, changed Engine revision or wrong role fails closed. Guard at most 17 local intents; counter and virtual time bounds inherited from prior Exchange sidecar. A new ExStart renegotiation starts a fresh local summary plan.
+8. One-way Hello, Dead timer and SeqNumberMismatch clear accumulated DD TX intents and completion status. Parent Hello/Dead virtual clock remains authoritative. The parent pure DD sidecar may internally track a mechanical retransmit timer after terminal acknowledgement; the wrapper filters this *synthetic* core intent after its own modeled ExchangeDone. This is not a real network traffic send/cancellation implementation.
+9. All operations are pure over immutable EngineState snapshots; no topology modification, route mutation, protocol socket, network packet or UI claim of Full adjacency.
+
+## Verification
+
+- Public API exported via `engine/src/index.ts`; test command `npm run test:ospf-dd-mbit-done` included unconditionally in `yadilab-required-ci` and separately in `linux-attested`.
+- Test cases: master no local data, master multi-page local summary, local M=0 but remote M=1, slave M-bit driven responses, duplicate handling, terminal fresh packet rejection, remote M-bit regression, pending Link State Request classification, explicit No-Full status, adversarial forged local page fields, one-way/Dead cleanup, stale Engine revision and 1,000 byte-identical replays.
+- Record actual PR-head and postmerge run SHA, job log PASS and release artifact IDs before claiming `CI_PASS`. Existing Ubuntu CI provides the agreed test evidence; no claim of native Parrot execution.
+
+## Next checkpoints
+
+A real `LOADING` state must be grounded in completion of valid DD summaries and correct Link State Request update/ack semantics. A legitimate `FULL` state and dynamic route/LSA topology require real LSA body semantics, checksum validation, database mutation, proper flooding and separately proven SPF and Engine truth. Those tasks are **NOT_RUN** here.

@@ -159,6 +159,17 @@ export type {
   OspfLsRequestSession, OspfLsRequestTrace, OspfLsRequestResult,
   OspfLsUpdateObservation,
 } from "./ospf-lsr-lifecycle.js";
+export {
+  OSPF_DD_FINISH_FORMAT, OSPF_DD_FINISH_VERSION,
+  OSPF_DD_FINISH_MAX_LOCAL_PAGES,
+  createOspfDdFinishSession, inspectOspfDdFinishSession,
+  receiveOspfDdFinishDescription, receiveOspfDdFinishHello,
+  advanceOspfDdFinishSession,
+} from "./ospf-dd-exchange-done.js";
+export type {
+  OspfDdLocalSummaryIntent, OspfDdFinishSession,
+  OspfDdFinishTrace, OspfDdFinishResult, OspfDdFinishEvent,
+} from "./ospf-dd-exchange-done.js";
 export type { SimulationMarkerReceipt, SimulationMarkerCancellation, SimulationTransitionState, SimulationMarkerRequest, SimulationTransitionResult } from "./simulation-transitions.js";
 export type { ScheduledSimulationEvent, SimulationEventPlan, SimulationEventPlanResult, NewSimulationEvent } from "./simulation-clock.js";
 export { queryServiceEnabled, queryListeningPort, queryListenerServiceState, queryHostStackView } from "./service-engine.js";
