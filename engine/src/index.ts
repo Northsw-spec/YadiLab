@@ -141,6 +141,24 @@ export type {
   OspfDdSummaryPage, OspfDdSummarySession,
   OspfDdSummaryTrace, OspfDdSummaryResult,
 } from "./ospf-dd-summary-admission.js";
+export {
+  OSPF_LSA_BINARY_FORMAT, OSPF_LSA_BINARY_VERSION, OSPF_LSA_MAX_BYTES,
+  verifyOspfLsaBinary,
+} from "./ospf-lsa-binary.js";
+export type { OspfLsaBinaryResult } from "./ospf-lsa-binary.js";
+export {
+  OSPF_LSR_FORMAT, OSPF_LSR_VERSION, OSPF_LSR_MAX_PACKET_REQUESTS,
+  OSPF_LSR_MAX_UPDATE_LSAS, OSPF_LSR_MAX_RETRIES,
+  OSPF_LSR_MAX_ADVANCE_RETRIES, inspectOspfLsRequestSession,
+  createOspfLsRequestSession, issueOspfLsRequest,
+  advanceOspfLsRequestSession, receiveOspfLsRequestHello,
+  receiveOspfLsRequestUpdate,
+} from "./ospf-lsr-lifecycle.js";
+export type {
+  OspfLsRequestCompletion, OspfLsRequestOutstanding,
+  OspfLsRequestSession, OspfLsRequestTrace, OspfLsRequestResult,
+  OspfLsUpdateObservation,
+} from "./ospf-lsr-lifecycle.js";
 export type { SimulationMarkerReceipt, SimulationMarkerCancellation, SimulationTransitionState, SimulationMarkerRequest, SimulationTransitionResult } from "./simulation-transitions.js";
 export type { ScheduledSimulationEvent, SimulationEventPlan, SimulationEventPlanResult, NewSimulationEvent } from "./simulation-clock.js";
 export { queryServiceEnabled, queryListeningPort, queryListenerServiceState, queryHostStackView } from "./service-engine.js";
