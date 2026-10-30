@@ -174,7 +174,9 @@ function rebind(
   exchange: OspfP2pExchangeSession, pages: readonly OspfDdSummaryPage[],
 ): OspfDdSummarySession | null {
   if (exchange.dd.phase !== "EXCHANGE") {
-    return { ...previous, exchange, pages: [], plan: undefined };
+    // exactOptionalPropertyTypes requires truly removing the optional plan.
+    const { plan: _discarded, ...reset } = previous;
+    return { ...reset, exchange, pages: [] };
   }
   const plan = rebuildPlan(state, exchange, previous.localHeaders, pages);
   return plan ? { ...previous, exchange, pages, plan } : null;
