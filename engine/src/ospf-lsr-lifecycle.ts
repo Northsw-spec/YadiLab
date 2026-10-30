@@ -19,8 +19,8 @@ export const OSPF_LSR_FORMAT = "yadilab.engine.ospfv2-lsr-lifecycle" as const;
 export const OSPF_LSR_VERSION = "1.0.0" as const;
 export const OSPF_LSR_MAX_PACKET_REQUESTS = 8 as const;
 export const OSPF_LSR_MAX_UPDATE_LSAS = 8 as const;
-export const OSPF_LSR_MAX_RETRIES = 16 as const;
-export const OSPF_LSR_MAX_ADVANCE_RETRIES = 16 as const;
+export const OSPF_LSR_MAX_RETRIES = 64 as const;
+export const OSPF_LSR_MAX_ADVANCE_RETRIES = 64 as const;
 const SOURCE = "SYNTHETIC_OSPFV2_LSR_LIFECYCLE_MODEL" as const;
 
 export interface OspfLsRequestCompletion {
