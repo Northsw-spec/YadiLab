@@ -135,7 +135,7 @@ rejected(mutation(routerBytes,[[33,17]]),"OSPF_ROUTER_LSA_TOS_LIMIT");
 rejected(mutation(routerBytes,[[73,1]]),"OSPF_ROUTER_LSA_TOS_TRUNCATED");
 rejected(mutation(routerBytes,[[36,0]]),"OSPF_ROUTER_LSA_TOS_INVALID");
 rejected(mutation(routerBytes,[[37,1]]),"OSPF_ROUTER_LSA_TOS_INVALID");
-rejected(mutation(routerBytes,[[52,0xf7]]),"OSPF_ROUTER_LSA_STUB_MASK_INVALID");
+rejected(mutation(routerBytes,[[56,0xf7]]),"OSPF_ROUTER_LSA_STUB_MASK_INVALID");
 
 // One extra repeated TOS entry in the first link, with all lengths and
 // Fletcher recomputed. Invalid because the same TOS repeats on that link.
@@ -152,7 +152,7 @@ rejected(mutation(networkBytes,[[28,0],[29,0],[30,0],[31,0]]),
   "OSPF_NETWORK_LSA_ROUTER_INVALID");
 rejected(mutation(networkBytes,[[24,10],[25,0],[26,0],[27,10]]),
   "OSPF_NETWORK_LSA_DR_NOT_LISTED");
-rejected(bytes(NETWORK_TWO).slice(0,24),"OSPF_LSA_NETWORK_BODY_INVALID");
+rejected(reseal(bytes(NETWORK_TWO).slice(0,24)),"OSPF_LSA_NETWORK_BODY_INVALID");
 const malformedNetwork=[...networkBytes,1];malformedNetwork[19]=33;
 rejected(malformedNetwork,"OSPF_LSA_NETWORK_BODY_INVALID");
 
@@ -166,8 +166,8 @@ eq(verifyOspfLsaBinary(mutation(networkBytes,[[20,0xf7]])).ok,true,
 // A host route (/32) as a stub network is explicitly valid in RFC 2328.
 // Mutate the existing stub to /32 and a host Link ID, resealing its checksum.
 const host=mutation(routerBytes,[
-  [48,198],[49,51],[50,100],[51,10],
-  [52,255],[53,255],[54,255],[55,255],
+  [52,198],[53,51],[54,100],[55,10],
+  [56,255],[57,255],[58,255],[59,255],
 ]);
 const hostParsed=pass(host,"RFC /32 host route as stub link");
 eq(hostParsed.links[2].linkData,"255.255.255.255","host network mask preserved");
