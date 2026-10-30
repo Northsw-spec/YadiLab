@@ -8,7 +8,7 @@ import { evaluateBuildReadiness, scanRemoteRuntimeReferences } from "./dependenc
 import { buildResolvedBundleInventory, writeInventoryArtifacts } from "./third-party-notices-lib.mjs";
 import { attestInstalledBrowserToolchain } from "./browser-toolchain-attestation-node.mjs";
 import { renderBrowserIndex } from "./browser-index-template.mjs";
-import { readReleaseContract, assertBundledRelease } from "./release-contract.mjs";
+import { readReleaseContract, assertBundledRelease, assertGitBundleInputs } from "./release-contract.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const release = readReleaseContract(root);
@@ -45,6 +45,8 @@ const result = await esbuild.build({
   loader: { ".json": "json" },
 });
 
+// Check actual esbuild dependency graph: local source is tracked in this checkout.
+assertGitBundleInputs(root, result.metafile);
 const resolvedInventory = buildResolvedBundleInventory(root, result.metafile);
 writeInventoryArtifacts(root, resolvedInventory, {
   inventoryPath: path.join(temp, "third-party-inventory.json"),

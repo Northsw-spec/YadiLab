@@ -1,0 +1,78 @@
+name: AUDIT-006 Git-indexed release inputs and mounted DOM identity
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/release-contract.mjs'
+      - 'scripts/build_browser_app.mjs'
+      - 'scripts/verify_release_identity.mjs'
+      - 'tests/browser/run_release_identity_tests.mjs'
+      - 'tests/acceptance/run_release_identity_real_browser.py'
+      - 'ui/app/main.mjs'
+      - 'README.md'
+      - 'docs/CURRENT_PROJECT_STATUS.md'
+      - 'docs/VERSION005_RELEASE_IDENTITY.md'
+      - 'docs/architecture/AUDIT006_RELEASE_HARDENING_ORACLES.md'
+      - '.github/workflows/audit006-release-security.yml'
+      - '.github/workflows/release-identity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit006-real-release-provenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked npm dependencies
+        run: npm ci
+      - name: Adversarial Git source provenance and release identity unit tests
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          npm run test:release-promotion
+          npm run test:network-topology-import
+          npm run test:imported-probes
+      - name: Build actual browser from checked Git head
+        env:
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+          node scripts/verify_release_identity.mjs
+      - name: Install isolated test-only Chromium
+        run: |
+          set -Eeuo pipefail
+          python3 -m venv /tmp/audit006-venv
+          /tmp/audit006-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/audit006-venv/bin/python -m playwright install --with-deps chromium
+      - name: Actual mounted UI identity and fake-token negative acceptance
+        env:
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18995 --bind 127.0.0.1 --directory ui/dist >/tmp/audit006-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18995/build-marker.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18995/build-marker.json >/dev/null
+          /tmp/audit006-venv/bin/python tests/acceptance/run_release_identity_real_browser.py \
+            --url http://127.0.0.1:18995/ --expected-commit "$YADILAB_EXPECTED_COMMIT" \
+            --evidence-dir /tmp/audit006-evidence
+      - name: Persist independent browser identity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit006-premerge-real-chromium
+          path: /tmp/audit006-evidence/
+          if-no-files-found: ignore

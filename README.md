@@ -1,4 +1,11 @@
-# YadiLab — v1.8.0-dev.12 (IMPORT-002)
+# YadiLab — current GitHub development source
+
+**Current authoritative version, checkpoint and description:** read `package.json` (`version` and `yadilabRelease`). This README is not an independent release authority; the current implementation is the HEAD of `main`. See [Current project status](docs/CURRENT_PROJECT_STATUS.md) for an actively maintained project index and the GitHub Actions/branch protection gates.
+
+## Historical project notes — retained for provenance only
+
+The IMPORT-002 description below is an archived milestone, **not** the current version or an instruction to restore a previous checkout.
+
 
 > **SOURCE AUTHORITY (MANDATORY):** Only the current `main` branch of this GitHub repository is the source-code base. Historical version/ZIP/checkpoint references in older text below are historical information **only**, not instructions to restore old code. All new code, tests and coding checkpoints must be committed to GitHub; Google Drive is for non-code research and planning. See [AGENTS.md](AGENTS.md). The current version/checkpoint is defined by `package.json`, not this historical README heading.
 

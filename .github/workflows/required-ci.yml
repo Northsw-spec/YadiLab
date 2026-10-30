@@ -1,0 +1,67 @@
+name: YadiLab required CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  yadilab-required-ci:
+    name: yadilab-required-ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Adversarial release source and existing regression gates
+        run: |
+          set -Eeuo pipefail
+          npm run test:release-identity
+          npm run test:release-promotion
+          npm run test:network-topology-import
+          npm run test:imported-probes
+      - name: Compile and verify exact Git-indexed browser release
+        env:
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          npm run build:browser
+          node scripts/verify_browser_release.mjs
+          node scripts/verify_release_identity.mjs
+      - name: Prepare independent real Chromium
+        run: |
+          set -Eeuo pipefail
+          python3 -m venv /tmp/yadilab-required-ci-venv
+          /tmp/yadilab-required-ci-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/yadilab-required-ci-venv/bin/python -m playwright install --with-deps chromium
+      - name: Real DOM identity and spoofed-JavaScript rejection
+        env:
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18995 --bind 127.0.0.1 --directory ui/dist >/tmp/yadilab-required-ci-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18995/build-marker.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18995/build-marker.json >/dev/null
+          /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_release_identity_real_browser.py \
+            --url http://127.0.0.1:18995/ --expected-commit "$YADILAB_EXPECTED_COMMIT" \
+            --evidence-dir /tmp/yadilab-required-ci-evidence
+      - name: Preserve bounded verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yadilab-required-ci-evidence
+          path: /tmp/yadilab-required-ci-evidence/
+          if-no-files-found: ignore
+          retention-days: 7

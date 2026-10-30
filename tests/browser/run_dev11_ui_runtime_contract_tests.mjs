@@ -16,7 +16,7 @@ const check = (value, message) => { assertions += 1; assert.ok(value, message); 
 const equal = (actual, expected, message) => { assertions += 1; assert.equal(actual, expected, message); };
 
 check(/^1\.8\.0-dev\.\d+$/.test(packageJson.version) && /^VERSION-\d+$/.test(packageJson.yadilabRelease.checkpoint), "version and checkpoint are source-defined");
-check(main.includes('data-yadilab-build-version": releaseIdentity.version') && main.includes('`v${releaseIdentity.version}`'), "IMPORT-004 version marker is visible in the app shell");
+check(main.includes('data-yadilab-build-version": releaseIdentity.version') && main.includes('"data-source-commit": releaseIdentity.sourceCommit') && main.includes('`v${releaseIdentity.version} · ${releaseIdentity.sourceCommit.slice(0,12)}`'), "Visible app version and exact Git source identity are derived from release contract");
 
 // Interaction contracts: topology stays first, right-button pan is explicit,
 // blank left-drag remains selection-only in Builder, and context menus cannot

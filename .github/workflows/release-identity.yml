@@ -54,6 +54,35 @@ jobs:
           YADILAB_TEST_ONCE: '1'
           YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
         run: bash start-yadilab.sh
+      - name: Prepare independent Chromium release attestation
+        run: |
+          set -Eeuo pipefail
+          python3 -m venv /tmp/yadilab-release-dom-venv
+          /tmp/yadilab-release-dom-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          /tmp/yadilab-release-dom-venv/bin/python -m playwright install --with-deps chromium
+      - name: Verify exact mounted UI and reject token-only JavaScript
+        env:
+          YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          python3 -m http.server 18995 --bind 127.0.0.1 --directory ui/dist >/tmp/yadilab-release-dom-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 70); do
+            if curl -fsS http://127.0.0.1:18995/build-marker.json >/dev/null 2>&1; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:18995/build-marker.json >/dev/null
+          /tmp/yadilab-release-dom-venv/bin/python tests/acceptance/run_release_identity_real_browser.py \
+            --url http://127.0.0.1:18995/ --expected-commit "$YADILAB_EXPECTED_COMMIT" \
+            --evidence-dir /tmp/yadilab-release-dom-evidence
+      - name: Preserve mounted release identity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit006-mounted-release-identity
+          path: /tmp/yadilab-release-dom-evidence/
+          if-no-files-found: ignore
       - name: Package built Linux app
         run: |
           mkdir -p artifact/YadiLab_VERSION005_Linux_x86_64
