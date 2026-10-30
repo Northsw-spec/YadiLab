@@ -170,6 +170,17 @@ export type {
   OspfDdLocalSummaryIntent, OspfDdFinishSession,
   OspfDdFinishTrace, OspfDdFinishResult, OspfDdFinishEvent,
 } from "./ospf-dd-exchange-done.js";
+export {
+  OSPF_LOADING_FORMAT, OSPF_LOADING_VERSION,
+  createOspfLoadingSession, inspectOspfLoadingSession,
+  receiveOspfLoadingDescription, advanceOspfLoadingSession,
+  receiveOspfLoadingHello, issueOspfLoadingRequest,
+  receiveOspfLoadingUpdate,
+} from "./ospf-loading-coordinator.js";
+export type {
+  OspfLoadingPhase, OspfLoadingSession, OspfLoadingTrace,
+  OspfLoadingEvent, OspfLoadingResult,
+} from "./ospf-loading-coordinator.js";
 export type { SimulationMarkerReceipt, SimulationMarkerCancellation, SimulationTransitionState, SimulationMarkerRequest, SimulationTransitionResult } from "./simulation-transitions.js";
 export type { ScheduledSimulationEvent, SimulationEventPlan, SimulationEventPlanResult, NewSimulationEvent } from "./simulation-clock.js";
 export { queryServiceEnabled, queryListeningPort, queryListenerServiceState, queryHostStackView } from "./service-engine.js";
