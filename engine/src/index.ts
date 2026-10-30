@@ -115,6 +115,8 @@ export { readPath, removePath, setPath } from "./path.js";
 export { createInitialEngineState, applyOperation, applyOperations } from "./state.js";
 export { SIMULATION_EVENT_PLAN_FORMAT, SIMULATION_EVENT_PLAN_SCHEMA_VERSION, SIMULATION_EVENT_QUEUE_LIMIT, createSimulationEventPlan, inspectSimulationEventPlan, scheduleSimulationEvent, cancelSimulationEvent, advanceSimulationEventPlan } from "./simulation-clock.js";
 export { SIMULATION_TRANSITION_FORMAT, SIMULATION_TRANSITION_VERSION, SIMULATION_MARKER_KIND, SIMULATION_MARKER_PROVENANCE, createSimulationTransitionState, inspectSimulationTransitionState, scheduleSimulationMarker, cancelSimulationMarker, advanceSimulationTransitions } from "./simulation-transitions.js";
+export { OSPF_P2P_FORMAT, OSPF_P2P_VERSION, OSPF_P2P_MAX_EVENTS, OSPF_P2P_MAX_ADVANCE_EVENTS, createOspfP2pSession, inspectOspfP2pSession, receiveOspfP2pHello, advanceOspfP2pSession } from "./ospf-p2p-hello.js";
+export type { OspfP2pNeighborState, OspfP2pTraceKind, OspfP2pConfig, OspfP2pHelloObservation, OspfP2pTrace, OspfP2pSession, OspfP2pResult } from "./ospf-p2p-hello.js";
 export type { SimulationMarkerReceipt, SimulationMarkerCancellation, SimulationTransitionState, SimulationMarkerRequest, SimulationTransitionResult } from "./simulation-transitions.js";
 export type { ScheduledSimulationEvent, SimulationEventPlan, SimulationEventPlanResult, NewSimulationEvent } from "./simulation-clock.js";
 export { queryServiceEnabled, queryListeningPort, queryListenerServiceState, queryHostStackView } from "./service-engine.js";
