@@ -1,0 +1,30 @@
+# CONVERGENCE — RFC 2328 Loading coordination (model-only)
+
+## Authority and canonical starting point
+
+- Protected GitHub `main=d69e29cafa16b3378e652165192f10107ebbff4c`, tree `1cdd62890fbfa960b32e7f1cfe9f53ee3286a47f`. Do not use prior ZIPs as code authority.
+- Normative source: [RFC 2328 §10.3, neighbor FSM](https://www.rfc-editor.org/rfc/rfc2328.html#section-10.3), [§10.9, Link State Request](https://www.rfc-editor.org/rfc/rfc2328.html#section-10.9). ExchangeDone with a nonempty request list enters Loading; after all outstanding requested LSAs have been received, LoadingDone enters Full. With an empty request list at ExchangeDone, the RFC enters Full immediately.
+- **This checkpoint does not claim actual RFC Full.** A raw LSA Fletcher checksum and an intent ledger are insufficient to establish a real packet source, installed LSDB, complete link-state topology, flooding, link ACK, SPF or working routes. It deliberately exposes only **model-scoped** terminal signals. There is no field or event called Full in the coordinator.
+
+## Design: source-bound, fail-closed, pure coordinator
+
+- New additive module `engine/src/ospf-loading-coordinator.ts` consumes two previously independently validated pure sidecars: `OspfDdFinishSession` (local and remote DD M-bit, sequence, snapshot-bound `exchangeDone`) and `OspfLsRequestSession` (single outstanding synthetic LSR, RxmtInterval, checksum-verified LSA response bytes and frozen request identities).
+- The coordinator starts only at fresh NegotiationDone, before any accepted remote DD pages. DD and LSR views must be **JSON-identical complete summary snapshots**, not just the same Router IDs or LSA count. Correlation covers scenario source/hash, Engine revision, neighbor/area, DD sequence, virtual time, remote header list, local list, and all existing versioned ledgers. Every API call validates both parents and the exact cross-view equality first.
+- Progression is `EXCHANGE_MODEL` -> `LOADING_MODEL` **only when** `OspfDdFinishSession.exchangeDone` and its accepted DD summary snapshot has a nonempty request-intent list. With no requests, phase is `NO_LOADING_REQUIRED_MODEL`; this is not Full and emits only `NO_LOADING_REQUIRED_UNVERIFIED_MODEL`.
+- In `LOADING_MODEL`, the coordinator may issue one synthetic request **intent** through the existing LSR sidecar, which already handles retry deadlines, bounded request batches, and full per-LSA byte/checksum/advertised-instance validation. No request or update is allowed before DD completion or after all requests have been satisfied.
+- Only verified raw LSA byte responses for the **currently outstanding** requested identities can remove a request. When and only when the complete source-bound request-intent list is exhausted, `LOADING_DONE_ELIGIBLE_MODEL` fires once and phase changes to `REQUESTS_SATISFIED_MODEL`. This is a **qualifying model signal**, not an actual Full neighbor transition. An invalid Fletcher checksum, unexpected identity, foreign area/peer, stale Engine snapshot or wrong ordering cannot create this signal.
+- DD reception, Hello reception, virtual time advancement and LSR updates coordinate both independent parent models against **one same virtual clock**. Mismatching resulting summary snapshots fail atomically with the original unchanged session. A one-way Hello, Dead expiration, or SeqNumberMismatch tears down request intents and previously verified receipts, resets to `EXCHANGE_MODEL`, and emits `LOADING_RESET_MODEL`. Fresh ExStart must reestablish an Exchange; old receipts never resume automatically.
+- Request completion is checked on every read from the original immutable source-bound header list and the saved checksummed bytes. A forged terminal phase, missing completion, mismatched DD/LSR virtual clock or checksum-corrupted receipt is detected before any operation. EngineState and routing truth are never modified by the coordinator.
+- Model scope is intentionally only P2P, bounded Type 1 and Type 2 metadata, one virtual neighbor, and synthetic externally admitted LSA updates. A `LOADING_MODEL` phase is not evidence of a network capture or successful RIB/LSDB synchronization. No actual protocol packet or real transport is constructed.
+
+## Regression gates
+
+- Source: `engine/src/ospf-loading-coordinator.ts`, public Engine API exports in `engine/src/index.ts`.
+- Tests: `tests/engine/run_ospf_loading_coordinator_tests.mjs`; `npm run test:ospf-loading-coordinator`, unconditionally executed by required PR `yadilab-required-ci` **and** the independent exact-merge-sha Linux release workflow.
+- Positive: both master and slave DD completion, two consecutively issued single-request LSR intents, exact virtual retry deadline, Fletcher-verified LSA receipts, progress remaining count, one terminal completion event, empty-request skip without fabricated Full, duplicate prevention and same-clock Hello advancement.
+- Negative: premature request/update, checksum-corrupt response, older LSA, unknown peer/area, stale Engine revision, DD interface MTU and sequence mismatches, one-way/Dead reset of outstanding or completed state, forged completion status, missing receipts, mismatched DD/LSR snapshots, and invariant Engine reachability. 1,000 byte-identical end-to-end replay oracles across DD -> LSR -> verified replies -> terminal signal -> one-way reset.
+- CI_PASS requires actual run logs on the exact PR head and again on exact merged `main`, all required checks SUCCESS, and independent real Chromium/launcher acceptance with release artifacts. Manual Parrot execution is NOT_RUN unless separately requested.
+
+## Deferred and safety-critical
+
+The precise *RFC-standard* LoadingDone-to-Full transition cannot be represented as a verified live neighbor until the full LSA body and topology semantics, trusted packet admission, LSDB contents/installation, update/ACK/flooding, adjacency reset timing, real route computation/installation and negative Engine truth oracles are independently implemented and tested. These are separate follow-up checkpoints; do not silently promote `REQUESTS_SATISFIED_MODEL` or `NO_LOADING_REQUIRED_MODEL` to actual Full.

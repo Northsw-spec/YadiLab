@@ -139,7 +139,7 @@ export function inspectOspfLsRequestSession(
 }
 export function createOspfLsRequestSession(
   state: EngineState, summary: OspfDdSummarySession,
-  maxPerPacket = OSPF_LSR_MAX_PACKET_REQUESTS,
+  maxPerPacket: number = OSPF_LSR_MAX_PACKET_REQUESTS,
 ): OspfLsRequestSession {
   if (!Number.isInteger(maxPerPacket) || maxPerPacket < 1
     || maxPerPacket > OSPF_LSR_MAX_PACKET_REQUESTS
