@@ -28,6 +28,7 @@ jobs:
           npm run test:network-topology-import
           npm run test:imported-probes
           npm run test:simulation-clock
+          npm run test:simulation-transitions
       - name: Compile and verify exact Git-indexed browser release
         env:
           YADILAB_EXPECTED_COMMIT: ${{ github.sha }}

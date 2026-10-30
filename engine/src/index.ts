@@ -114,6 +114,8 @@ export { truthAll, truthAny, truthEquals, truthNot } from "./truth.js";
 export { readPath, removePath, setPath } from "./path.js";
 export { createInitialEngineState, applyOperation, applyOperations } from "./state.js";
 export { SIMULATION_EVENT_PLAN_FORMAT, SIMULATION_EVENT_PLAN_SCHEMA_VERSION, SIMULATION_EVENT_QUEUE_LIMIT, createSimulationEventPlan, inspectSimulationEventPlan, scheduleSimulationEvent, cancelSimulationEvent, advanceSimulationEventPlan } from "./simulation-clock.js";
+export { SIMULATION_TRANSITION_FORMAT, SIMULATION_TRANSITION_VERSION, SIMULATION_MARKER_KIND, SIMULATION_MARKER_PROVENANCE, createSimulationTransitionState, inspectSimulationTransitionState, scheduleSimulationMarker, cancelSimulationMarker, advanceSimulationTransitions } from "./simulation-transitions.js";
+export type { SimulationMarkerReceipt, SimulationMarkerCancellation, SimulationTransitionState, SimulationMarkerRequest, SimulationTransitionResult } from "./simulation-transitions.js";
 export type { ScheduledSimulationEvent, SimulationEventPlan, SimulationEventPlanResult, NewSimulationEvent } from "./simulation-clock.js";
 export { queryServiceEnabled, queryListeningPort, queryListenerServiceState, queryHostStackView } from "./service-engine.js";
 export { queryTcpStateMachine } from "./tcp-engine.js";
