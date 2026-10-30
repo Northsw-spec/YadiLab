@@ -113,6 +113,8 @@ export { derivePathMtu, evaluateMtuAtEgress } from "./mtu-engine.js";
 export { truthAll, truthAny, truthEquals, truthNot } from "./truth.js";
 export { readPath, removePath, setPath } from "./path.js";
 export { createInitialEngineState, applyOperation, applyOperations } from "./state.js";
+export { SIMULATION_EVENT_PLAN_FORMAT, SIMULATION_EVENT_PLAN_SCHEMA_VERSION, SIMULATION_EVENT_QUEUE_LIMIT, createSimulationEventPlan, inspectSimulationEventPlan, scheduleSimulationEvent, cancelSimulationEvent, advanceSimulationEventPlan } from "./simulation-clock.js";
+export type { ScheduledSimulationEvent, SimulationEventPlan, SimulationEventPlanResult, NewSimulationEvent } from "./simulation-clock.js";
 export { queryServiceEnabled, queryListeningPort, queryListenerServiceState, queryHostStackView } from "./service-engine.js";
 export { queryTcpStateMachine } from "./tcp-engine.js";
 export { sourceDefaultGatewayVerdict, queryReachabilityWithSourceGateway } from "./source-gateway-engine.js";

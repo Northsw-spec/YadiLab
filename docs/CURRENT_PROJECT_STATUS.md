@@ -15,9 +15,12 @@
 - [#3 IMPORT-FORMATS-RESEARCH](https://github.com/Northsw-spec/YadiLab/issues/3): original research and continuous checkpoint journal. Nmap, Nessus, Ansible, draw.io, DOCX and ODT work is logged in comments. Broad importer registry is not automatically equivalent to every format adapter being supported.
 - Historical failed GitHub Actions runs represent intermediate development attempts; they are **not** current CI PASS, nor evidence of present failure if corrected before merge.
 
-## Required branch protection (repository owner action)
+## Enforced branch protection and release evidence
 
-GitHub reported `main.protected=false` and returned 403 for private-repository rulesets: `Upgrade to GitHub Pro or make this repository public`. **Do not change repository visibility simply to obtain branch rules.** With a plan supporting private-repository branch protection, in GitHub open `Settings → Branches → Add branch protection rule` (or `Settings → Rules → Rulesets`) for `main`, require PR before merge, require status checks matching the current release/build gates, require branch up to date, block force-push/deletion and restrict bypass. Add reviewed required jobs only after confirming their exact stable check names. Then independently read back protection and verify a direct push is rejected. Until then, PR-before-merge and exact-head CI review are process controls, **not GitHub-enforced controls**.
+- As verified against GitHub on 2026-10-30, the repository is **public** and main is **protected**. GitHub's branch readback lists enforced required status check `yadilab-required-ci` (GitHub Actions app), including administrator enforcement in its returned level `everyone`. That is independent of the GitHub app's 403 access to the detailed branch-protection endpoint.
+- PR #57 merged as squash to main `8e2262d951255b89683a06c49969c9e9ea6f3310` after 35/35 GitHub Actions checks succeeded on PR head `ac2748b4ff27c885ca95e150857edb0b9090f05e`. A requested protected merge was initially rejected for lack of a separate approval; the owner corrected the rule and GitHub then permitted the merge without bypass.
+- Independent post-merge [Linux release workflow run 41090438201](https://github.com/Northsw-spec/YadiLab/actions/runs/41090438201) succeeded on exact main commit, with attested browser DOM identity and saved Linux distribution artifact. This is Ubuntu CI evidence only, not native Parrot acceptance.
+- For every **new** PR, reread actual main, required check and CI results; this historical verified state is never automatic evidence that later commits are green. Keep pull requests mandatory, check current head, require successful CI, and do not force-push or delete main.
 
 ## Documentation and history
 
