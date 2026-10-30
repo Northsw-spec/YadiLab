@@ -230,6 +230,22 @@ export function receiveOspfDdFinishDescription(
       const post = inspectOspfDdFinishSession(next, state);
       return post ? fail(session, post) : { ok: true, session: next, events };
     })();
+  if (session.summary.exchange.dd.phase !== "EXCHANGE") {
+    // A SeqNumberMismatch or Dead reset may later renegotiate ExStart.
+    // Recover only a fresh Exchange (zero accepted DD pages).
+    if (accepted.session.exchange.exchange?.accepted !== 0)
+      return fail(session, "OSPF_DD_FINISH_RENEGOTIATION_INVALID");
+    let fresh: OspfDdFinishSession;
+    try {
+      fresh = createOspfDdFinishSession(state, accepted.session, session.pageSize);
+    } catch {
+      return fail(session, "OSPF_DD_FINISH_RENEGOTIATION_INVALID");
+    }
+    const first = fresh.localTx[0];
+    if (first) events.push(trace("DD_LOCAL_SUMMARY_TX_INTENT", first.atMs,
+      first.sequence, first.more, first.headers.length));
+    return { ok: true, session: fresh, events };
+  }
   const before = session.summary.pages.length;
   const after = accepted.session.pages.length;
   if (after === before) {
