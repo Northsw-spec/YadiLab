@@ -170,6 +170,19 @@ export type {
   OspfAreaLsdbReadEntry, OspfAreaLsdbReadResult, OspfAreaLsdbResult,
 } from "./ospf-area-lsdb.js";
 export {
+  OSPF_MAXAGE_FLUSH_FORMAT, OSPF_MAXAGE_FLUSH_VERSION,
+  OSPF_MAXAGE_MAX_NEIGHBORS, OSPF_MAXAGE_MAX_RETRANSMISSION_IDS,
+  OSPF_MAXAGE_MAX_REMOVAL_BATCH, OSPF_MAXAGE_INVENTORY_SOURCE,
+  inspectOspfMaxAgeInventory, evaluateOspfMaxAgeFlush,
+  removeOspfAreaMaxAgeModel,
+} from "./ospf-maxage-flush-model.js";
+export type {
+  OspfMaxAgeNeighborPhase, OspfMaxAgeLsaIdentity,
+  OspfMaxAgeNeighborDeclaration, OspfMaxAgeInventoryDeclaration,
+  OspfMaxAgeFlushBlocker, OspfMaxAgeFlushCandidate,
+  OspfMaxAgeFlushEvaluation, OspfMaxAgeFlushEvent, OspfMaxAgeFlushResult,
+} from "./ospf-maxage-flush-model.js";
+export {
   OSPF_LSR_FORMAT, OSPF_LSR_VERSION, OSPF_LSR_MAX_PACKET_REQUESTS,
   OSPF_LSR_MAX_UPDATE_LSAS, OSPF_LSR_MAX_RETRIES,
   OSPF_LSR_MAX_ADVANCE_RETRIES, inspectOspfLsRequestSession,
