@@ -34,7 +34,7 @@ function sourcePath(root, filename) {
 function indexedRegularFile(root,tracked,filename) {
   const {candidate,rel}=sourcePath(root,filename);
   if (!tracked.has(rel)) {
-    throw new Error("RELEASE_SOURCE_UNTRACKED: copied or bundled input absent from Git index");
+    throw new Error(`RELEASE_SOURCE_UNTRACKED: copied or bundled input absent from Git index: ${rel}`);
   }
   let info;
   try { info=fs.lstatSync(candidate); }
