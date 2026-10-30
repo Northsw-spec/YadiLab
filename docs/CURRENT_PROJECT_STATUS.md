@@ -8,6 +8,12 @@
 - Unit/adversarial `npm run test:release-identity` and `tests/acceptance/run_release_identity_real_browser.py` are independent evidence layers. A string `js.includes` or manifest identity alone never proves a mounted React UI.
 - The installed GitHub connector can code, commit, open PR, read checks and merge after verified tests; it **cannot change repository branch protection**. Do not describe `main` as protected until a separate GitHub readback confirms it.
 
+## Current development priority: complete network-document import
+
+**Active owner-approved execution contract:** [IMPORT-COMPLETE-001](architecture/IMPORT_COMPLETION_EXECUTION_MASTERPLAN.md), tracked by [issue #3](https://github.com/Northsw-spec/YadiLab/issues/3). Import completion takes precedence over discretionary new OSPF/SPF/convergence checkpoints. Continue from the first unfulfilled `IC-000`–`IC-110` acceptance gate using **fresh current main and actual CI**, not older research status. The already merged OSPF modules and their tests remain in place.
+
+Five active enterprise adapters (JSON, CSV, TSV, XLSX, ODS) are **not** proof of complete import support for all planned formats. Specialized GraphML, draw.io, Ansible, DOCX, ODT, Nmap and Nessus reviews are **not** universally active import adapters; actual semantics, provenance, Builder mapping and eligible modeled probes must be verified per profile. PDF, Visio, lab-project, capture and log formats have further scoped work. Do not equate a parser PASS with network truth, an automatically generated physical cable, or permission to perform real external probes.
+
 ## GitHub issues, not automatically equivalent to bugs
 
 - [#1 AUDIT-006](https://github.com/Northsw-spec/YadiLab/issues/1): original provenance defects plus remaining Masterprompt/CLI scope. Track both fixes and unresolved backlog separately.
