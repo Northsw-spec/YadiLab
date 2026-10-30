@@ -121,6 +121,16 @@ export { OSPF_DD_FORMAT, OSPF_DD_VERSION, createOspfP2pDdSession, inspectOspfP2p
 export type { OspfP2pDdConfig, OspfP2pDdObservation, OspfP2pDdReceipt, OspfP2pDdPhase, OspfP2pDdRole, OspfP2pDdTrace, OspfP2pDdSession, OspfP2pDdResult } from "./ospf-p2p-dd.js";
 export { OSPF_EXCHANGE_FORMAT, OSPF_EXCHANGE_VERSION, OSPF_EXCHANGE_MAX_ACCEPTED, OSPF_EXCHANGE_MAX_RETRANSMITS, OSPF_EXCHANGE_MAX_ADVANCE_RETRANSMITS, createOspfP2pExchangeSession, inspectOspfP2pExchangeSession, advanceOspfP2pExchangeSession, receiveOspfP2pExchangeHello, receiveOspfP2pExchangeDescription } from "./ospf-p2p-exchange.js";
 export type { OspfP2pExchangeConfig, OspfP2pExchangeRecord, OspfP2pExchangeSession, OspfP2pExchangeTrace, OspfP2pExchangeEvent, OspfP2pExchangeResult } from "./ospf-p2p-exchange.js";
+export {
+  OSPF_LSDB_SUMMARY_FORMAT, OSPF_LSDB_SUMMARY_VERSION, OSPF_LSDB_MAX_HEADERS,
+  OSPF_LSDB_MAX_BATCH_HEADERS, OSPF_LSDB_MAX_BATCHES, OSPF_LSA_MAX_AGE,
+  OSPF_LSA_MAX_AGE_DIFF, validOspfLsaHeader, compareOspfLsaHeaders,
+  createOspfLsdbSummaryPlan, inspectOspfLsdbSummaryPlan, recordOspfLsdbSummaryBatch,
+} from "./ospf-lsdb-summary.js";
+export type {
+  OspfLsaKind, OspfLsaHeader, OspfLsaRequestIntent, OspfLsdbSummaryAnchor,
+  OspfLsdbSummaryPlan, OspfLsdbSummaryResult,
+} from "./ospf-lsdb-summary.js";
 export type { SimulationMarkerReceipt, SimulationMarkerCancellation, SimulationTransitionState, SimulationMarkerRequest, SimulationTransitionResult } from "./simulation-transitions.js";
 export type { ScheduledSimulationEvent, SimulationEventPlan, SimulationEventPlanResult, NewSimulationEvent } from "./simulation-clock.js";
 export { queryServiceEnabled, queryListeningPort, queryListenerServiceState, queryHostStackView } from "./service-engine.js";
