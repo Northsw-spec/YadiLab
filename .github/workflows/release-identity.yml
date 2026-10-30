@@ -39,6 +39,7 @@ jobs:
           npm run test:ospf-lsr-fletcher
           npm run test:ospf-dd-mbit-done
           npm run test:ospf-loading-coordinator
+          npm run test:ospf-lsa-body
       - name: Build browser from exact clean Git checkout
         env:
           YADILAB_EXPECTED_COMMIT: ${{ github.sha }}
