@@ -13,6 +13,20 @@
 7. **Preserve existing functions.** Never replace a functioning subsystem just because an old document describes something else. Additive, bounded changes to the current implementation are preferred. Don't make false physical topology or Engine truth inferences from source files, scans or documents.
 8. **Release identity comes from current package and Git, not this document.** Never hard-code an old version, checkpoint, SHA or build base here. Release labels, provenance and checkpoint completion must be grounded in current GitHub metadata.
 
+## Active import-completion priority — mandatory for future conversations
+
+**Current owner-approved development order:** Finish YadiLab's scoped multi-format network-document import and visualization workflow **before starting discretionary new OSPF/SPF/convergence features**. The canonical active execution plan is [IMPORT-COMPLETE-001](docs/architecture/IMPORT_COMPLETION_EXECUTION_MASTERPLAN.md), tracked in [GitHub issue #3](https://github.com/Northsw-spec/YadiLab/issues/3). This is an implementation priority and acceptance contract, not evidence that every planned format already works.
+
+At the **start of every new YadiLab coding session**, and whenever the owner says "continue"/"fortsätt" without changing scope:
+1. Fetch **current protected main**, branch/tree SHA, `package.json`, applicable checks, the actual relevant source/tests and open PRs.
+2. Read **this AGENTS.md**, the active import masterplan and issue #3 before choosing work. Select the **first unfinished import checkpoint** based on current source and actual CI evidence, not a historical ZIP, chat memory, README, plan-status labels or old PREP documents.
+3. Implement small, separately evidenced import PRs using source-bound review, negative/security tests, actual browser and current release verification. Record checkpoint/CI/merge/release evidence and remaining work in issue #3.
+4. Preserve already implemented OSPF/SPF code, existing import adapters, Engine truth and mandatory regressions. Do not opportunistically start new OSPF/SPF milestones until the import plan's **IC-110 closeout** is verified and approved, or the owner explicitly changes priority. Security/CI/release-critical repairs are permitted exceptions; note them in issue #3.
+
+A document parser or planned registry entry never equals full import, network visualization or probe support. Imported scans, reports and observations must never be converted into fabricated physical links, current service state or Engine PASS/TRUE. Ubuntu GitHub Actions remains sufficient for automated checkpoints; do not invent native Parrot or actual-network test evidence.
+
+Updates to this active priority or its acceptance criteria must be made by reviewed, documented GitHub changes and reflected in issue #3. Root AGENTS controls developer workflow; the plan controls import sequence and semantic scope. Neither overrides fresh current main code as source authority.
+
 ## Mandatory checkpoint handoff
 
 Record the current `main` SHA at start; branch/PR URL; scope and source paths; tests with actual PASS/FAIL/NOT_RUN; CI run URL; risk or unverified items; final code commit SHA; whether `main` includes it. Do not announce delivery as finished if any code exists only in a temporary environment. Do not mix Google Drive document upload with GitHub code delivery.
