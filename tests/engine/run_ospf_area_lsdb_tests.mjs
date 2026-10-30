@@ -261,8 +261,11 @@ eq(inspectOspfAreaLsdbSession({...s,entries:[{
   "OSPF_AREA_LSDB_ENTRY_INVALID","stored corrupt Fletcher rechecked");
 eq(inspectOspfAreaLsdbSession({...s,clockMs:0},state),
   "OSPF_AREA_LSDB_ENTRY_INVALID","future receive time rejected");
+bad(receiveOspfAreaLsaBatch(s,state,
+  observe(9000,[nextRouter],"SYNC_MODEL","0.0.0.1")),
+  "OSPF_AREA_LSDB_OBSERVATION_INVALID");
 eq(inspectOspfAreaLsdbSession({...s,anchor:{...s.anchor,areaId:"0.0.0.1"}},state),
-  "OSPF_AREA_LSDB_STALE_SOURCE","tampered area anchor rejected");
+  null,"without authenticated area authority, a consistent area rebind is not detectable");
 eq(inspectOspfAreaLsdbSession(s,{...state,stateRevision:1}),
   "OSPF_AREA_LSDB_STALE_SOURCE","Engine state revision rebound refused");
 eq(inspectOspfAreaLsdbSession(s,{...state,scenarioHash:"spoof"}),
