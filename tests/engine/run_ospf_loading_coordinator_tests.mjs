@@ -159,7 +159,7 @@ eq(inspectOspfLoadingSession({...s,requests:{...s.requests,completed:[]}},state)
 eq(inspectOspfLoadingSession({...s,requests:{...s.requests,summary:loadedResult.session.requests.summary}},state),
   "OSPF_LOADING_SNAPSHOT_MISMATCH","different virtual timestamps refused");
 eq(inspectOspfLoadingSession({...s,finish:{...s.finish,exchangeDone:false}},state),
-  "OSPF_DD_FINISH_TX_LEDGER_INVALID","forged DD completion refused");
+  "OSPF_DD_FINISH_DONE_INVALID","forged DD completion refused");
 const altered=s.requests.completed.map(c=>({...c,lsaBytes:[...c.lsaBytes]}));
 altered[0].lsaBytes[22]^=1;
 eq(inspectOspfLoadingSession({...s,requests:{...s.requests,completed:altered}},state),
