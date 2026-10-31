@@ -59,6 +59,7 @@ jobs:
           npm run test:ic020-p2c6-exit
           npm run test:ic030-p1-graphml-freshness
           npm run test:ic030-p2a-drawio-candidate
+          npm run test:ic030-p2b-drawio-ui
           npm run test:simulation-clock
           npm run test:simulation-transitions
           npm run test:ospf-p2p-hello
@@ -141,6 +142,8 @@ jobs:
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_graphml_p2c_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic030_p1_graphml_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
+          /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic030_p2b_drawio_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
       - name: Preserve bounded verification evidence
         if: always()
