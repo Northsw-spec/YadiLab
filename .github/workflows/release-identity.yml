@@ -49,6 +49,7 @@ jobs:
           npm run test:ic020-p2c6-exit
           npm run test:ic030-p1-graphml-freshness
           npm run test:ic030-p2a-drawio-candidate
+          npm run test:ic030-p2b-drawio-ui
           npm run test:dev11-ui
           npm run test:ospf-p2p-dd
           npm run test:ospf-p2p-exchange
@@ -131,6 +132,8 @@ jobs:
           /tmp/yadilab-release-dom-venv/bin/python tests/acceptance/run_graphml_p2c_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-release-dom-evidence
           /tmp/yadilab-release-dom-venv/bin/python tests/acceptance/run_ic030_p1_graphml_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-release-dom-evidence
+          /tmp/yadilab-release-dom-venv/bin/python tests/acceptance/run_ic030_p2b_drawio_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-release-dom-evidence
       - name: Preserve mounted release identity evidence
         if: always()
