@@ -143,10 +143,11 @@ export function normalizeNetworkInventoryDocument(
     message: "Multiple Links tables are present; resolve the duplicate source tables before import.",
   });
   const conflicted = inlineLinks.length > 0 && explicitLinks !== undefined;
-  const linkSourceConflict: NetworkLinkSourceConflict | undefined = conflicted ? Object.freeze({
-    inlineDeclaredLinks: inlineLinks.length,
-    sheetDeclaredLinks: explicitLinks.records.length,
-  }) : undefined;
+  const linkSourceConflict: NetworkLinkSourceConflict | undefined =
+    inlineLinks.length > 0 && explicitLinks !== undefined ? Object.freeze({
+      inlineDeclaredLinks: inlineLinks.length,
+      sheetDeclaredLinks: explicitLinks.records.length,
+    }) : undefined;
   if (!validChoice || (choice !== undefined && !conflicted)) diagnostics.push({
     code: "NETWORK_IMPORT_LINK_SOURCE_CHOICE_INVALID", severity: "error",
     message: "A link-source choice is valid only between an explicit Links table and inline Connected To declarations.",
