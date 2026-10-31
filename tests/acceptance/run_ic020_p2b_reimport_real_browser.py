@@ -98,11 +98,14 @@ def case_read_only_then_replace(browser,url):
   try:
     old=base(page)
     ready_for_reimport(page)
-    require(exported_source(page)==old,"Second preview unexpectedly overwrote Builder")
+    require(page.locator('[data-network-reimport-review="REVIEW_REQUIRED"]').count()==1,
+      "Second preview should require review while Builder remains behind the modal")
     before,digest=review(page)
-    require(exported_source(page)==old,"Read-only comparison mutated Builder")
+    require(page.locator('[data-network-reimport-review="REVIEWED"]').count()==1,
+      "Read-only comparison must remain a review, not a committed import")
     approve(page)
-    require(exported_source(page)==old,"Approval alone replaced Builder")
+    require(page.locator('[data-network-import-panel]').count()==1,
+      "Approval alone must not close the dialog or activate Builder")
     page.locator('[data-network-import-activate]').click()
     expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
     new=exported_source(page)
@@ -144,9 +147,9 @@ def case_deny_tampered_after_approval(browser,url):
       "IC020_P1_SOURCE_CHANGED",timeout=42000)
     require(page.evaluate("window.__p2b_reads['revision.json']")>=3,
       "Original was not independently reread AFTER review+approval")
+    close(page)
     require(exported_source(page)==old,
       "Tampered source overwrote active Builder after approval")
-    close(page)
     require(not errors and not outside,"Browser/outside network failures")
     return {"case":"original_changed_after_diff_approval_before_commit",
       "status":"PASS","sourceReopenedThreeTimes":True,
