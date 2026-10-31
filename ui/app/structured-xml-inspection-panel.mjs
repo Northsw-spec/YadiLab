@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { SharedAnsibleOrdinalReview } from "./shared-ansible-ordinal-review.mjs";
 const e = React.createElement;
 
 /** Aggregate-only, already validated producer metadata; no source content. */
@@ -49,6 +50,7 @@ export function StructuredXmlInspectionDetails({ result }) {
  */
 export function StructuredXmlInspectionPanel({
   inspectFile, onClose, workspaceIdentity, getCurrentWorkspaceIdentity,
+  model = null, onExportReviewed,
 }) {
   const [selection, setSelection] = useState(null);
   const [consent, setConsent] = useState(false);
@@ -165,6 +167,25 @@ export function StructuredXmlInspectionPanel({
       error ? e("p", { role: "alert", className: "helper-status blocked",
         "data-ic010-p2-error": "BLOCKED" }, error) : null,
       e(StructuredXmlInspectionDetails, { result }),
+      result?.status === "REVIEW_REQUIRED" &&
+        ["ansible.inventory.static.yaml.v1","ansible.inventory.static.ini.v1"].includes(result.profileId)
+        ? e(SharedAnsibleOrdinalReview, {
+            key: epoch.current + ":" + result.sourceSha256,
+            result, model,
+            onExport: async (decision) => {
+              const source = selectedFile.current, activeEpoch = epoch.current;
+              const isCurrent = () => epoch.current === activeEpoch &&
+                selectedFile.current === source && consentNow.current &&
+                getCurrentWorkspaceIdentity() === workspaceIdentity;
+              if (!source || !isCurrent() || typeof onExportReviewed !== "function") {
+                const error = new Error("IC010_P3B_STALE");
+                error.code = "IC010_P3B_STALE";
+                throw error;
+              }
+              return onExportReviewed(source,result,decision,isCurrent);
+            },
+          })
+        : null,
       e("p", { "data-ic010-p2-truth-boundary": "true" },
         "This panel cannot import nodes, create links, run probes, verify identities or change the active scenario."),
     ));
