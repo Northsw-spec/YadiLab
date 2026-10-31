@@ -79,7 +79,7 @@ def case_builder(browser,url,choice):
     require(exported_source(page)==baseline,"Blocked conflicting source changed live Builder")
     choose(page,choice)
     page.locator('[data-network-import-activate]').click()
-    expect(page.locator('[data-network-import-panel]').to_have_count(0,timeout=45000)
+    expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
     source=exported_source(page)
     expected=INDEPENDENT_SHEET if choice=="LINKS_SHEET" else INDEPENDENT_INLINE
     require(len(source.get("resources",[]))==8,
@@ -105,7 +105,7 @@ def case_runtime(browser,url):
     pending(page)
     choose(page,"INLINE_CONNECTED_TO")
     page.locator('[data-network-import-runtime]').click()
-    expect(page.locator('[data-network-import-panel]').to_have_count(0,timeout=45000)
+    expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
     page.wait_for_function(
       "document.querySelector('.app-frame')?.getAttribute('data-runtime-scenario-hash') !== 'builder'",
       timeout=30000)
@@ -171,7 +171,7 @@ def case_tamper(browser,url,threshold):
     require(exported_source(page)==baseline,
             "Changed source mutated existing Builder")
     page.get_by_role("button",name="Close network import").click()
-    expect(page.locator('[data-network-import-panel]').to_have_count(0)
+    expect(page.locator('[data-network-import-panel]')).to_have_count(0)
     require(not errors,"Browser errors "+repr(errors))
     require(not outside,"Outside network requests "+repr(outside))
     return {"case":"same_size_original_mutation_on_read_"+str(threshold),
@@ -188,7 +188,7 @@ def case_close_reopen(browser,url):
     pending(page)
     choose(page,"LINKS_SHEET")
     page.get_by_role("button",name="Close network import").click()
-    expect(page.locator('[data-network-import-panel]').to_have_count(0)
+    expect(page.locator('[data-network-import-panel]')).to_have_count(0)
     file_picker(page)
     pending(page)
     require(page.locator('[data-network-import-link-review="REVIEWED"]').count()==0,
