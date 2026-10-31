@@ -59,7 +59,7 @@ function canonicalRecord(index: number, table: string, values: Record<string, { 
   for (const [field, item] of Object.entries(values)) fields[field] = cellValue(item.value, item.source, table, index);
   return { recordIndex: index, fields };
 }
-const positiveInt = (text: string | undefined): boolean => text !== undefined && /^\\d+$/.test(text) && Number(text) >= 0 && Number(text) <= 32;
+const positiveInt = (text: string | undefined): boolean => text !== undefined && /^\d+$/.test(text) && Number(text) >= 0 && Number(text) <= 32;
 
 export type NetworkLinkSourceDecision = "LINKS_SHEET" | "INLINE_CONNECTED_TO";
 export interface NetworkLinkSourceConflict {
