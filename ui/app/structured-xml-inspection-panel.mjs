@@ -122,7 +122,7 @@ export function StructuredXmlInspectionPanel({
       setResult(next);
     } catch (cause) {
       if (stillCurrent()) {
-        setError(typeof cause?.code === "string" && /^IC010_(?:XML|STATIC|P3)_[A-Z0-9_]+$/.test(cause.code)
+        setError(typeof cause?.code === "string" && /^IC010_(?:XML|STATIC|P3|P3C)_[A-Z0-9_]+$/.test(cause.code)
           ? cause.code : "IC010_XML_INSPECTION_BLOCKED");
       }
     } finally {
