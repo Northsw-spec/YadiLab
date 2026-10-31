@@ -144,6 +144,7 @@
     "test:ic010-p3c-office": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic010_p3c_office_structure_tests.mjs",
     "test:ic010-p3d-provenance": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic010_p3d_shared_status_tests.mjs",
     "test:ic020-p1-source-freshness": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic020_p1_core_source_freshness_tests.mjs",
+    "test:ic020-p2a-link-review": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic020_p2a_dual_link_review_tests.mjs",
     "test:release-identity": "node tests/browser/run_release_identity_tests.mjs"
   },
   "dependencies": {

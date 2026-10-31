@@ -1,6 +1,7 @@
 import type { ScenarioSource } from "../../../core-model/src/generated/contracts.js";
 import { mapNetworkWorkbookToScenario, normalizeNetworkInventoryDocument, selectEnterpriseImportAdapter } from "../../../enterprise-import/src/index.js";
 import type { ImportDiagnostic } from "../../../enterprise-import/src/types.js";
+import type { NetworkLinkSourceDecision, NetworkLinkSourceConflict } from "../../../enterprise-import/src/network-inventory.js";
 import { webCryptoImportHashProvider } from "../../../enterprise-import/src/hash.js";
 import { readEnterpriseImportFile, type BinaryReadableFile } from "./import-helper.js";
 
@@ -10,6 +11,8 @@ export interface NetworkTopologyImportPreview {
   readonly filename: string;
   readonly sourceSha256: string;
   readonly sourceByteSize: number;
+  readonly linkSourceConflict?: NetworkLinkSourceConflict;
+  readonly linkSourceChoice?: NetworkLinkSourceDecision;
   readonly sheets: readonly string[];
   readonly devices: number;
   readonly links: number;
@@ -22,7 +25,10 @@ function fail(code: "IC020_P1_SOURCE_CHANGED" | "IC020_P1_STALE"): never {
   throw Object.assign(new Error(code), { code });
 }
 
-export async function previewNetworkTopologyFile(file: BinaryReadableFile): Promise<NetworkTopologyImportPreview> {
+export async function previewNetworkTopologyFile(
+  file: BinaryReadableFile,
+  options: Readonly<{ linkSourceChoice?: NetworkLinkSourceDecision }> = {},
+): Promise<NetworkTopologyImportPreview> {
   if (!file || typeof file.name !== "string" || file.name.length < 1 ||
       file.name.length > 240 || /[\\/\u0000-\u001f\u007f]/.test(file.name) ||
       file.name.trim() !== file.name || !/\.(json|csv|tsv|xlsx|ods)$/i.test(file.name)) {
@@ -40,12 +46,14 @@ export async function previewNetworkTopologyFile(file: BinaryReadableFile): Prom
   const sourceSha256 = await webCryptoImportHashProvider.sha256Bytes(input.bytes);
   const adapter = selectEnterpriseImportAdapter(input.mediaType);
   const parsed = await adapter.parse(input, { options: { tableName: "Devices" } });
-  const normalized = normalizeNetworkInventoryDocument(parsed.document);
+  const normalized = normalizeNetworkInventoryDocument(parsed.document, options);
   const mapped = mapNetworkWorkbookToScenario(normalized.document);
   const diagnostics = [...parsed.diagnostics, ...normalized.diagnostics, ...mapped.diagnostics];
   const ok = mapped.ok && !diagnostics.some((x) => x.severity === "error") && Boolean(mapped.source);
   return { ok, ...(ok && mapped.source ? { source: mapped.source } : {}), filename: file.name,
     sourceSha256, sourceByteSize: input.bytes.byteLength,
+    ...(normalized.linkSourceConflict ? { linkSourceConflict: normalized.linkSourceConflict } : {}),
+    ...(normalized.linkSourceChoice ? { linkSourceChoice: normalized.linkSourceChoice } : {}),
     sheets: parsed.document.tables.map((x) => x.tableId), devices: mapped.source?.resources.length ?? normalized.document.tables.find((t) => t.tableId === "Nodes")?.records.length ?? 0,
     links: mapped.source?.connections.length ?? normalized.document.tables.find((t) => t.tableId === "Links")?.records.length ?? 0,
     diagnostics };
@@ -72,7 +80,8 @@ export async function verifyNetworkTopologyOriginalForActivation(
   }
   let latest: NetworkTopologyImportPreview;
   try {
-    latest = await previewNetworkTopologyFile(file);
+    latest = await previewNetworkTopologyFile(file, expected.linkSourceChoice
+      ? { linkSourceChoice: expected.linkSourceChoice } : {});
   } catch {
     // Do not expose raw source/ZIP/parser errors after consented review.
     fail("IC020_P1_SOURCE_CHANGED");
@@ -82,6 +91,8 @@ export async function verifyNetworkTopologyOriginalForActivation(
       latest.filename !== expected.filename ||
       latest.sourceSha256 !== expected.sourceSha256 ||
       latest.sourceByteSize !== expected.sourceByteSize ||
+      latest.linkSourceChoice !== expected.linkSourceChoice ||
+      JSON.stringify(latest.linkSourceConflict) !== JSON.stringify(expected.linkSourceConflict) ||
       latest.devices !== expected.devices || latest.links !== expected.links ||
       JSON.stringify(latest.source) !== JSON.stringify(expected.source) ||
       JSON.stringify(latest.diagnostics) !== JSON.stringify(expected.diagnostics)) {

@@ -61,9 +61,38 @@ function canonicalRecord(index: number, table: string, values: Record<string, { 
 }
 const positiveInt = (text: string | undefined): boolean => text !== undefined && /^\d+$/.test(text) && Number(text) >= 0 && Number(text) <= 32;
 
-export function normalizeNetworkInventoryDocument(document: ImportDocument): { document: ImportDocument; diagnostics: readonly ImportDiagnostic[] } {
-  // The native Nodes/Metadata/Links workbook schema remains unchanged.
-  if (document.tables.some((t) => t.tableId === "Metadata") && document.tables.some((t) => t.tableId === "Nodes")) return { document, diagnostics: [] };
+export type NetworkLinkSourceDecision = "LINKS_SHEET" | "INLINE_CONNECTED_TO";
+export interface NetworkLinkSourceConflict {
+  readonly inlineDeclaredLinks: number;
+  readonly sheetDeclaredLinks: number;
+}
+export interface NetworkInventoryNormalization {
+  readonly document: ImportDocument;
+  readonly diagnostics: readonly ImportDiagnostic[];
+  readonly linkSourceConflict?: NetworkLinkSourceConflict;
+  readonly linkSourceChoice?: NetworkLinkSourceDecision;
+}
+
+/**
+ * Preserve the original producer's unambiguous link source. Only an explicit
+ * operator decision may select between two conflicting declarations; no
+ * gateway/IP/host inferred physical edges, and no silent merge.
+ */
+export function normalizeNetworkInventoryDocument(
+  document: ImportDocument,
+  options: Readonly<{ linkSourceChoice?: NetworkLinkSourceDecision }> = {},
+): NetworkInventoryNormalization {
+  const choice = options?.linkSourceChoice;
+  const validChoice = choice === undefined || choice === "LINKS_SHEET" || choice === "INLINE_CONNECTED_TO";
+  // The already canonical Nodes/Metadata/Links workbook schema remains unchanged.
+  if (document.tables.some((t) => t.tableId === "Metadata") &&
+      document.tables.some((t) => t.tableId === "Nodes")) {
+    if (choice !== undefined) return { document, diagnostics: [{
+      code: "NETWORK_IMPORT_LINK_SOURCE_CHOICE_INVALID", severity: "error",
+      message: "A link-source decision requires conflicting Devices inline links and a separate Links table.",
+    }] };
+    return { document, diagnostics: [] };
+  }
   const inventory = document.tables.find((t) => ["devices", "nodes", "records"].includes(t.tableId.toLowerCase()));
   if (!inventory) return { document, diagnostics: [{ code: "NETWORK_IMPORT_INVENTORY_MISSING", severity: "error", message: "Expected a Devices or Nodes worksheet, or a CSV/TSV with device rows." }] };
   const diagnostics: ImportDiagnostic[] = [];
@@ -107,11 +136,36 @@ export function normalizeNetworkInventoryDocument(document: ImportDocument): { d
       linkId: { value: `link_row_${row.recordIndex}`, source: fields.target }, nodeA: { value: id, source: fields.id }, nodeB: { value: target, source: fields.target },
     }));
   }
-  const explicitLinks = document.tables.find((t) => t.tableId.toLowerCase() === "links");
-  if (inlineLinks.length && explicitLinks) diagnostics.push({ code: "NETWORK_IMPORT_LINK_SOURCES_CONFLICT", severity: "error", message: "Links worksheet and 'Connected To' columns both specify edges; use just one explicit source to avoid accidental duplication." });
-  // Preserve a dedicated Links sheet (canonical schema). No connection is inferred.
-  const links = explicitLinks ? explicitLinks.records.map((row) => {
-    const pickLink = (names: readonly string[]) => pick(row, names, explicitLinks.tableId, diagnostics);
+  const explicitTables = document.tables.filter((t) => t.tableId.toLowerCase() === "links");
+  const explicitLinks = explicitTables[0];
+  if (explicitTables.length > 1) diagnostics.push({
+    code: "NETWORK_IMPORT_LINK_SHEET_AMBIGUOUS", severity: "error",
+    message: "Multiple Links tables are present; resolve the duplicate source tables before import.",
+  });
+  const conflicted = inlineLinks.length > 0 && explicitLinks !== undefined;
+  const linkSourceConflict: NetworkLinkSourceConflict | undefined =
+    inlineLinks.length > 0 && explicitLinks !== undefined ? Object.freeze({
+      inlineDeclaredLinks: inlineLinks.length,
+      sheetDeclaredLinks: explicitLinks.records.length,
+    }) : undefined;
+  if (!validChoice || (choice !== undefined && !conflicted)) diagnostics.push({
+    code: "NETWORK_IMPORT_LINK_SOURCE_CHOICE_INVALID", severity: "error",
+    message: "A link-source choice is valid only between an explicit Links table and inline Connected To declarations.",
+  });
+  if (conflicted && choice === undefined) diagnostics.push({
+    code: "NETWORK_IMPORT_LINK_SOURCES_CONFLICT", severity: "error",
+    message: "Two explicit link sources conflict. Review and choose one; neither is automatically trusted, merged or activated.",
+  });
+  if (conflicted && (choice === "LINKS_SHEET" || choice === "INLINE_CONNECTED_TO")) diagnostics.push({
+    code: "NETWORK_IMPORT_LINK_SOURCE_REVIEWED", severity: "warning",
+    message: choice === "LINKS_SHEET"
+      ? "Operator chose the explicit Links table only; inline Connected To declarations were excluded."
+      : "Operator chose inline Connected To declarations only; the explicit Links table was excluded.",
+  });
+  // A discarded source does not contribute any modeled link.
+  const useSheet = Boolean(explicitLinks) && (!conflicted || choice === "LINKS_SHEET");
+  const links = useSheet ? explicitLinks!.records.map((row) => {
+    const pickLink = (names: readonly string[]) => pick(row, names, explicitLinks!.tableId, diagnostics);
     const id = pickLink(["linkId", "Link ID", "Connection ID"]);
     const from = pickLink(["nodeA", "From", "Source", "From Device", "Source Device"]);
     const to = pickLink(["nodeB", "To", "Destination", "To Device", "Target Device"]);
@@ -133,5 +187,10 @@ export function normalizeNetworkInventoryDocument(document: ImportDocument): { d
   const output: ImportTable[] = [metadata, { tableId: "Nodes", records: nodes }, { tableId: "Interfaces", records: interfaces }, { tableId: "Links", records: links }];
   if (!links.length) diagnostics.push({ code: "NETWORK_IMPORT_NO_EXPLICIT_LINKS", severity: "warning", message: "No explicit network links were supplied; the topology will show devices without connecting them." });
   if (nodes.length === 0) diagnostics.push({ code: "NETWORK_IMPORT_NO_DEVICES", severity: "error", message: "No valid device rows were found." });
-  return { document: { tables: output }, diagnostics };
+  return {
+    document: { tables: output }, diagnostics,
+    ...(linkSourceConflict ? { linkSourceConflict } : {}),
+    ...(conflicted && (choice === "LINKS_SHEET" || choice === "INLINE_CONNECTED_TO")
+      ? { linkSourceChoice: choice } : {}),
+  };
 }
