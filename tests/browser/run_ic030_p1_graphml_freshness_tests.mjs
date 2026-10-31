@@ -18,7 +18,7 @@ const eq=(a,b,label)=>{assert.deepEqual(a,b,label);count++};
 const yes=(v,label)=>{assert.ok(v,label);count++};
 const blocked=async(p,code)=>{await assert.rejects(p,e=>e?.code===code,code);count++};
 const bytes=new Uint8Array(fs.readFileSync("tests/fixtures/import/graphml/valid-two-nodes.graphml"));
-const different=new TextEncoder().encode(new TextDecoder().decode(bytes).replace("router_1","router_9"));
+const different=new TextEncoder().encode(new TextDecoder().decode(bytes).replaceAll("router_1","router_9"));
 eq(different.byteLength,bytes.byteLength,"Same-length different GraphML bytes");
 const data=(x)=>x.buffer.slice(x.byteOffset,x.byteOffset+x.byteLength);
 const document=(name,initial,second=initial)=>({
