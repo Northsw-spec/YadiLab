@@ -24,13 +24,13 @@
       "stage": {
         "detect": "ACTIVE_MEDIA_ADAPTER",
         "parse": "ACTIVE_TABULAR",
-        "preview": "IMPORT_HELPER",
-        "review": "ENTERPRISE_MAPPING",
-        "projection": "ENTERPRISE_BASELINE_TO_SCENARIO",
-        "builder": "ENTERPRISE_MAPPING_CONDITIONAL",
-        "modeledProbe": "NOT_ATTESTED_FOR_PROFILE",
-        "replay": "ENTERPRISE_REIMPORT",
-        "ui": "IMPORT_HELPER"
+        "preview": "QUICK_NETWORK_SHA_BOUND_AND_IMPORT_HELPER",
+        "review": "SOURCE_BOUND_EXPLICIT_LINK_CHOICE_AND_REIMPORT_APPROVAL",
+        "projection": "EXPLICIT_DECLARED_NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
+        "builder": "CONSENTED_QUICK_NETWORK_BUILDER_WITH_FRESH_SOURCE_RECHECK",
+        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_TESTED_BROWSER_SUBTYPE_PROBE_NOT_ATTESTED",
+        "replay": "SOURCE_BOUND_REIMPORT_REVIEW_AND_READ_ONLY_SAVED_REPORT",
+        "ui": "QUICK_NETWORK_NATIVE_PICKER_AND_IMPORT_HELPER"
       },
       "sources": [
         "enterprise-import/src/json.ts",
@@ -40,11 +40,42 @@
       ],
       "tests": [
         "tests/enterprise-import/run_enterprise_import_tests.mjs",
-        "tests/enterprise-import/run_external_data_capability_tests.mjs"
+        "tests/enterprise-import/run_external_data_capability_tests.mjs",
+        "tests/browser/run_ic020_p1_core_source_freshness_tests.mjs",
+        "tests/browser/run_ic020_p2a_dual_link_review_tests.mjs",
+        "tests/browser/run_ic020_p2b_reimport_review_tests.mjs",
+        "tests/browser/run_ic020_p2c1_saved_report_replay_tests.mjs",
+        "tests/browser/run_ic020_p2c3_unmapped_inventory_tests.mjs",
+        "tests/acceptance/run_ic020_p1_core_inventory_real_browser.py",
+        "tests/acceptance/run_ic020_p2a_link_review_real_browser.py",
+        "tests/acceptance/run_ic020_p2b_reimport_real_browser.py",
+        "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
+        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py"
       ],
-      "ciCoverage": "TEST_EXISTS_NOT_IN_REQUIRED_GATE",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
       "nextCheckpoint": "IC-020",
-      "risk": "Enterprise JSON is not arbitrary JSON; a mapping profile and compilation are required."
+      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ic020Refresh": {
+        "checkpoint": "IC-020 P2c4",
+        "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+        "evidenceTreeSha": "25ab69f011f86dd22c4528b79846a8592f0e43e3",
+        "independentLinuxRelease": {
+          "runId": 41234186594,
+          "headSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+          "conclusion": "success"
+        },
+        "sourceBoundOriginalShaRecheck": "ATTESTED_P1_ALL_FIVE",
+        "manualCompetingLinkSourceChoice": "ATTESTED_P2A_SUPPORTED_INVENTORY",
+        "consentedLiveReimport": "ATTESTED_P2B",
+        "readOnlySavedReimportReview": "ATTESTED_P2C1",
+        "typedOriginalPortChecks": "NOT_CLAIMED_FOR_THIS_SUBTYPE",
+        "ambiguousInventoryAndUnmappedColumns": "ATTESTED_P2C3_ALL_FIVE",
+        "compiledChromiumFileToBuilder": "ATTESTED_P1_ALL_FIVE",
+        "compiledChromiumImportedModeledRuntime": "NOT_ATTESTED_FOR_THIS_SUBTYPE",
+        "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
+        "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      }
     },
     {
       "id": "builtin.csv",
@@ -56,13 +87,13 @@
       "stage": {
         "detect": "ACTIVE_MEDIA_ADAPTER",
         "parse": "ACTIVE_TABULAR",
-        "preview": "QUICK_NETWORK_AND_IMPORT_HELPER",
-        "review": "EXPLICIT_NETWORK_LINKS_OR_MAPPING",
-        "projection": "NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
-        "builder": "QUICK_IMPORT_EXPLICIT",
-        "modeledProbe": "CSV_FIXTURE_TESTED_MODELED",
-        "replay": "ENTERPRISE_REIMPORT",
-        "ui": "PRIMARY_AND_IMPORT_HELPER"
+        "preview": "QUICK_NETWORK_SHA_BOUND_AND_IMPORT_HELPER",
+        "review": "SOURCE_BOUND_EXPLICIT_LINK_CHOICE_AND_REIMPORT_APPROVAL",
+        "projection": "EXPLICIT_DECLARED_NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
+        "builder": "CONSENTED_QUICK_NETWORK_BUILDER_WITH_FRESH_SOURCE_RECHECK",
+        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_AND_CHROMIUM_VERIFIED",
+        "replay": "SOURCE_BOUND_REIMPORT_REVIEW_AND_READ_ONLY_SAVED_REPORT",
+        "ui": "QUICK_NETWORK_NATIVE_PICKER_AND_IMPORT_HELPER"
       },
       "sources": [
         "enterprise-import/src/delimited.ts",
@@ -72,11 +103,42 @@
       ],
       "tests": [
         "tests/enterprise-import/run_network_topology_import_checkpoint.mjs",
-        "tests/browser/run_import004_probe_runtime_tests.mjs"
+        "tests/browser/run_import004_probe_runtime_tests.mjs",
+        "tests/browser/run_ic020_p1_core_source_freshness_tests.mjs",
+        "tests/browser/run_ic020_p2a_dual_link_review_tests.mjs",
+        "tests/browser/run_ic020_p2b_reimport_review_tests.mjs",
+        "tests/browser/run_ic020_p2c1_saved_report_replay_tests.mjs",
+        "tests/browser/run_ic020_p2c3_unmapped_inventory_tests.mjs",
+        "tests/acceptance/run_ic020_p1_core_inventory_real_browser.py",
+        "tests/acceptance/run_ic020_p2a_link_review_real_browser.py",
+        "tests/acceptance/run_ic020_p2b_reimport_real_browser.py",
+        "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
+        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py"
       ],
-      "ciCoverage": "REQUIRED_CORE_REGRESSION",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
       "nextCheckpoint": "IC-020",
-      "risk": "Modeled only: no real ping or scan; link, route, service and listener truth must be supplied or remain UNKNOWN."
+      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ic020Refresh": {
+        "checkpoint": "IC-020 P2c4",
+        "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+        "evidenceTreeSha": "25ab69f011f86dd22c4528b79846a8592f0e43e3",
+        "independentLinuxRelease": {
+          "runId": 41234186594,
+          "headSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+          "conclusion": "success"
+        },
+        "sourceBoundOriginalShaRecheck": "ATTESTED_P1_ALL_FIVE",
+        "manualCompetingLinkSourceChoice": "ATTESTED_P2A_SUPPORTED_INVENTORY",
+        "consentedLiveReimport": "ATTESTED_P2B",
+        "readOnlySavedReimportReview": "ATTESTED_P2C1",
+        "typedOriginalPortChecks": "NOT_CLAIMED_FOR_THIS_SUBTYPE",
+        "ambiguousInventoryAndUnmappedColumns": "ATTESTED_P2C3_ALL_FIVE",
+        "compiledChromiumFileToBuilder": "ATTESTED_P1_ALL_FIVE",
+        "compiledChromiumImportedModeledRuntime": "ATTESTED_P1_CSV",
+        "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
+        "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      }
     },
     {
       "id": "builtin.tsv",
@@ -88,13 +150,13 @@
       "stage": {
         "detect": "ACTIVE_MEDIA_ADAPTER",
         "parse": "ACTIVE_TABULAR",
-        "preview": "QUICK_NETWORK_AND_IMPORT_HELPER",
-        "review": "EXPLICIT_NETWORK_LINKS_OR_MAPPING",
-        "projection": "NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
-        "builder": "QUICK_IMPORT_EXPLICIT",
-        "modeledProbe": "SHARED_PATH_SUBTYPE_E2E_NOT_ATTESTED",
-        "replay": "ENTERPRISE_REIMPORT",
-        "ui": "PRIMARY_AND_IMPORT_HELPER"
+        "preview": "QUICK_NETWORK_SHA_BOUND_AND_IMPORT_HELPER",
+        "review": "SOURCE_BOUND_EXPLICIT_LINK_CHOICE_AND_REIMPORT_APPROVAL",
+        "projection": "EXPLICIT_DECLARED_NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
+        "builder": "CONSENTED_QUICK_NETWORK_BUILDER_WITH_FRESH_SOURCE_RECHECK",
+        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_TESTED_BROWSER_SUBTYPE_PROBE_NOT_ATTESTED",
+        "replay": "SOURCE_BOUND_REIMPORT_REVIEW_AND_READ_ONLY_SAVED_REPORT",
+        "ui": "QUICK_NETWORK_NATIVE_PICKER_AND_IMPORT_HELPER"
       },
       "sources": [
         "enterprise-import/src/delimited.ts",
@@ -104,11 +166,42 @@
       ],
       "tests": [
         "tests/enterprise-import/run_enterprise_import_tests.mjs",
-        "tests/browser/run_network_topology_checkpoint_tests.mjs"
+        "tests/browser/run_network_topology_checkpoint_tests.mjs",
+        "tests/browser/run_ic020_p1_core_source_freshness_tests.mjs",
+        "tests/browser/run_ic020_p2a_dual_link_review_tests.mjs",
+        "tests/browser/run_ic020_p2b_reimport_review_tests.mjs",
+        "tests/browser/run_ic020_p2c1_saved_report_replay_tests.mjs",
+        "tests/browser/run_ic020_p2c3_unmapped_inventory_tests.mjs",
+        "tests/acceptance/run_ic020_p1_core_inventory_real_browser.py",
+        "tests/acceptance/run_ic020_p2a_link_review_real_browser.py",
+        "tests/acceptance/run_ic020_p2b_reimport_real_browser.py",
+        "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
+        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py"
       ],
-      "ciCoverage": "SHARED_CODE_REQUIRED_SUBTYPE_NOT_ATTESTED",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
       "nextCheckpoint": "IC-020",
-      "risk": "TSV-specific real-browser mapping, Runtime and probe evidence not demonstrated on current required CI."
+      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ic020Refresh": {
+        "checkpoint": "IC-020 P2c4",
+        "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+        "evidenceTreeSha": "25ab69f011f86dd22c4528b79846a8592f0e43e3",
+        "independentLinuxRelease": {
+          "runId": 41234186594,
+          "headSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+          "conclusion": "success"
+        },
+        "sourceBoundOriginalShaRecheck": "ATTESTED_P1_ALL_FIVE",
+        "manualCompetingLinkSourceChoice": "ATTESTED_P2A_SUPPORTED_INVENTORY",
+        "consentedLiveReimport": "ATTESTED_P2B",
+        "readOnlySavedReimportReview": "ATTESTED_P2C1",
+        "typedOriginalPortChecks": "NOT_CLAIMED_FOR_THIS_SUBTYPE",
+        "ambiguousInventoryAndUnmappedColumns": "ATTESTED_P2C3_ALL_FIVE",
+        "compiledChromiumFileToBuilder": "ATTESTED_P1_ALL_FIVE",
+        "compiledChromiumImportedModeledRuntime": "NOT_ATTESTED_FOR_THIS_SUBTYPE",
+        "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
+        "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      }
     },
     {
       "id": "builtin.xlsx",
@@ -120,13 +213,13 @@
       "stage": {
         "detect": "ACTIVE_MEDIA_ADAPTER",
         "parse": "ACTIVE_TABULAR",
-        "preview": "QUICK_NETWORK_AND_IMPORT_HELPER",
-        "review": "EXPLICIT_NETWORK_LINKS_OR_MAPPING",
-        "projection": "NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
-        "builder": "QUICK_IMPORT_EXPLICIT",
-        "modeledProbe": "SHARED_PATH_SUBTYPE_E2E_NOT_ATTESTED",
-        "replay": "ENTERPRISE_REIMPORT",
-        "ui": "PRIMARY_AND_IMPORT_HELPER"
+        "preview": "QUICK_NETWORK_SHA_BOUND_AND_IMPORT_HELPER",
+        "review": "SOURCE_BOUND_EXPLICIT_LINK_CHOICE_AND_REIMPORT_APPROVAL",
+        "projection": "EXPLICIT_DECLARED_NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
+        "builder": "CONSENTED_QUICK_NETWORK_BUILDER_WITH_FRESH_SOURCE_RECHECK",
+        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_TESTED_BROWSER_SUBTYPE_PROBE_NOT_ATTESTED",
+        "replay": "SOURCE_BOUND_REIMPORT_REVIEW_AND_READ_ONLY_SAVED_REPORT",
+        "ui": "QUICK_NETWORK_NATIVE_PICKER_AND_IMPORT_HELPER"
       },
       "sources": [
         "enterprise-import/src/xlsx.ts",
@@ -136,11 +229,44 @@
       ],
       "tests": [
         "tests/enterprise-import/run_network_topology_import_checkpoint.mjs",
-        "tests/browser/run_network_topology_checkpoint_tests.mjs"
+        "tests/browser/run_network_topology_checkpoint_tests.mjs",
+        "tests/browser/run_ic020_p1_core_source_freshness_tests.mjs",
+        "tests/browser/run_ic020_p2a_dual_link_review_tests.mjs",
+        "tests/browser/run_ic020_p2b_reimport_review_tests.mjs",
+        "tests/browser/run_ic020_p2c1_saved_report_replay_tests.mjs",
+        "tests/browser/run_ic020_p2c3_unmapped_inventory_tests.mjs",
+        "tests/acceptance/run_ic020_p1_core_inventory_real_browser.py",
+        "tests/acceptance/run_ic020_p2a_link_review_real_browser.py",
+        "tests/acceptance/run_ic020_p2b_reimport_real_browser.py",
+        "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
+        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py",
+        "tests/browser/run_ic020_p2c2_multisheet_tests.mjs",
+        "tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py"
       ],
-      "ciCoverage": "REQUIRED_IMPORT_AND_COMPILE_SUBTYPE_PROBE_NOT_ATTESTED",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
       "nextCheckpoint": "IC-020",
-      "risk": "Real template XLSX parse and Builder compile tested, but XLSX-specific Runtime probe UI not attested."
+      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ic020Refresh": {
+        "checkpoint": "IC-020 P2c4",
+        "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+        "evidenceTreeSha": "25ab69f011f86dd22c4528b79846a8592f0e43e3",
+        "independentLinuxRelease": {
+          "runId": 41234186594,
+          "headSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+          "conclusion": "success"
+        },
+        "sourceBoundOriginalShaRecheck": "ATTESTED_P1_ALL_FIVE",
+        "manualCompetingLinkSourceChoice": "ATTESTED_P2A_SUPPORTED_INVENTORY",
+        "consentedLiveReimport": "ATTESTED_P2B",
+        "readOnlySavedReimportReview": "ATTESTED_P2C1",
+        "typedOriginalPortChecks": "ATTESTED_P2C2_SIX_SHEET",
+        "ambiguousInventoryAndUnmappedColumns": "ATTESTED_P2C3_ALL_FIVE",
+        "compiledChromiumFileToBuilder": "ATTESTED_P1_ALL_FIVE",
+        "compiledChromiumImportedModeledRuntime": "NOT_ATTESTED_FOR_THIS_SUBTYPE",
+        "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
+        "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      }
     },
     {
       "id": "builtin.ods",
@@ -152,13 +278,13 @@
       "stage": {
         "detect": "ACTIVE_MEDIA_ADAPTER",
         "parse": "ACTIVE_TABULAR",
-        "preview": "QUICK_NETWORK_AND_IMPORT_HELPER",
-        "review": "EXPLICIT_NETWORK_LINKS_OR_MAPPING",
-        "projection": "NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
-        "builder": "QUICK_IMPORT_EXPLICIT",
-        "modeledProbe": "SHARED_PATH_SUBTYPE_E2E_NOT_ATTESTED",
-        "replay": "ENTERPRISE_REIMPORT",
-        "ui": "PRIMARY_AND_IMPORT_HELPER"
+        "preview": "QUICK_NETWORK_SHA_BOUND_AND_IMPORT_HELPER",
+        "review": "SOURCE_BOUND_EXPLICIT_LINK_CHOICE_AND_REIMPORT_APPROVAL",
+        "projection": "EXPLICIT_DECLARED_NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
+        "builder": "CONSENTED_QUICK_NETWORK_BUILDER_WITH_FRESH_SOURCE_RECHECK",
+        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_AND_CHROMIUM_VERIFIED",
+        "replay": "SOURCE_BOUND_REIMPORT_REVIEW_AND_READ_ONLY_SAVED_REPORT",
+        "ui": "QUICK_NETWORK_NATIVE_PICKER_AND_IMPORT_HELPER"
       },
       "sources": [
         "enterprise-import/src/ods.ts",
@@ -168,11 +294,44 @@
       ],
       "tests": [
         "tests/enterprise-import/run_workbook_mapping_tests.mjs",
-        "tests/browser/run_import004_probe_runtime_tests.mjs"
+        "tests/browser/run_import004_probe_runtime_tests.mjs",
+        "tests/browser/run_ic020_p1_core_source_freshness_tests.mjs",
+        "tests/browser/run_ic020_p2a_dual_link_review_tests.mjs",
+        "tests/browser/run_ic020_p2b_reimport_review_tests.mjs",
+        "tests/browser/run_ic020_p2c1_saved_report_replay_tests.mjs",
+        "tests/browser/run_ic020_p2c3_unmapped_inventory_tests.mjs",
+        "tests/acceptance/run_ic020_p1_core_inventory_real_browser.py",
+        "tests/acceptance/run_ic020_p2a_link_review_real_browser.py",
+        "tests/acceptance/run_ic020_p2b_reimport_real_browser.py",
+        "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
+        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py",
+        "tests/browser/run_ic020_p2c2_multisheet_tests.mjs",
+        "tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py"
       ],
-      "ciCoverage": "SHARED_CODE_REQUIRED_SUBTYPE_NOT_ATTESTED",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
       "nextCheckpoint": "IC-020",
-      "risk": "ODS parser exists; current mandatory regression does not separately attest ODS file → Runtime/Probes."
+      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ic020Refresh": {
+        "checkpoint": "IC-020 P2c4",
+        "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+        "evidenceTreeSha": "25ab69f011f86dd22c4528b79846a8592f0e43e3",
+        "independentLinuxRelease": {
+          "runId": 41234186594,
+          "headSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+          "conclusion": "success"
+        },
+        "sourceBoundOriginalShaRecheck": "ATTESTED_P1_ALL_FIVE",
+        "manualCompetingLinkSourceChoice": "ATTESTED_P2A_SUPPORTED_INVENTORY",
+        "consentedLiveReimport": "ATTESTED_P2B",
+        "readOnlySavedReimportReview": "ATTESTED_P2C1",
+        "typedOriginalPortChecks": "ATTESTED_P2C2_SIX_SHEET",
+        "ambiguousInventoryAndUnmappedColumns": "ATTESTED_P2C3_ALL_FIVE",
+        "compiledChromiumFileToBuilder": "ATTESTED_P1_ALL_FIVE",
+        "compiledChromiumImportedModeledRuntime": "ATTESTED_P2C2_ODS",
+        "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
+        "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      }
     },
     {
       "id": "native.scenario.json",
@@ -843,5 +1002,12 @@
       "nextCheckpoint": "IC-090",
       "risk": "Only a proposed suffix/profile hint. No active importer, preview, reviewed Builder projection, Runtime probe or replay."
     }
-  ]
+  ],
+  "auditRefreshP2c4": {
+    "basis": "SOURCE_BACKED_SUBSET_REFRESH_NOT_FULL_FUNCTIONAL_CERTIFICATION",
+    "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
+    "evidenceTreeSha": "25ab69f011f86dd22c4528b79846a8592f0e43e3",
+    "releaseRun": 41234186594,
+    "note": "Historical auditBaseline is intentionally unchanged; five active adapters only updated. Other 22 profile statuses remain the original IC-000 audit observations, not current full-feature certification. IC-020 exit remains open."
+  }
 }
