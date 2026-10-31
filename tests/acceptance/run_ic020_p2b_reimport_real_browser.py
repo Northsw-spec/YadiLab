@@ -42,7 +42,7 @@ def base(page):
   require(page.locator('[data-network-reimport-review]').count()==0,
     "Initial import from welcome scenario incorrectly requires reimport approval")
   page.locator('[data-network-import-activate]').click()
-  expect(page.locator('[data-network-import-panel]').to_have_count(0,timeout=45000)
+  expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
   old=exported_source(page)
   require(len(old.get("resources",[]))==4 and len(old.get("connections",[]))==3,
     "Actual initial CSV baseline not imported")
@@ -91,7 +91,7 @@ def approve(page):
 
 def close(page):
   page.get_by_role("button",name="Close network import").click()
-  expect(page.locator('[data-network-import-panel]').to_have_count(0)
+  expect(page.locator('[data-network-import-panel]')).to_have_count(0)
 
 def case_read_only_then_replace(browser,url):
   page,errors,outside=setup(browser,url)
@@ -104,7 +104,7 @@ def case_read_only_then_replace(browser,url):
     approve(page)
     require(exported_source(page)==old,"Approval alone replaced Builder")
     page.locator('[data-network-import-activate]').click()
-    expect(page.locator('[data-network-import-panel]').to_have_count(0,timeout=45000)
+    expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
     new=exported_source(page)
     ids={x["id"] for x in new["resources"]}
     require(ids=={"router01","switch01","pc01","linux01"},
@@ -189,7 +189,7 @@ def case_approved_runtime(browser,url):
     review(page)
     approve(page)
     page.locator('[data-network-import-runtime]').click()
-    expect(page.locator('[data-network-import-panel]').to_have_count(0,timeout=45000)
+    expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
     page.wait_for_function(
       "document.querySelector('.app-frame')?.getAttribute('data-runtime-scenario-hash') !== 'builder'",
       timeout=30000)
