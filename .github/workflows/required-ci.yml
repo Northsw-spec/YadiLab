@@ -55,6 +55,7 @@ jobs:
           npm run test:ic020-p2c2-multisheet
           npm run test:ic020-p2c3-unmapped
           npm run test:ic020-p2c4-matrix
+          npm run test:ic020-p2c5-truth
           npm run test:simulation-clock
           npm run test:simulation-transitions
           npm run test:ospf-p2p-hello
@@ -131,6 +132,8 @@ jobs:
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
+          /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic020_p2c5_truth_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
       - name: Preserve bounded verification evidence
         if: always()

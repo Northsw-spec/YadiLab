@@ -114,15 +114,16 @@ def xmlrows(rows):
     return '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'+''.join(out)+'</sheetData></worksheet>'
 
 
-def xlsx_bytes(variant="valid"):
-    tables=dataset(variant)
+def xlsx_bytes(variant="valid", tables_override=None):
+    tables=dataset(variant) if tables_override is None else tables_override
+    names=list(tables) if tables_override is not None else SHEETS
     out=BytesIO()
     with ZipFile(out,"w") as z:
         types=['<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
          '<Default Extension="xml" ContentType="application/xml"/>',
          '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>']
-        for i in range(1,len(SHEETS)+1):
+        for i in range(1,len(names)+1):
             types.append(f'<Override PartName="/xl/worksheets/sheet{i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>')
         types.append("</Types>")
         write_zip(z,"[Content_Types].xml","".join(types))
@@ -132,23 +133,24 @@ def xlsx_bytes(variant="valid"):
           '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
         ]
         rels=['<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">']
-        for i,name in enumerate(SHEETS,1):
+        for i,name in enumerate(names,1):
             workbook.append(f'<sheet name={quoteattr(name)} sheetId="{i}" r:id="rId{i}"/>')
             rels.append('<Relationship Id="rId'+str(i)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+str(i)+'.xml"/>')
         workbook.append("</sheets></workbook>");rels.append("</Relationships>")
         write_zip(z,"xl/workbook.xml","".join(workbook))
         write_zip(z,"xl/_rels/workbook.xml.rels","".join(rels))
-        for i,name in enumerate(SHEETS,1):
+        for i,name in enumerate(names,1):
             write_zip(z,f"xl/worksheets/sheet{i}.xml",xmlrows(tables[name]))
     return out.getvalue()
 
 
-def ods_bytes(variant="valid"):
-    tables=dataset(variant)
+def ods_bytes(variant="valid", tables_override=None):
+    tables=dataset(variant) if tables_override is None else tables_override
+    names=list(tables) if tables_override is not None else SHEETS
     content=[
       '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:spreadsheet>'
     ]
-    for name in SHEETS:
+    for name in names:
         content.append('<table:table table:name='+quoteattr(name)+'>')
         for row in tables[name]:
             content.append("<table:table-row>")
@@ -168,6 +170,15 @@ def ods_bytes(variant="valid"):
         write_zip(z,"content.xml","".join(content))
     return out.getvalue()
 
+
+def build_flat(fmt, rows):
+    """P2c5 test-only true single-Devices-sheet Office archive producer."""
+    tables={"Devices":rows}
+    if fmt=="xlsx":
+        return xlsx_bytes(tables_override=tables)
+    if fmt=="ods":
+        return ods_bytes(tables_override=tables)
+    raise ValueError("unsupported format")
 
 def build(fmt="xlsx",variant="valid"):
     return xlsx_bytes(variant) if fmt=="xlsx" else ods_bytes(variant) if fmt=="ods" else None
