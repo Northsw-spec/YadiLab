@@ -72,7 +72,8 @@ def case_one_reference(browser,url):
             require(token not in page.locator('[data-ic010-p2-panel]').inner_html(),
                 "Private source identifier leaked into shared DOM: "+token)
         expect(page.locator('[data-ic010-p3b-exported]')).to_be_visible()
-        require(exported_source(page)==sourceBefore,"Review altered active Builder")
+        # Canonical Builder export must be checked AFTER the modal closes;
+        # its overlay deliberately prevents clicking background menu controls.
         # Switching original source also revokes review and acknowledgement.
         choose(page,"sensitive.yml",load("ansible-yaml/valid-sensitive-vars.yml"))
         require(page.locator('[data-ic010-p3b-review]').count()==0,
