@@ -279,7 +279,7 @@ export async function mapReviewedDrawioOriginalToBuilder(
     return { ...blocked(sha, "DRAWIO_CANDIDATE_WORKBOOK_INVALID"),
       diagnostics: mapped.diagnostics.map(x => ({ code: x.code, message: x.code })) };
   }
-  const condition = { op: "equals" as const, target: sorted.length && nodeIds.get(positionKey(sorted[0]!.node))!,
+  const condition = { op: "equals" as const, target: nodeIds.get(positionKey(sorted[0]!.node))!,
     path: "drawio_manual_verification", value: "VERIFIED" };
   const source: ScenarioSource = {
     ...mapped.source,
