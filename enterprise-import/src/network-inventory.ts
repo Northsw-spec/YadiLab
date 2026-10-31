@@ -17,6 +17,15 @@ const aliases = {
   gateway: ["Default Gateway", "Gateway", "Default GW"],
   target: ["Connected To", "Connects To", "Link To", "Peer ID", "Peer Node"],
 } as const;
+const RECOGNIZED_DEVICE_HEADERS = new Set(
+  Object.values(aliases).flatMap((names) => names.map(key)),
+);
+const INVENTORY_TABLE_IDS = new Set(["devices", "nodes", "records"]);
+function populatedSourceCell(value: unknown): boolean {
+  // A false, 0 or structured original value is not an empty cell.
+  return value !== null && value !== undefined &&
+    !(typeof value === "string" && value.trim() === "");
+}
 
 function pick(record: ImportRecord, candidates: readonly string[], table: string, diagnostics: ImportDiagnostic[]): ImportCell | undefined {
   // Alias precedence is only applied if exactly one source header matches.
@@ -71,6 +80,7 @@ export interface NetworkInventoryNormalization {
   readonly diagnostics: readonly ImportDiagnostic[];
   readonly linkSourceConflict?: NetworkLinkSourceConflict;
   readonly linkSourceChoice?: NetworkLinkSourceDecision;
+  readonly unmappedColumnCount: number;
 }
 
 /**
@@ -84,20 +94,37 @@ export function normalizeNetworkInventoryDocument(
 ): NetworkInventoryNormalization {
   const choice = options?.linkSourceChoice;
   const validChoice = choice === undefined || choice === "LINKS_SHEET" || choice === "INLINE_CONNECTED_TO";
+  // Do not silently prefer the first of two competing network inventory
+  // tables. This also covers canonical Metadata+Nodes mixed with Devices.
+  const inventories = document.tables.filter((t) =>
+    INVENTORY_TABLE_IDS.has(t.tableId.toLowerCase()));
+  if (inventories.length > 1) return { document, unmappedColumnCount: 0, diagnostics: [{
+    code: "NETWORK_IMPORT_DEVICE_TABLE_AMBIGUOUS", severity: "error",
+    message: "Multiple competing device inventory tables were supplied. No source table was selected or combined.",
+  }] };
   // The already canonical Nodes/Metadata/Links workbook schema remains unchanged.
   if (document.tables.some((t) => t.tableId === "Metadata") &&
       document.tables.some((t) => t.tableId === "Nodes")) {
-    if (choice !== undefined) return { document, diagnostics: [{
+    if (choice !== undefined) return { document, unmappedColumnCount: 0, diagnostics: [{
       code: "NETWORK_IMPORT_LINK_SOURCE_CHOICE_INVALID", severity: "error",
       message: "A link-source decision requires conflicting Devices inline links and a separate Links table.",
     }] };
-    return { document, diagnostics: [] };
+    return { document, diagnostics: [], unmappedColumnCount: 0 };
   }
-  const inventory = document.tables.find((t) => ["devices", "nodes", "records"].includes(t.tableId.toLowerCase()));
-  if (!inventory) return { document, diagnostics: [{ code: "NETWORK_IMPORT_INVENTORY_MISSING", severity: "error", message: "Expected a Devices or Nodes worksheet, or a CSV/TSV with device rows." }] };
+  const inventory = inventories[0];
+  if (!inventory) return { document, unmappedColumnCount: 0, diagnostics: [{
+    code: "NETWORK_IMPORT_INVENTORY_MISSING", severity: "error",
+    message: "Expected one supported Devices or Nodes table, or a CSV/TSV device inventory.",
+  }] };
   const diagnostics: ImportDiagnostic[] = [];
+  const nonemptyUnmappedHeaders = new Set<string>();
   const nodes: ImportRecord[] = [], interfaces: ImportRecord[] = [], inlineLinks: ImportRecord[] = [];
   for (const row of inventory.records) {
+    for (const [header, cell] of Object.entries(row.fields)) {
+      const normalizedHeader = key(header);
+      if (!RECOGNIZED_DEVICE_HEADERS.has(normalizedHeader) &&
+          populatedSourceCell(cell.value)) nonemptyUnmappedHeaders.add(normalizedHeader);
+    }
     const fields = (Object.keys(aliases) as (keyof typeof aliases)[]).reduce((out, name) => {
       out[name] = pick(row, aliases[name], inventory.tableId, diagnostics); return out;
     }, {} as Record<keyof typeof aliases, ImportCell | undefined>);
@@ -136,6 +163,11 @@ export function normalizeNetworkInventoryDocument(
       linkId: { value: `link_row_${row.recordIndex}`, source: fields.target }, nodeA: { value: id, source: fields.id }, nodeB: { value: target, source: fields.target },
     }));
   }
+  const unmappedColumnCount = nonemptyUnmappedHeaders.size;
+  if (unmappedColumnCount > 0) diagnostics.push({
+    code: "NETWORK_IMPORT_COLUMNS_UNMAPPED", severity: "warning",
+    message: "Some source columns are unsupported, were not mapped, and do not establish modeled assets, links or Engine truth.",
+  });
   const explicitTables = document.tables.filter((t) => t.tableId.toLowerCase() === "links");
   const explicitLinks = explicitTables[0];
   if (explicitTables.length > 1) diagnostics.push({
@@ -188,7 +220,7 @@ export function normalizeNetworkInventoryDocument(
   if (!links.length) diagnostics.push({ code: "NETWORK_IMPORT_NO_EXPLICIT_LINKS", severity: "warning", message: "No explicit network links were supplied; the topology will show devices without connecting them." });
   if (nodes.length === 0) diagnostics.push({ code: "NETWORK_IMPORT_NO_DEVICES", severity: "error", message: "No valid device rows were found." });
   return {
-    document: { tables: output }, diagnostics,
+    document: { tables: output }, diagnostics, unmappedColumnCount,
     ...(linkSourceConflict ? { linkSourceConflict } : {}),
     ...(conflicted && (choice === "LINKS_SHEET" || choice === "INLINE_CONNECTED_TO")
       ? { linkSourceChoice: choice } : {}),
