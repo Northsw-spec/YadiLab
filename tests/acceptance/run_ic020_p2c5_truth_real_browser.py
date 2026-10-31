@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -40,7 +41,7 @@ def run_selected(pane,page,host,probe,destination,truth):
     source.select_option(host)
     active.select_option(probe)
     if destination:
-        pane.get_by_label("Destination").select_option(destination)
+        pane.locator("label.inspector-field").filter(has_text=re.compile(r"^Destination")).locator("select").select_option(destination)
     pane.get_by_role("button",name="Kör modellerad aktiv probe").click()
     transcript=page.locator('[data-active-probe-transcript]').first
     expect(transcript).to_be_visible(timeout=25000)
