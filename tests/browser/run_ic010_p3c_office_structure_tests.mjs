@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import fs from "node:fs";
 import React from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {ZipJsArchiveBackend} from "../../dist-browser-test/package-io/src/zipjs-backend.js";
@@ -176,5 +177,8 @@ eq(builtinEnterpriseImportAdapters.map(x=>x.id),
   ["builtin.json","builtin.csv","builtin.tsv","builtin.xlsx","builtin.ods"],
   "Five native adapters unchanged");
 eq(selectEnterpriseImportAdapter("text/csv").id,"builtin.csv");
+ok(fs.readFileSync("ui/app/structured-xml-inspection-panel.mjs","utf8")
+  .includes("/^IC010_(?:XML|STATIC|P3|P3C)_[A-Z0-9_]+$/"),
+  "Office fixed-size codes remain safely displayable rather than generic XML fallback");
 console.log("PASS IC-010 P3c shared Office ZIP structural inspection: "+
   count+" producer, SHA, locator, secret redaction, archive spoof, size, consent and truth assertions.");
