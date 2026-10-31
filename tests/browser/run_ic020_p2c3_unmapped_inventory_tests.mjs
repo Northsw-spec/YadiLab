@@ -26,6 +26,11 @@ const sha=x=>crypto.createHash("sha256").update(x).digest("hex");
 const file=(name,data)=>({name,size:data.byteLength,async arrayBuffer(){
   return data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);
 }});
+// CI source gate: Python parse only, no pycache/side-effect artifacts.
+execFileSync("python3",["-c",
+ "import ast,pathlib; ast.parse(pathlib.Path('tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py').read_text(encoding='utf-8'))"],
+ {stdio:["ignore","pipe","pipe"],timeout:8000});
+assertions++;
 const SECRET="SYNTHETIC_PRIVATE_UNMAPPED_COLUMN_4783_NOT_REAL";
 const nodes=[
  {"Asset ID":"rtr01","Hostname":"Router","Device Type":"Router","IP Address":"10.7.0.1",
