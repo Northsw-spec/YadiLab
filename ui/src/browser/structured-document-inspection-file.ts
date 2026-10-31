@@ -24,6 +24,11 @@ export async function inspectSharedDocumentFileReadOnly(
   }
   const name = file.name.toLowerCase();
   const staticInventory = name.endsWith(".yaml") || name.endsWith(".yml") || name.endsWith(".ini");
+  const xml = name.endsWith(".graphml") || name.endsWith(".drawio") ||
+    name.endsWith(".nessus") || name.endsWith(".xml");
+  if (!xml && !staticInventory) {
+    throw new EnterpriseImportError("IC010_P3_EXTENSION_UNSUPPORTED", "IC010_P3_EXTENSION_UNSUPPORTED");
+  }
   if (!staticInventory) {
     // Original XML contract and maximum source budget stay authoritative.
     return inspectStructuredXmlFileReadOnly(file);
