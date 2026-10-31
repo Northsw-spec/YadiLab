@@ -3263,9 +3263,32 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       ) : null,
       e("p", { className: "helper-note" }, preview.links === 0 ? "No physical connections provided. Devices will be shown without invented links." : "Only explicitly declared links will appear in the topology."),
       preview.diagnostics.length ? e("ul", { className: "validation-list" }, ...preview.diagnostics.slice(0, 30).map((d, i) => e("li", { key: i }, `${d.severity.toUpperCase()}: ${d.code} – ${d.message}`))) : e("p", null, "No import diagnostics."),
+      isCoreReimport(preview) ? e("section", {
+        "data-network-reimport-review": reimportApproved ? "APPROVED" : reimportReview ? "REVIEWED" : "REVIEW_REQUIRED",
+      },
+        e("p", null, "Reimport: compare the CURRENT LIVE workspace snapshot against the newly verified incoming original. The prior workspace digest is NOT a prior original-file SHA. No change is automatically applied."),
+        e("button", { type: "button", disabled: busy, "data-network-reimport-compare": "true",
+          onClick: reviewCoreReimport }, busy ? "Comparing…" : "Review differences (read-only)"),
+        reimportReview ? e("div", { "data-network-reimport-diff": "true" },
+          e("p", { "data-network-reimport-workspace-sha": "true" }, "Current live workspace SHA-256 (NOT an original-file SHA): " + reimportReview.currentWorkspaceSourceSha256),
+          e("p", { "data-network-reimport-original-sha": "true" }, "Incoming original file SHA-256: " + reimportReview.incomingOriginalSourceSha256),
+          e("p", { "data-network-reimport-resource-counts": "true" },
+            `Devices: added ${reimportReview.resources.added}, removed ${reimportReview.resources.removed}, changed ${reimportReview.resources.changed}, unchanged ${reimportReview.resources.unchanged}`),
+          e("p", { "data-network-reimport-link-counts": "true" },
+            `Explicit links: added ${reimportReview.connections.added}, removed ${reimportReview.connections.removed}, changed ${reimportReview.connections.changed}, unchanged ${reimportReview.connections.unchanged}`),
+          e("p", null, "Documented model differences only. Neither physical cabling nor Engine truth is verified here."),
+          e("button", { type: "button", disabled: busy || reimportApproved,
+            "data-network-reimport-approve": "true", onClick: () => {
+              if (getCurrentWorkspaceIdentity() !== workspaceIdentity) {
+                setFailure("IC020_P2B_BASELINE_CHANGED"); return;
+              }
+              setReimportApproved(true);
+            } }, reimportApproved ? "Reviewed replacement approved" : "Approve replacing the entire current workspace")
+        ) : null
+      ) : null,
       e("div", { className: "network-import-actions" },
-        e("button", { type: "button", disabled: !preview.ok || busy, "data-network-import-runtime": "true", onClick: () => activate("runtime") }, busy ? "Validating…" : "Open modeled Runtime + Probes"),
-        e("button", { type: "button", disabled: !preview.ok || busy, "data-network-import-activate": "true", onClick: () => activate("builder") }, busy ? "Validating…" : "Create topology in Builder (edit only)")),
+        e("button", { type: "button", disabled: !preview.ok || busy || (isCoreReimport(preview) && (!reimportReview || !reimportApproved)), "data-network-import-runtime": "true", onClick: () => activate("runtime") }, busy ? "Validating…" : "Open modeled Runtime + Probes"),
+        e("button", { type: "button", disabled: !preview.ok || busy || (isCoreReimport(preview) && (!reimportReview || !reimportApproved)), "data-network-import-activate": "true", onClick: () => activate("builder") }, busy ? "Validating…" : "Create topology in Builder (edit only)")),
       e("p", { className: "helper-note", "data-import-probe-boundary": "true" }, "Modeled probes use declared Windows/Linux source hosts and existing Engine evidence. A topology inventory alone cannot prove connectivity, routing, DNS or open ports: UNKNOWN is expected when required facts are absent. No real traffic is sent."),
     ) : null,
     ),
