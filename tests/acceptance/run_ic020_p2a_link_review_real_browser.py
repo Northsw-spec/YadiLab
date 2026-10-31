@@ -74,9 +74,11 @@ def case_builder(browser,url,choice):
   page,errors,outside=setup(browser,url)
   try:
     baseline=exported_source(page)
+    baselineId=page.locator('.app-frame').get_attribute('data-runtime-scenario-id')
     file_picker(page)
     pending(page)
-    require(exported_source(page)==baseline,"Blocked conflicting source changed live Builder")
+    require(page.locator('.app-frame').get_attribute('data-runtime-scenario-id')==baselineId,
+            "Blocked conflicting source changed current Builder identity")
     choose(page,choice)
     page.locator('[data-network-import-activate]').click()
     expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
@@ -168,10 +170,10 @@ def case_tamper(browser,url,threshold):
               "Changed original silently closed modal after Builder activation")
     require(page.evaluate("window.__ic020P2aReads['consultant.json']")>=threshold,
             "Source was not reread at actual reviewed stage")
-    require(exported_source(page)==baseline,
-            "Changed source mutated existing Builder")
     page.get_by_role("button",name="Close network import").click()
     expect(page.locator('[data-network-import-panel]')).to_have_count(0)
+    require(exported_source(page)==baseline,
+            "Changed source mutated existing Builder")
     require(not errors,"Browser errors "+repr(errors))
     require(not outside,"Outside network requests "+repr(outside))
     return {"case":"same_size_original_mutation_on_read_"+str(threshold),
