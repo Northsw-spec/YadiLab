@@ -51,3 +51,7 @@ export type { AnsibleStaticInventoryPreview, AnsibleHostObservation, AnsibleInve
 export { ANSIBLE_ASSOCIATION_FORMAT, reviewAnsibleInventoryAssociations } from "./ansible-association-review.js";
 export type { AnsibleModeledResource, AnsibleBuilderSnapshot, AnsibleAssociationDecision,
   AnsibleReviewedAssociation, AnsibleAssociationSidecar, AnsibleAssociationResult } from "./ansible-association-review.js";
+
+// IC-010/P1: bounded producer-validated read-only XML profile metadata; never an active adapter.
+export { inspectStructuredXmlSourceReadOnly } from "./structured-xml-source-inspection.js";
+export type { ReadOnlyXmlProfileId, XmlSourceSummary, OriginalXmlSourceLocator, XmlSourceBlockedCode, BlockedXmlSource, InspectedXmlSource, ReadOnlyXmlInspection } from "./structured-xml-source-inspection.js";
