@@ -48,6 +48,9 @@ import { reviewNmapOriginalFileAssociations } from "../src/browser/nmap-associat
 import { NmapObservationPanel } from "./nmap-observation-panel.mjs";
 import { NessusSeverityPanel } from "./nessus-severity-panel.mjs";
 import { DrawioStructurePanel } from "./drawio-structure-panel.mjs";
+import { DrawioReviewedBuilderPanel } from "./drawio-reviewed-builder-panel.mjs";
+import { previewDrawioCandidateFile, verifyDrawioOriginalForReviewedActivation } from "../src/browser/drawio-reviewed-candidate-file.js";
+import { mapReviewedDrawioOriginalToBuilder } from "../../enterprise-import/src/drawio-reviewed-candidate.js";
 import { DrawioSavedReferenceReplayPanel } from "./drawio-reference-replay-panel.mjs";
 import { replayDrawioSavedReportFiles } from "../src/browser/drawio-report-replay-file.js";
 import { previewDrawioFileReadOnly } from "../src/browser/drawio-file-preview.js";
@@ -3360,7 +3363,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   );
 }
 
-function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructuredXml, onInspectGraphml, onInspectNmap, onInspectNmapReplay, onInspectNessus, onInspectNessusReplay, onInspectDrawio, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructuredXml, onInspectGraphml, onInspectNmap, onInspectNmapReplay, onInspectNessus, onInspectNessusReplay, onInspectDrawio, onReviewDrawioBuilder, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   const networkPickerRef = useRef(null);
   // Opening the native picker happens synchronously within the user's click,
@@ -3423,6 +3426,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructured
         e("button", { type: "button", "data-inspect-nessus": "EVIDENCE_ONLY", onClick: onInspectNessus }, "Inspect Nessus .nessus (severity summary only)"),
         e("button", { type: "button", "data-inspect-nessus-replay": "EVIDENCE_OBSERVED", onClick: onInspectNessusReplay }, "Inspect saved Nessus references (read-only replay)"),
         e("button", { type: "button", "data-inspect-drawio": "PREVIEW_ONLY", onClick: onInspectDrawio }, "Inspect draw.io .drawio (uncompressed structure)"),
+        e("button", { type: "button", "data-review-drawio-builder": "REVIEW_REQUIRED", onClick: onReviewDrawioBuilder }, "Review diagrams.net (.drawio) into Builder"),
         e("button", { type: "button", "data-inspect-drawio-replay": "TOPOLOGY_DECLARED", onClick: onInspectDrawioReplay }, "Inspect saved draw.io references (read-only replay)"),
         e("button", { type: "button", "data-inspect-ansible": "CONFIG_DOCUMENTED", onClick: onInspectAnsible }, "Inspect Ansible YAML (read-only inventory)"),
         e("button", { type: "button", "data-inspect-ansible-yaml-replay": "CONFIG_DOCUMENTED", onClick: onInspectAnsibleYamlReplay }, "Inspect saved Ansible YAML references (read-only replay)"),
@@ -3596,6 +3600,7 @@ function App() {
   const [nessusSeverityOpen, setNessusSeverityOpen] = useState(false);
   const [nessusReplayOpen, setNessusReplayOpen] = useState(false);
   const [drawioStructureOpen, setDrawioStructureOpen] = useState(false);
+  const [drawioBuilderReviewOpen, setDrawioBuilderReviewOpen] = useState(false);
   const [drawioReplayOpen, setDrawioReplayOpen] = useState(false);
   const [ansibleInventoryOpen, setAnsibleInventoryOpen] = useState(false);
   const [ansibleYamlReplayOpen, setAnsibleYamlReplayOpen] = useState(false);
@@ -4162,7 +4167,7 @@ function App() {
     e("header", { className: "app-header" },
       e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version} · ${releaseIdentity.sourceCommit.slice(0,12)}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
       e(MainActions, { onInspectStructuredXml: () => setStructuredXmlInspectionOpen(true), onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectNmapReplay: () => setNmapReplayOpen(true), onInspectNessus: () => setNessusSeverityOpen(true), onInspectNessusReplay: () => setNessusReplayOpen(true),
-        onInspectDrawio: () => setDrawioStructureOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectAnsibleIniReplay: () => setAnsibleIniReplayOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
+        onInspectDrawio: () => setDrawioStructureOpen(true), onReviewDrawioBuilder: () => setDrawioBuilderReviewOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectAnsibleIniReplay: () => setAnsibleIniReplayOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
     selectedGuidedLab ? e("section", { className: "curriculum-strip", "data-curriculum-wave": "guided_troubleshooting_wave1" },
@@ -4449,6 +4454,70 @@ function App() {
         return replayDrawioSavedReportFiles(original,report,getCurrentModel,consent,isCurrent);
       },
       onClose:()=>setDrawioReplayOpen(false),
+    }) : null,
+    drawioBuilderReviewOpen ? e(DrawioReviewedBuilderPanel, {
+      inspectFile: previewDrawioCandidateFile,
+      manualRoleOptions: GRAPHML_MANUAL_ROLE_OPTIONS,
+      onClose: () => setDrawioBuilderReviewOpen(false),
+      onConfirm: async (expectedGraph, decision, reviewedBytes, originalFile, isCurrentSelection) => {
+        // Capture the exact current workspace and transition BEFORE any yield.
+        // This dialog must not commit an obsolete reviewed diagram over newer
+        // user Builder edits, other imports, guided labs or a Runtime.
+        const liveBefore = latestDrawioWorkspaceRef.current;
+        const workspaceIdentity = JSON.stringify(liveBefore);
+        const transitionIdentity = scenarioTransitionRef.current;
+        const checkCurrent = () => {
+          if (scenarioTransitionRef.current !== transitionIdentity ||
+              JSON.stringify(latestDrawioWorkspaceRef.current) !== workspaceIdentity) {
+            const error = new Error("IC030_P2B_WORKSPACE_CHANGED");
+            error.code = "IC030_P2B_WORKSPACE_CHANGED"; throw error;
+          }
+          if (typeof isCurrentSelection !== "function" || !isCurrentSelection()) {
+            const error = new Error("IC030_P2B_STALE");
+            error.code = "IC030_P2B_STALE"; throw error;
+          }
+        };
+        checkCurrent();
+        const mapped = await mapReviewedDrawioOriginalToBuilder(
+          reviewedBytes, expectedGraph, decision);
+        checkCurrent();
+        if (mapped.status !== "READY_FOR_COMPILATION" || !mapped.source) {
+          const code = mapped.diagnostics[0]?.code ?? "DRAWIO_CANDIDATE_BLOCKED";
+          const error = new Error(code);error.code = code;throw error;
+        }
+        const candidate = await compileBuilderWorkspace(
+          createBuilderWorkspace(mapped.source), compilerOptions);
+        checkCurrent();
+        if (candidate.compile.status !== "valid") {
+          const error = new Error("IC030_P2B_COMPILE_BLOCKED");
+          error.code = "IC030_P2B_COMPILE_BLOCKED"; throw error;
+        }
+        const layout = await autoLayoutBuilder(candidate, new ElkLayoutBackend());
+        checkCurrent();
+        if (!layout.ok) {
+          const error = new Error("IC030_P2B_LAYOUT_BLOCKED");
+          error.code = "IC030_P2B_LAYOUT_BLOCKED"; throw error;
+        }
+        // The LAST asynchronous gate rereads exactly the originally chosen
+        // File, checks full SHA and ordinal endpoint structure, and reapplies
+        // the SAME manual review decisions.
+        const refreshed = await verifyDrawioOriginalForReviewedActivation(
+          originalFile, expectedGraph, decision, isCurrentSelection);
+        checkCurrent();
+        if (JSON.stringify(refreshed.source) !== JSON.stringify(mapped.source) ||
+            JSON.stringify(refreshed.origins) !== JSON.stringify(mapped.origins)) {
+          const error = new Error("DRAWIO_CANDIDATE_SOURCE_CHANGED");
+          error.code = "DRAWIO_CANDIDATE_SOURCE_CHANGED"; throw error;
+        }
+        beginScenarioTransition();
+        setImportedProbeAutoOpen(false);
+        setDiagnostics([...layout.diagnostics, {
+          severity: "warning", code: "DRAWIO_REVIEWED_GRAPH_NOT_VERIFIED",
+          message: "Only individually selected drawn positions and expressly consented modeled edges entered Builder. No real devices, physical cables, reachability, routes, OS or Engine PASS were verified."
+        }]);
+        setWorkspace(layout.workspace);
+        setDrawioBuilderReviewOpen(false);
+      },
     }) : null,
     drawioStructureOpen ? e(DrawioStructurePanel, {
       inspectFile: previewDrawioFileReadOnly,
