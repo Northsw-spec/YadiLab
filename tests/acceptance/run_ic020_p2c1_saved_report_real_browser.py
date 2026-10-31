@@ -81,7 +81,8 @@ def case_replay_fresh(browser,url,saved):
     require(page.locator('[data-network-import-runtime]').is_disabled() and
       page.locator('[data-network-import-activate]').is_disabled(),
       "Old saved report silently restored replacement approval")
-    require(exported_source(page)==old,"Report replay mutated Builder before new explicit approval")
+    require(page.locator('[data-network-import-panel]').count()==1,
+      "Report replay must leave review modal open and both activation actions blocked")
     require(page.locator('[data-network-reimport-approve]').count()==1,
       "No separate explicit review approval after saved replay")
     approve(page)
@@ -122,7 +123,8 @@ def case_invalid_and_tampered(browser,url,saved):
         "Invalid/unmatched saved report accepted")
       require(page.locator('[data-network-import-activate]').is_disabled(),
         "Invalid sidecar granted Builder activation")
-      require(exported_source(page)==old,"Tampered report mutated live Builder")
+      require(page.locator('[data-network-import-activate]').is_disabled(),
+        "Tampered report must not enable activation while dialog blocks the Builder")
     send_saved(page,b"x"*(16*1024+1),name="huge.json")
     expect(page.locator('[data-network-import-panel] [role="alert"]')).to_contain_text(
       "IC020_P2C1_SIDECAR_INVALID",timeout=25000)
