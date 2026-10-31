@@ -55,3 +55,7 @@ export type { AnsibleModeledResource, AnsibleBuilderSnapshot, AnsibleAssociation
 // IC-010/P1: bounded producer-validated read-only XML profile metadata; never an active adapter.
 export { inspectStructuredXmlSourceReadOnly } from "./structured-xml-source-inspection.js";
 export type { ReadOnlyXmlProfileId, XmlSourceSummary, OriginalXmlSourceLocator, XmlSourceBlockedCode, BlockedXmlSource, InspectedXmlSource, ReadOnlyXmlInspection } from "./structured-xml-source-inspection.js";
+
+// IC-010/P3a: metadata-only static Ansible inventory inspection; no new adapter.
+export { inspectStaticAnsibleSourceReadOnly } from "./structured-ansible-source-inspection.js";
+export type { AnsibleStaticProfileId, AnsibleBlockedCode, AnsibleDocumentLocator, AnsibleAggregateSummary, AnsibleBlockedInspection, AnsibleReadOnlyInspection, AnsibleStaticInspection } from "./structured-ansible-source-inspection.js";
