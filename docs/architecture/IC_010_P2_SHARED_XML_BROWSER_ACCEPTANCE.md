@@ -1,6 +1,6 @@
 # IC-010 P2 — Frozen unified read-only XML browser-entry oracles
 
-**Baseline:** protected `main=58d726cd0df3c45e5d34cb08051a317f35115a80`, tree `58d726cd0df3c45e5d34cb08051a317f35115a80` was NOT assumed to be tree SHA; actual current tree must be independently queried. `AGENTS.md`, IMPORT-COMPLETE-001, issue #3, P1 source and existing individual read-only UI inspected. **Scope:** a separate *UI-discovery-only* vertical slice within IC-010, not completion of all profiles.
+**Baseline:** protected `main=58d726cd0df3c45e5d34cb08051a317f35115a80`, Git tree `31ec3578619b3abbfdcdf89e3ddd5f506c97ca48` verified from the actual Git commit object. These are historical audit identities only. `AGENTS.md`, IMPORT-COMPLETE-001, issue #3, P1 source and existing individual read-only UI inspected. **Scope:** a separate *UI-discovery-only* vertical slice within IC-010, not completion of all profiles.
 
 ## Frozen intended product behavior
 
