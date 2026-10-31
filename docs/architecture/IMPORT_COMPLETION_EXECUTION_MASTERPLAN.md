@@ -61,6 +61,8 @@ Generate a source-cited inventory of each scoped profile's detect / parse / prev
 
 **Gate:** every row grounded in live source/tests/CI; no current implementation silently omitted; baseline five adapters and import probes regressions PASS; no new import activation.
 
+**IC-000 source-audit reference:** [Live capability audit](IC_000_LIVE_IMPORT_CAPABILITY_AUDIT.md) and [machine-readable v1 matrix](import-capability-matrix.v1.json). These reflect a historical code snapshot and are not automatic proof of current test/release status. Every later import PR must revise the affected profile capability fields and evidence only after actual feature/CI verification.
+
 ### IC-010 — shared profile entrypoint and source/provenance contracts
 Introduce bounded profile detection, typed original-source locators, state-machine transition/status vocabulary, review/consent, stale-source/Builder invalidation and discriminated projections. Reuse existing modules; avoid a universal XML/YAML parser and preserve five legacy adapters byte-for-byte at public contracts. Show status in a coherent import UI with safe blocked/unsupported explanations and real browser file-picker controls.
 
