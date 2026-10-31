@@ -56,6 +56,7 @@ jobs:
           npm run test:ic020-p2c3-unmapped
           npm run test:ic020-p2c4-matrix
           npm run test:ic020-p2c5-truth
+          npm run test:ic020-p2c6-exit
           npm run test:simulation-clock
           npm run test:simulation-transitions
           npm run test:ospf-p2p-hello
