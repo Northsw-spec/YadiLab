@@ -33,6 +33,7 @@ import guidedLinuxFirewall from "../../curriculum/builtin/wave1/linux-firewall.j
 import guidedLinuxSsh from "../../curriculum/builtin/wave1/linux-ssh.json";
 import defaultEnterpriseMapping from "../../examples/enterprise-import/enterprise-import-template.mapping.json";
 import { previewNetworkTopologyFile, verifyNetworkTopologyOriginalForActivation } from "../src/browser/network-topology-import.js";
+import { compareCoreNetworkReimport } from "../src/browser/core-network-reimport-review.js";
 import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
 import { inspectSharedDocumentFileReadOnly } from "../src/browser/structured-document-inspection-file.js";
 import { reviewSharedStaticHostOriginalReference } from "../src/browser/shared-ansible-original-reference.js";
@@ -3052,12 +3053,20 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
   const [selectedLinkSource, setSelectedLinkSource] = useState(null);
+  const [reimportReview, setReimportReview] = useState(null);
+  const [reimportApproved, setReimportApproved] = useState(false);
+  // The previous source is the CURRENT live editable workspace, not a
+  // cryptographically attested past original file.
+  const isCoreReimport = (candidate) => Boolean(candidate?.ok && candidate?.source &&
+    candidate.source.scenarioId === "imported_network" &&
+    workspaceIdentity?.source?.scenarioId === candidate.source.scenarioId);
   const requestId = useRef(0);
   const selectedOriginal = useRef(null);
   const invalidated = () => {
     requestId.current++;
     selectedOriginal.current = null;
     setPreview(null); setFailure(""); setBusy(false); setSelectedLinkSource(null);
+    setReimportReview(null); setReimportApproved(false);
     setDiagnostics([]);
   };
   const close = () => { invalidated(); onClose(); };
@@ -3065,6 +3074,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     const current = ++requestId.current;
     selectedOriginal.current = file ?? null;
     setFailure(""); setPreview(null); setDiagnostics([]); setSelectedLinkSource(null);
+    setReimportReview(null); setReimportApproved(false);
     if (!file) { setBusy(false); return; }
     setBusy(true);
     try {
@@ -3092,6 +3102,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     }
     const current = ++requestId.current;
     setBusy(true); setFailure(""); setPreview(null); setDiagnostics([]);
+    setReimportReview(null); setReimportApproved(false);
     try {
       const next = await previewNetworkTopologyFile(original, { linkSourceChoice: choice });
       if (requestId.current !== current || selectedOriginal.current !== original) return;
@@ -3115,6 +3126,25 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       setFailure("IC020_P2A_SOURCE_CHANGED");
     } finally { if (requestId.current === current) setBusy(false); }
   };
+  const reviewCoreReimport = async () => {
+    if (busy || !preview?.ok || !preview.source || !isCoreReimport(preview)) return;
+    const candidate=preview, original=selectedOriginal.current, epoch=requestId.current;
+    const isCurrent=()=>Boolean(original) && requestId.current===epoch &&
+      selectedOriginal.current===original && getCurrentWorkspaceIdentity()===workspaceIdentity;
+    if(!isCurrent()){setFailure("IC020_P2B_BASELINE_CHANGED");return;}
+    setBusy(true);setFailure("");setReimportReview(null);setReimportApproved(false);
+    try{
+      await verifyNetworkTopologyOriginalForActivation(original,candidate,isCurrent);
+      const report=await compareCoreNetworkReimport(workspaceIdentity,candidate,isCurrent);
+      if(!isCurrent())throw new Error("IC020_P2B_BASELINE_CHANGED");
+      setReimportReview(report);
+    }catch{
+      if(requestId.current===epoch){
+        setFailure("IC020_P2B_BASELINE_CHANGED");
+        setReimportReview(null);setReimportApproved(false);
+      }
+    }finally{if(requestId.current===epoch)setBusy(false);}
+  };
   // A file picked directly from MAIN ACTIONS must enter the exact same
   // preview/validation path as a file picked from the dialog itself.
   useEffect(() => {
@@ -3133,6 +3163,13 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     if (!preview?.ok || !preview.source || busy) return;
     const original = selectedOriginal.current;
     const activationEpoch = requestId.current;
+    const needsReimportReview=isCoreReimport(preview);
+    if(needsReimportReview && (!reimportReview || !reimportApproved ||
+        reimportReview.incomingOriginalSourceSha256!==preview.sourceSha256 ||
+        reimportReview.currentWorkspaceRevision!==workspaceIdentity.sourceRevision ||
+        reimportReview.sourceLinkChoice!==preview.linkSourceChoice)){
+      setFailure("IC020_P2B_REVIEW_REQUIRED");return;
+    }
     if (preview.linkSourceConflict && (!preview.linkSourceChoice ||
         preview.linkSourceChoice !== selectedLinkSource)) {
       setFailure("IC020_P2A_REVIEW_REQUIRED");
@@ -3144,6 +3181,12 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       getCurrentWorkspaceIdentity() === workspaceIdentity;
     if (!isCurrent()) { setFailure("IC020_P1_STALE"); return; }
     setBusy(true); setFailure("");
+    const verifyReimportApproval=async()=>{
+      if(!needsReimportReview)return;
+      const current=await compareCoreNetworkReimport(workspaceIdentity,preview,isCurrent);
+      if(!isCurrent() || JSON.stringify(current)!==JSON.stringify(reimportReview))
+        throw new Error("IC020_P2B_BASELINE_CHANGED");
+    };
     try {
       let next = await compileBuilderWorkspace(createBuilderWorkspace(preview.source), compilerOptions);
       if (next.compile.status !== "valid") {
@@ -3174,10 +3217,12 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
           return;
         }
         await verifyNetworkTopologyOriginalForActivation(original, preview, isCurrent);
+        await verifyReimportApproval();
         if (!isCurrent()) throw new Error("IC020_P1_STALE");
         onActivate(runtime.workspace, true);
       } else {
         await verifyNetworkTopologyOriginalForActivation(original, preview, isCurrent);
+        await verifyReimportApproval();
         if (!isCurrent()) throw new Error("IC020_P1_STALE");
         onActivate(next, false);
       }
@@ -3218,9 +3263,32 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       ) : null,
       e("p", { className: "helper-note" }, preview.links === 0 ? "No physical connections provided. Devices will be shown without invented links." : "Only explicitly declared links will appear in the topology."),
       preview.diagnostics.length ? e("ul", { className: "validation-list" }, ...preview.diagnostics.slice(0, 30).map((d, i) => e("li", { key: i }, `${d.severity.toUpperCase()}: ${d.code} – ${d.message}`))) : e("p", null, "No import diagnostics."),
+      isCoreReimport(preview) ? e("section", {
+        "data-network-reimport-review": reimportApproved ? "APPROVED" : reimportReview ? "REVIEWED" : "REVIEW_REQUIRED",
+      },
+        e("p", null, "Reimport: compare the CURRENT LIVE workspace snapshot against the newly verified incoming original. The prior workspace digest is NOT a prior original-file SHA. No change is automatically applied."),
+        e("button", { type: "button", disabled: busy, "data-network-reimport-compare": "true",
+          onClick: reviewCoreReimport }, busy ? "Comparing…" : "Review differences (read-only)"),
+        reimportReview ? e("div", { "data-network-reimport-diff": "true" },
+          e("p", { "data-network-reimport-workspace-sha": "true" }, "Current live workspace SHA-256 (NOT an original-file SHA): " + reimportReview.currentWorkspaceSourceSha256),
+          e("p", { "data-network-reimport-original-sha": "true" }, "Incoming original file SHA-256: " + reimportReview.incomingOriginalSourceSha256),
+          e("p", { "data-network-reimport-resource-counts": "true" },
+            `Devices: added ${reimportReview.resources.added}, removed ${reimportReview.resources.removed}, changed ${reimportReview.resources.changed}, unchanged ${reimportReview.resources.unchanged}`),
+          e("p", { "data-network-reimport-link-counts": "true" },
+            `Explicit links: added ${reimportReview.connections.added}, removed ${reimportReview.connections.removed}, changed ${reimportReview.connections.changed}, unchanged ${reimportReview.connections.unchanged}`),
+          e("p", null, "Documented model differences only. Neither physical cabling nor Engine truth is verified here."),
+          e("button", { type: "button", disabled: busy || reimportApproved,
+            "data-network-reimport-approve": "true", onClick: () => {
+              if (getCurrentWorkspaceIdentity() !== workspaceIdentity) {
+                setFailure("IC020_P2B_BASELINE_CHANGED"); return;
+              }
+              setReimportApproved(true);
+            } }, reimportApproved ? "Reviewed replacement approved" : "Approve replacing the entire current workspace")
+        ) : null
+      ) : null,
       e("div", { className: "network-import-actions" },
-        e("button", { type: "button", disabled: !preview.ok || busy, "data-network-import-runtime": "true", onClick: () => activate("runtime") }, busy ? "Validating…" : "Open modeled Runtime + Probes"),
-        e("button", { type: "button", disabled: !preview.ok || busy, "data-network-import-activate": "true", onClick: () => activate("builder") }, busy ? "Validating…" : "Create topology in Builder (edit only)")),
+        e("button", { type: "button", disabled: !preview.ok || busy || (isCoreReimport(preview) && (!reimportReview || !reimportApproved)), "data-network-import-runtime": "true", onClick: () => activate("runtime") }, busy ? "Validating…" : "Open modeled Runtime + Probes"),
+        e("button", { type: "button", disabled: !preview.ok || busy || (isCoreReimport(preview) && (!reimportReview || !reimportApproved)), "data-network-import-activate": "true", onClick: () => activate("builder") }, busy ? "Validating…" : "Create topology in Builder (edit only)")),
       e("p", { className: "helper-note", "data-import-probe-boundary": "true" }, "Modeled probes use declared Windows/Linux source hosts and existing Engine evidence. A topology inventory alone cannot prove connectivity, routing, DNS or open ports: UNKNOWN is expected when required facts are absent. No real traffic is sent."),
     ) : null,
     ),
