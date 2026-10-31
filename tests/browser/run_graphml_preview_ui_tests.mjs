@@ -84,7 +84,7 @@ assert.match(app, /data-inspect-graphml": "PREVIEW_ONLY"/); assertions++;
 assert.match(app, /e\(GraphmlReadOnlyPanel, \{ inspectFile: previewGraphmlFileReadOnly/); assertions++;
 assert.match(app, /onConfirm: async \(sourcePreview, decisions\)/); assertions++;
 assert.match(app, /onInspectGraphml: \(\) => setGraphmlPreviewOpen\(true\)/); assertions++;
-assert.match(app, /accept: "\.xlsx,\.ods,\.csv,\.tsv"/); assertions++;
+assert.match(app, /accept: "\.json,\.xlsx,\.ods,\.csv,\.tsv"/); assertions++;
 
 // Negative control: removing the real dialog invocation must invalidate wiring check.
 const wiring = (src) => /e\(GraphmlReadOnlyPanel, \{ inspectFile: previewGraphmlFileReadOnly/.test(src);
