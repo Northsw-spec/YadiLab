@@ -80,7 +80,8 @@ export async function verifyNetworkTopologyOriginalForActivation(
   }
   let latest: NetworkTopologyImportPreview;
   try {
-    latest = await previewNetworkTopologyFile(file, { linkSourceChoice: expected.linkSourceChoice });
+    latest = await previewNetworkTopologyFile(file, expected.linkSourceChoice
+      ? { linkSourceChoice: expected.linkSourceChoice } : {});
   } catch {
     // Do not expose raw source/ZIP/parser errors after consented review.
     fail("IC020_P1_SOURCE_CHANGED");
