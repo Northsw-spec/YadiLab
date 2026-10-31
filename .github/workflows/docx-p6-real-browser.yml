@@ -28,6 +28,25 @@ jobs:
           cache: npm
       - name: Locked dependencies
         run: npm ci
+      # Ubuntu 24.04 hosted runners can stall for 35 minutes fetching
+      # azure.archive.ubuntu.com; normalize only ephemeral APT sources.
+      # Keep pinned Playwright and --with-deps Chromium test gate intact.
+      - name: Normalize Ubuntu package mirror for Chromium dependencies
+        run: |
+          set -Eeuo pipefail
+          for apt_source in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+            if [ -f "$apt_source" ]; then
+              sudo sed -i \
+                -e 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+                -e 's|https://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+                "$apt_source"
+            fi
+          done
+          if sudo grep -R -l 'azure.archive.ubuntu.com' /etc/apt/sources.list.d /etc/apt/sources.list 2>/dev/null; then
+            echo 'FAIL independent Chromium CI: Azure Ubuntu mirror still configured'
+            exit 1
+          fi
+          echo 'PASS runner-local Ubuntu mirror normalized'
       - name: Pinned isolated real Chromium
         run: |
           python3 -m venv /tmp/docx-p6-venv
