@@ -34,6 +34,7 @@ import guidedLinuxSsh from "../../curriculum/builtin/wave1/linux-ssh.json";
 import defaultEnterpriseMapping from "../../examples/enterprise-import/enterprise-import-template.mapping.json";
 import { previewNetworkTopologyFile, verifyNetworkTopologyOriginalForActivation } from "../src/browser/network-topology-import.js";
 import { compareCoreNetworkReimport } from "../src/browser/core-network-reimport-review.js";
+import { savedCoreReimportReportText, readSavedCoreReimportReport, matchSavedCoreReimportReport } from "../src/browser/core-network-reimport-saved-report.js";
 import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
 import { inspectSharedDocumentFileReadOnly } from "../src/browser/structured-document-inspection-file.js";
 import { reviewSharedStaticHostOriginalReference } from "../src/browser/shared-ansible-original-reference.js";
@@ -3055,6 +3056,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   const [selectedLinkSource, setSelectedLinkSource] = useState(null);
   const [reimportReview, setReimportReview] = useState(null);
   const [reimportApproved, setReimportApproved] = useState(false);
+  const [savedReplay, setSavedReplay] = useState(null);
   // The previous source is the CURRENT live editable workspace, not a
   // cryptographically attested past original file.
   const isCoreReimport = (candidate) => Boolean(candidate?.ok && candidate?.source &&
@@ -3066,7 +3068,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     requestId.current++;
     selectedOriginal.current = null;
     setPreview(null); setFailure(""); setBusy(false); setSelectedLinkSource(null);
-    setReimportReview(null); setReimportApproved(false);
+    setReimportReview(null); setReimportApproved(false); setSavedReplay(null);
     setDiagnostics([]);
   };
   const close = () => { invalidated(); onClose(); };
@@ -3074,7 +3076,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     const current = ++requestId.current;
     selectedOriginal.current = file ?? null;
     setFailure(""); setPreview(null); setDiagnostics([]); setSelectedLinkSource(null);
-    setReimportReview(null); setReimportApproved(false);
+    setReimportReview(null); setReimportApproved(false); setSavedReplay(null);
     if (!file) { setBusy(false); return; }
     setBusy(true);
     try {
@@ -3102,7 +3104,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     }
     const current = ++requestId.current;
     setBusy(true); setFailure(""); setPreview(null); setDiagnostics([]);
-    setReimportReview(null); setReimportApproved(false);
+    setReimportReview(null); setReimportApproved(false); setSavedReplay(null);
     try {
       const next = await previewNetworkTopologyFile(original, { linkSourceChoice: choice });
       if (requestId.current !== current || selectedOriginal.current !== original) return;
@@ -3132,7 +3134,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     const isCurrent=()=>Boolean(original) && requestId.current===epoch &&
       selectedOriginal.current===original && getCurrentWorkspaceIdentity()===workspaceIdentity;
     if(!isCurrent()){setFailure("IC020_P2B_BASELINE_CHANGED");return;}
-    setBusy(true);setFailure("");setReimportReview(null);setReimportApproved(false);
+    setBusy(true);setFailure("");setReimportReview(null);setReimportApproved(false);setSavedReplay(null);
     try{
       await verifyNetworkTopologyOriginalForActivation(original,candidate,isCurrent);
       const report=await compareCoreNetworkReimport(workspaceIdentity,candidate,isCurrent);
@@ -3142,6 +3144,53 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       if(requestId.current===epoch){
         setFailure("IC020_P2B_BASELINE_CHANGED");
         setReimportReview(null);setReimportApproved(false);
+      }
+    }finally{if(requestId.current===epoch)setBusy(false);}
+  };
+  // Saved diff export is reference information; never an approval token.
+  const exportCoreReimportReport = async () => {
+    if (busy || !reimportReview || !preview?.ok || !isCoreReimport(preview)) return;
+    const candidate=preview, original=selectedOriginal.current, epoch=requestId.current;
+    const isCurrent=()=>Boolean(original) && requestId.current===epoch &&
+      selectedOriginal.current===original && getCurrentWorkspaceIdentity()===workspaceIdentity;
+    if(!isCurrent()){setFailure("IC020_P2C1_REPLAY_MISMATCH");return;}
+    setBusy(true);setFailure("");
+    try{
+      await verifyNetworkTopologyOriginalForActivation(original,candidate,isCurrent);
+      const current=await compareCoreNetworkReimport(workspaceIdentity,candidate,isCurrent);
+      if(!isCurrent() || JSON.stringify(current)!==JSON.stringify(reimportReview))
+        throw new Error("IC020_P2C1_REPLAY_MISMATCH");
+      downloadJson({filename:"yadilab-core-reimport-"+current.incomingOriginalSourceSha256.slice(0,12)+".json",
+        mime:"application/json",text:savedCoreReimportReportText(current)});
+    }catch{
+      if(requestId.current===epoch)setFailure("IC020_P2C1_REPLAY_MISMATCH");
+    }finally{if(requestId.current===epoch)setBusy(false);}
+  };
+  // Reopen the original, recompute the LIVE Builder diff and compare all saved
+  // fields. A matched report *never* restores a prior replacement approval.
+  const replaySavedCoreReimportReport = async file => {
+    if(busy || !file || !preview?.ok || !isCoreReimport(preview))return;
+    const candidate=preview, original=selectedOriginal.current, epoch=requestId.current;
+    const isCurrent=()=>Boolean(original) && requestId.current===epoch &&
+      selectedOriginal.current===original && getCurrentWorkspaceIdentity()===workspaceIdentity;
+    setReimportApproved(false);setReimportReview(null);setSavedReplay(null);setFailure("");
+    if(!isCurrent()){setFailure("IC020_P2C1_REPLAY_MISMATCH");return;}
+    setBusy(true);
+    try{
+      const saved=await readSavedCoreReimportReport(file,isCurrent);
+      await verifyNetworkTopologyOriginalForActivation(original,candidate,isCurrent);
+      const current=await compareCoreNetworkReimport(workspaceIdentity,candidate,isCurrent);
+      if(!isCurrent())throw new Error("IC020_P2C1_REPLAY_MISMATCH");
+      const matched=matchSavedCoreReimportReport(saved,current);
+      if(!isCurrent())throw new Error("IC020_P2C1_REPLAY_MISMATCH");
+      setReimportReview(current);
+      setSavedReplay(matched);
+      // Never setReimportApproved(true): approval is a separate live click.
+    }catch(error){
+      if(requestId.current===epoch){
+        const code=error?.code==="IC020_P2C1_SIDECAR_INVALID"
+          ? "IC020_P2C1_SIDECAR_INVALID" : "IC020_P2C1_REPLAY_MISMATCH";
+        setFailure(code);setReimportReview(null);setReimportApproved(false);setSavedReplay(null);
       }
     }finally{if(requestId.current===epoch)setBusy(false);}
   };
@@ -3269,7 +3318,22 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
         e("p", null, "Reimport: compare the CURRENT LIVE workspace snapshot against the newly verified incoming original. The prior workspace digest is NOT a prior original-file SHA. No change is automatically applied."),
         e("button", { type: "button", disabled: busy, "data-network-reimport-compare": "true",
           onClick: reviewCoreReimport }, busy ? "Comparing…" : "Review differences (read-only)"),
+        e("label", { "data-network-reimport-replay-picker":"true" },
+          "Load a saved read-only reimport report (does not approve replacement)",
+          e("input", { type:"file", accept:".json", disabled:busy,
+            "data-network-reimport-replay-file":"true",
+            onChange:event=>{
+              const selected=event.target.files?.[0]??null;
+              event.target.value="";
+              if(selected)void replaySavedCoreReimportReport(selected);
+            } })),
+        savedReplay ? e("p", { "data-network-reimport-replay-status":"MATCHED_REVIEW_ONLY" },
+          "Saved report matches this freshly rechecked original and LIVE workspace. No previous approval was restored; inspect differences and approve separately.") : null,
         reimportReview ? e("div", { "data-network-reimport-diff": "true" },
+          e("button", { type:"button", disabled:busy,
+            "data-network-reimport-export-report":"true",
+            onClick:exportCoreReimportReport },
+            "Download read-only reimport report JSON"),
           e("p", { "data-network-reimport-workspace-sha": "true" }, "Current live workspace SHA-256 (NOT an original-file SHA): " + reimportReview.currentWorkspaceSourceSha256),
           e("p", { "data-network-reimport-original-sha": "true" }, "Incoming original file SHA-256: " + reimportReview.incomingOriginalSourceSha256),
           e("p", { "data-network-reimport-resource-counts": "true" },
