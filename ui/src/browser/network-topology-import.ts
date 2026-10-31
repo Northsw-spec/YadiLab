@@ -11,6 +11,7 @@ export interface NetworkTopologyImportPreview {
   readonly filename: string;
   readonly sourceSha256: string;
   readonly sourceByteSize: number;
+  readonly unmappedColumnCount: number;
   readonly linkSourceConflict?: NetworkLinkSourceConflict;
   readonly linkSourceChoice?: NetworkLinkSourceDecision;
   readonly sheets: readonly string[];
@@ -52,6 +53,7 @@ export async function previewNetworkTopologyFile(
   const ok = mapped.ok && !diagnostics.some((x) => x.severity === "error") && Boolean(mapped.source);
   return { ok, ...(ok && mapped.source ? { source: mapped.source } : {}), filename: file.name,
     sourceSha256, sourceByteSize: input.bytes.byteLength,
+    unmappedColumnCount: normalized.unmappedColumnCount,
     ...(normalized.linkSourceConflict ? { linkSourceConflict: normalized.linkSourceConflict } : {}),
     ...(normalized.linkSourceChoice ? { linkSourceChoice: normalized.linkSourceChoice } : {}),
     sheets: parsed.document.tables.map((x) => x.tableId), devices: mapped.source?.resources.length ?? normalized.document.tables.find((t) => t.tableId === "Nodes")?.records.length ?? 0,
@@ -91,6 +93,7 @@ export async function verifyNetworkTopologyOriginalForActivation(
       latest.filename !== expected.filename ||
       latest.sourceSha256 !== expected.sourceSha256 ||
       latest.sourceByteSize !== expected.sourceByteSize ||
+      latest.unmappedColumnCount !== expected.unmappedColumnCount ||
       latest.linkSourceChoice !== expected.linkSourceChoice ||
       JSON.stringify(latest.linkSourceConflict) !== JSON.stringify(expected.linkSourceConflict) ||
       latest.devices !== expected.devices || latest.links !== expected.links ||
