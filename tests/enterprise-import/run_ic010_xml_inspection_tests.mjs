@@ -48,7 +48,7 @@ const graph = source("tests/fixtures/import/graphml/valid-two-nodes.graphml");
 const graphResult = await inspect("site.graphml", graph);
 checked(graphResult, "graphml.structural.v1", "TOPOLOGY_DECLARED", "REVIEW_REQUIRED", graph,
   { kind: "GRAPH_STRUCTURE", nodes: 2, graphEdges: 1 });
-eq(graphResult.status === "REVIEW_REQUIRED" && graphResult.canActivate, true, "Discovery only; reviewed later");
+eq(graphResult.status === "REVIEW_REQUIRED" && graphResult.canActivate, false, "Discovery never activates; review is not authorization");
 eq(sha(graph), graphResult.sourceSha256, "Does not mutate input");
 
 const nmap = source("tests/fixtures/import/nmap-xml/valid-observed-hosts.xml");
