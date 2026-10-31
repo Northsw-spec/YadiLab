@@ -104,7 +104,7 @@ for(const item of samples){
 }
 for(const [name,payload] of [
   ["fake.docx",odt],["fake.odt",docx],
-  ["bad.docx",bytes("not-a-word-zip")],["bad.odt",bytes("not-an-odt-zip-but-long-enough-to-parse!")],
+  ["bad.docx",bytes("not-a-word-zip")],["bad.odt",bytes("not-an-odt-zip-but-long-enough-to-parse-and-fail!")],
   ["script.odt",makeOdtZip(packageEntries({extra:{"Scripts/startup.js":"alert(1)"}}))],
   ["wrongmime.odt",makeOdtZip(packageEntries({mime:"application/vnd.oasis.opendocument.spreadsheet"}))],
   ["dtd.odt",makeOdtZip(packageEntries({contentXml:content([table([["A"]])]).replace(
