@@ -43,6 +43,7 @@ export function GraphmlReadOnlyPanel({ onClose, inspectFile, onConfirm, manualRo
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const request = useRef(0);
+  const originalRef = useRef(null);
   const panel = useRef(null);
 
   useEffect(() => {
@@ -58,12 +59,13 @@ export function GraphmlReadOnlyPanel({ onClose, inspectFile, onConfirm, manualRo
   const chooseFile = async (file) => {
     if (!file || busy) return;
     const id = ++request.current;
+    originalRef.current = null;
     setResult(null);
     setError("");
     setBusy(true);
     try {
       const parsed = await inspectFile(file);
-      if (request.current === id) setResult(parsed);
+      if (request.current === id) { originalRef.current = file; setResult(parsed); }
     } catch (cause) {
       if (request.current === id) setError(cause?.code ? `${cause.code}: ${cause.message}` : cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -88,7 +90,16 @@ export function GraphmlReadOnlyPanel({ onClose, inspectFile, onConfirm, manualRo
       error ? e("p", { role: "alert", className: "helper-status blocked", "data-graphml-error": "BLOCKED" }, error) : null,
       e(GraphmlPreviewDetails, { result }),
       result ? e(GraphmlManualReviewControls, { key: result.preview.sourceSha256, result,
-        manualRoleOptions, busy, setBusy, setError, onConfirm }) : null,
+        manualRoleOptions, busy, setBusy, setError,
+        onConfirm: async (sourcePreview, decisions) => {
+          const original = originalRef.current;
+          const selectedRequest = request.current;
+          if (!original || typeof onConfirm !== "function") {
+            const error = new Error("IC030_P1_STALE"); error.code = "IC030_P1_STALE"; throw error;
+          }
+          const isCurrent = () => request.current === selectedRequest && originalRef.current === original;
+          return onConfirm(sourcePreview, decisions, original, isCurrent);
+        } }) : null,
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: busy, "data-graphml-cancel": "true",
           onClick: () => { request.current++; onClose(); } }, "Close without changes")),
