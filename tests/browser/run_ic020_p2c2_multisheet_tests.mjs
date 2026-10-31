@@ -93,8 +93,9 @@ for(const format of ["xlsx","ods"]){
  ok(model.sources.some(x=>x.id==="lin01"&&x.os==="linux"));
  for(const osName of ["windows","linux"]){
    const from=model.sources.find(x=>x.os===osName);
-   const probe=model.probes.find(x=>x.probeId===osName+".ping");
-   const dest=model.destinations.find(x=>x.id==="rtr01");
+   const scoped=buildRuntimeActiveProbeModel(runtime.workspace,from?.id);
+   const probe=scoped.probes.find(x=>x.probeId===osName+".ping");
+   const dest=scoped.destinations.find(x=>x.id==="rtr01");
    ok(Boolean(from&&probe&&dest),"OS-specific modeled probe source/probe/target exists");
    const before=JSON.stringify(runtime.workspace.engineState);
    const response=runRuntimeActiveProbe(runtime.workspace,{
