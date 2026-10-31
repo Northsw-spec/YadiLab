@@ -199,6 +199,61 @@ def test_delayed_read(browser,url):
     finally:
         page.close()
 
+def test_workspace_switch_invalidates_pending(browser,url):
+    page,errors,outside=setup(browser,url)
+    try:
+        original_source=exported_source(page)
+        initial_scenario=page.locator(".app-frame").get_attribute("data-runtime-scenario-id")
+        open_panel(page)
+        page.evaluate("""() => {
+          const original = File.prototype.arrayBuffer;
+          window.__ic010ReleaseWorkspace = [];
+          File.prototype.arrayBuffer = function() {
+            if (this.name === "workspace-slow.xml") {
+              return new Promise((resolve,reject) => {
+                window.__ic010ReleaseWorkspace.push(() => original.call(this).then(resolve,reject));
+              });
+            }
+            return original.call(this);
+          };
+        }""")
+        choose(page,"workspace-slow.xml",nmap_bytes())
+        consent_inspect(page)
+        page.wait_for_function("window.__ic010ReleaseWorkspace.length === 1",timeout=10000)
+        # A legitimate, independent Builder command replaces the current
+        # workspace while a source read is still pending. We invoke its actual
+        # existing React click handler, not a test-only workspace setter.
+        page.evaluate("""() => {
+          const action = [...document.querySelectorAll(".workspace-menu button")]
+            .find(button => button.textContent.trim() === "Öppna enterprise i byggläget");
+          if (!action || action.disabled) throw Error("Expected enabled Builder action");
+          action.click();
+        }""")
+        page.wait_for_function("""initial =>
+          document.querySelector(".app-frame")?.getAttribute("data-runtime-scenario-id") !== initial
+        """,arg=initial_scenario,timeout=25000)
+        expect(page.locator('[data-ic010-p2-consent]')).to_be_disabled(timeout=10000)
+        require(page.locator('[data-ic010-p2-result]').count()==0,
+                "Old source survived legitimate Builder replacement")
+        require(page.locator('[data-ic010-p2-selected]').count()==0,
+                "Old selected file survived Builder replacement")
+        page.evaluate("() => window.__ic010ReleaseWorkspace.shift()()")
+        page.wait_for_timeout(350)
+        require(page.locator('[data-ic010-p2-result]').count()==0,
+                "Pending read repopulated a different workspace")
+        page.locator('[data-ic010-p2-close]').click()
+        expect(page.locator('[data-ic010-p2-panel]')).to_have_count(0)
+        new_source=exported_source(page)
+        require(new_source!=original_source,
+                "Independent Builder command did not change the source (test invalid)")
+        require(not errors,"Browser errors: "+repr(errors))
+        require(not outside,"Remote requests: "+repr(outside))
+        return {"case":"live_workspace_replacement_invalidates_pending_source",
+                "status":"PASS","oldSourceDiscarded":True,
+                "workspaceChangedByIndependentAction":True,"outsideRequests":0}
+    finally:
+        page.close()
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--url",required=True)
@@ -216,7 +271,8 @@ def main():
             flags.append("--no-sandbox")
         browser=p.chromium.launch(headless=True,args=flags)
         try:
-            cases=[test_flow(browser,args.url),test_delayed_read(browser,args.url)]
+            cases=[test_flow(browser,args.url),test_delayed_read(browser,args.url),
+                   test_workspace_switch_invalidates_pending(browser,args.url)]
         finally:
             browser.close()
     report={"status":"PASS","kind":"Actual compiled Chromium UI, original file chooser & source validation",
