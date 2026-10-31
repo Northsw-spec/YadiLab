@@ -77,7 +77,7 @@ for(const format of ["xlsx","ods"]){
  eq(unnamed.interfaces,undefined,"Undocumented interface remains UNKNOWN");
  eq(result.source.zones.length,3);
  eq(result.source.layoutHints.length,8);
- eq(result.source.notes.length,3,"Only explicitly recorded gateway notes, never edges");
+ eq(result.source.notes.length,4,"Only four explicitly recorded gateway notes, never edges");
  ok(!result.source.connections.some(x=>x.from.resource==="unknown01"||x.to.resource==="unknown01"),
    "Partial unknown resource not connected by gateway/IP inference");
  ok(result.source.resources.filter(x=>x.interfaces).every(x=>x.interfaces.every(i=>i.id)),
