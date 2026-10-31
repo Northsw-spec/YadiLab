@@ -108,7 +108,7 @@ export async function extractDrawioOrdinalGraph(original: Uint8Array): Promise<D
     }
     if (model.name !== "mxGraphModel") fail("DRAWIO_CANDIDATE_SOURCE_INVALID");
     const root = model.children.find(p => p.name === "root");
-    if (!root) fail("DRAWIO_CANDIDATE_SOURCE_INVALID");
+    if (!root) throw new EnterpriseImportError("DRAWIO_CANDIDATE_SOURCE_INVALID", "DRAWIO_CANDIDATE_SOURCE_INVALID");
     const cells = root.children.filter(p => p.name === "mxCell");
     const originalVertices = cells.filter(p => p.attributes.vertex === "1");
     const originalEdges = cells.filter(p => p.attributes.edge === "1");
@@ -121,7 +121,7 @@ export async function extractDrawioOrdinalGraph(original: Uint8Array): Promise<D
       const sourceVertexOrdinal = index.get(edge.attributes.source);
       const targetVertexOrdinal = index.get(edge.attributes.target);
       if (sourceVertexOrdinal === undefined || targetVertexOrdinal === undefined) {
-        fail("DRAWIO_CANDIDATE_EDGE_ENDPOINT_INVALID");
+        throw new EnterpriseImportError("DRAWIO_CANDIDATE_EDGE_ENDPOINT_INVALID", "DRAWIO_CANDIDATE_EDGE_ENDPOINT_INVALID");
       }
       edges.push(Object.freeze({
         pageOrdinal, edgeOrdinal, sourceVertexOrdinal, targetVertexOrdinal,
