@@ -132,6 +132,7 @@ jobs:
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic020_p2c5_truth_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
       - name: Preserve bounded verification evidence
