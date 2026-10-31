@@ -142,6 +142,7 @@
     "test:ic010-p3a-ansible": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic010_p3a_static_ansible_inspection_tests.mjs",
     "test:ic010-p3b-source-review": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic010_p3b_original_reference_tests.mjs",
     "test:ic010-p3c-office": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic010_p3c_office_structure_tests.mjs",
+    "test:ic010-p3d-provenance": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic010_p3d_shared_status_tests.mjs",
     "test:release-identity": "node tests/browser/run_release_identity_tests.mjs"
   },
   "dependencies": {

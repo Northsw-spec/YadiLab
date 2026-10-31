@@ -47,6 +47,7 @@ jobs:
           npm run test:ic010-p3a-ansible
           npm run test:ic010-p3b-source-review
           npm run test:ic010-p3c-office
+          npm run test:ic010-p3d-provenance
           npm run test:simulation-clock
           npm run test:simulation-transitions
           npm run test:ospf-p2p-hello
@@ -109,6 +110,8 @@ jobs:
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic010_p3b_original_reference_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic010_p3c_shared_office_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
+          /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic010_p3d_shared_status_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
       - name: Preserve bounded verification evidence
         if: always()
