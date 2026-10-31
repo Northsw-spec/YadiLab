@@ -73,16 +73,14 @@ function consistent(model) {
       || p.stage.review !== "SOURCE_BOUND_EXPLICIT_LINK_CHOICE_AND_REIMPORT_APPROVAL"
       || p.stage.builder !== "CONSENTED_QUICK_NETWORK_BUILDER_WITH_FRESH_SOURCE_RECHECK"
       || p.stage.replay !== "SOURCE_BOUND_REIMPORT_REVIEW_AND_READ_ONLY_SAVED_REPORT"
-      || p.ciCoverage !== "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING"
-      || p.nextCheckpoint !== "IC-020") return false;
+      || p.ciCoverage !== "REQUIRED_IC020_P1_TO_P2C6_SOURCE_AND_BROWSER; SCOPED_EXIT_TRUTH_REGRESSION"
+      || p.nextCheckpoint !== "IC-030") return false;
     const office = p.id === "builtin.xlsx" || p.id === "builtin.ods";
     const chromiumRuntime = p.id === "builtin.csv" ? "ATTESTED_P1_CSV"
       : p.id === "builtin.ods" ? "ATTESTED_P2C2_ODS" : "NOT_ATTESTED_FOR_THIS_SUBTYPE";
     if (v.compiledChromiumImportedModeledRuntime !== chromiumRuntime
       || v.typedOriginalPortChecks !== (office ? "ATTESTED_P2C2_SIX_SHEET" : "NOT_CLAIMED_FOR_THIS_SUBTYPE")
-      || p.stage.modeledProbe !== (chromiumRuntime === "NOT_ATTESTED_FOR_THIS_SUBTYPE"
-        ? "IMPORTED_MODELED_RUNTIME_SOURCE_TESTED_BROWSER_SUBTYPE_PROBE_NOT_ATTESTED"
-        : "IMPORTED_MODELED_RUNTIME_SOURCE_AND_CHROMIUM_VERIFIED")) return false;
+      || p.stage.modeledProbe !== "IMPORTED_MODELED_RUNTIME_SOURCE_AND_CHROMIUM_VERIFIED") return false;
     const expectedOracles = [...sourceOracles, ...browserOracles,
       ...(office ? ["tests/browser/run_ic020_p2c2_multisheet_tests.mjs",
         "tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py"] : [])];
@@ -92,7 +90,7 @@ function consistent(model) {
   }
   return true;
 }
-ok(consistent(matrix), "five verified subset records with original 27-profile truth boundary");
+ok(consistent(matrix), "historical P2c4 source evidence intact alongside current five-format P2c6 coverage");
 for (const p of matrix.profiles.filter(p=>p.registry==="ACTIVE_ADAPTER")) {
   for (const file of [...p.sources,...p.tests]) ok(fs.existsSync(file),"source/test exists: "+file);
 }
@@ -122,5 +120,5 @@ rejects(changed(m=>m.profiles.find(p=>p.id==="builtin.json").ic020Refresh.crossR
   "cannot declare undocumented conflicts reconciled");
 rejects(changed(m=>m.auditRefreshP2c4.releaseRun=41222732843),
   "cannot swap P2c3 release identity");
-console.log("PASS IC-020 P2c4 source-backed five-format capability matrix and truthful incomplete exit gate: "+
+console.log("PASS IC-020 P2c4 historical evidence preserved alongside five-format P2c6 progress: "+
   assertions+" read-only, offline assertions");

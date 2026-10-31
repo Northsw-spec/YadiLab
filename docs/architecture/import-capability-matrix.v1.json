@@ -28,7 +28,7 @@
         "review": "SOURCE_BOUND_EXPLICIT_LINK_CHOICE_AND_REIMPORT_APPROVAL",
         "projection": "EXPLICIT_DECLARED_NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
         "builder": "CONSENTED_QUICK_NETWORK_BUILDER_WITH_FRESH_SOURCE_RECHECK",
-        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_TESTED_BROWSER_SUBTYPE_PROBE_NOT_ATTESTED",
+        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_AND_CHROMIUM_VERIFIED",
         "replay": "SOURCE_BOUND_REIMPORT_REVIEW_AND_READ_ONLY_SAVED_REPORT",
         "ui": "QUICK_NETWORK_NATIVE_PICKER_AND_IMPORT_HELPER"
       },
@@ -50,11 +50,13 @@
         "tests/acceptance/run_ic020_p2a_link_review_real_browser.py",
         "tests/acceptance/run_ic020_p2b_reimport_real_browser.py",
         "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
-        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py"
+        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py",
+        "tests/browser/run_ic020_p2c5_truth_tests.mjs",
+        "tests/acceptance/run_ic020_p2c5_truth_real_browser.py"
       ],
-      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
-      "nextCheckpoint": "IC-020",
-      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C6_SOURCE_AND_BROWSER; SCOPED_EXIT_TRUTH_REGRESSION",
+      "nextCheckpoint": "IC-030",
+      "risk": "Only explicitly declared source records, connections and modeled Engine results are supported. Flat Devices all-five Chromium FALSE/UNKNOWN are not proof of canonical six-sheet subtype FALSE/UNKNOWN; only ODS six-sheet modeled Runtime interaction is separately attested. External network/guest commands/Parrot are NOT_RUN; unrelated planned import profiles remain non-active.",
       "ic020Refresh": {
         "checkpoint": "IC-020 P2c4",
         "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
@@ -74,6 +76,29 @@
         "compiledChromiumImportedModeledRuntime": "NOT_ATTESTED_FOR_THIS_SUBTYPE",
         "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
         "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      },
+      "ic020CurrentEvidence": {
+        "checkpoint": "IC-020 P2c6",
+        "preAuditMainSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+        "preAuditTreeSha": "b04a3d49f28fdf5da730088bc4c31ecc37168fb2",
+        "independentlyVerifiedPreviousRelease": {
+          "runId": 41237691702,
+          "headSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+          "conclusion": "success"
+        },
+        "scope": "FIVE_ACTIVE_NETWORK_INVENTORY_FORMATS_TESTED_SOURCE_VARIANTS_ONLY",
+        "consentAndOriginalSha": "P1_TO_P2C5_SHA_BOUND_REPARSE_ATTESTED",
+        "manualConflictingLinkSource": "P2A_ATTESTED_FOR_TESTED_SOURCES",
+        "reimportReplacementAndReplay": "P2B_P2C1_READ_ONLY_EXPLICIT_APPROVAL_ATTESTED",
+        "ambiguousCompetingTablesAndUnmappedPrivacy": "P2C3_BLOCK_AND_WARNING_ATTESTED",
+        "flatDevicesAddressPrefixConflict": "P2C5_ALL_FIVE_BLOCKED_IN_SOURCE_AND_CHROMIUM",
+        "flatDevicesProbeModeledWindowsLinux": "P2C5_ALL_FIVE_FALSE_OFFLINK_UNKNOWN_DNS_CHROMIUM",
+        "compiledChromiumNativeFilePicker": "P1_ALL_FIVE",
+        "canonicalSixSheetPortValidation": "NOT_APPLICABLE",
+        "canonicalSixSheetModeledRuntimeBrowser": "NOT_APPLICABLE",
+        "canonicalSixSheetFalseUnknownChromium": "NOT_APPLICABLE",
+        "modeledBoundary": "NO_GUEST_COMMAND_EXECUTION",
         "nativeParrotAndPhysicalNetwork": "NOT_RUN"
       }
     },
@@ -113,11 +138,13 @@
         "tests/acceptance/run_ic020_p2a_link_review_real_browser.py",
         "tests/acceptance/run_ic020_p2b_reimport_real_browser.py",
         "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
-        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py"
+        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py",
+        "tests/browser/run_ic020_p2c5_truth_tests.mjs",
+        "tests/acceptance/run_ic020_p2c5_truth_real_browser.py"
       ],
-      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
-      "nextCheckpoint": "IC-020",
-      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C6_SOURCE_AND_BROWSER; SCOPED_EXIT_TRUTH_REGRESSION",
+      "nextCheckpoint": "IC-030",
+      "risk": "Only explicitly declared source records, connections and modeled Engine results are supported. Flat Devices all-five Chromium FALSE/UNKNOWN are not proof of canonical six-sheet subtype FALSE/UNKNOWN; only ODS six-sheet modeled Runtime interaction is separately attested. External network/guest commands/Parrot are NOT_RUN; unrelated planned import profiles remain non-active.",
       "ic020Refresh": {
         "checkpoint": "IC-020 P2c4",
         "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
@@ -138,6 +165,29 @@
         "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
         "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
         "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      },
+      "ic020CurrentEvidence": {
+        "checkpoint": "IC-020 P2c6",
+        "preAuditMainSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+        "preAuditTreeSha": "b04a3d49f28fdf5da730088bc4c31ecc37168fb2",
+        "independentlyVerifiedPreviousRelease": {
+          "runId": 41237691702,
+          "headSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+          "conclusion": "success"
+        },
+        "scope": "FIVE_ACTIVE_NETWORK_INVENTORY_FORMATS_TESTED_SOURCE_VARIANTS_ONLY",
+        "consentAndOriginalSha": "P1_TO_P2C5_SHA_BOUND_REPARSE_ATTESTED",
+        "manualConflictingLinkSource": "P2A_ATTESTED_FOR_TESTED_SOURCES",
+        "reimportReplacementAndReplay": "P2B_P2C1_READ_ONLY_EXPLICIT_APPROVAL_ATTESTED",
+        "ambiguousCompetingTablesAndUnmappedPrivacy": "P2C3_BLOCK_AND_WARNING_ATTESTED",
+        "flatDevicesAddressPrefixConflict": "P2C5_ALL_FIVE_BLOCKED_IN_SOURCE_AND_CHROMIUM",
+        "flatDevicesProbeModeledWindowsLinux": "P2C5_ALL_FIVE_FALSE_OFFLINK_UNKNOWN_DNS_CHROMIUM",
+        "compiledChromiumNativeFilePicker": "P1_ALL_FIVE",
+        "canonicalSixSheetPortValidation": "NOT_APPLICABLE",
+        "canonicalSixSheetModeledRuntimeBrowser": "NOT_APPLICABLE",
+        "canonicalSixSheetFalseUnknownChromium": "NOT_APPLICABLE",
+        "modeledBoundary": "NO_GUEST_COMMAND_EXECUTION",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
       }
     },
     {
@@ -154,7 +204,7 @@
         "review": "SOURCE_BOUND_EXPLICIT_LINK_CHOICE_AND_REIMPORT_APPROVAL",
         "projection": "EXPLICIT_DECLARED_NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
         "builder": "CONSENTED_QUICK_NETWORK_BUILDER_WITH_FRESH_SOURCE_RECHECK",
-        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_TESTED_BROWSER_SUBTYPE_PROBE_NOT_ATTESTED",
+        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_AND_CHROMIUM_VERIFIED",
         "replay": "SOURCE_BOUND_REIMPORT_REVIEW_AND_READ_ONLY_SAVED_REPORT",
         "ui": "QUICK_NETWORK_NATIVE_PICKER_AND_IMPORT_HELPER"
       },
@@ -176,11 +226,13 @@
         "tests/acceptance/run_ic020_p2a_link_review_real_browser.py",
         "tests/acceptance/run_ic020_p2b_reimport_real_browser.py",
         "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
-        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py"
+        "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py",
+        "tests/browser/run_ic020_p2c5_truth_tests.mjs",
+        "tests/acceptance/run_ic020_p2c5_truth_real_browser.py"
       ],
-      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
-      "nextCheckpoint": "IC-020",
-      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C6_SOURCE_AND_BROWSER; SCOPED_EXIT_TRUTH_REGRESSION",
+      "nextCheckpoint": "IC-030",
+      "risk": "Only explicitly declared source records, connections and modeled Engine results are supported. Flat Devices all-five Chromium FALSE/UNKNOWN are not proof of canonical six-sheet subtype FALSE/UNKNOWN; only ODS six-sheet modeled Runtime interaction is separately attested. External network/guest commands/Parrot are NOT_RUN; unrelated planned import profiles remain non-active.",
       "ic020Refresh": {
         "checkpoint": "IC-020 P2c4",
         "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
@@ -201,6 +253,29 @@
         "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
         "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
         "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      },
+      "ic020CurrentEvidence": {
+        "checkpoint": "IC-020 P2c6",
+        "preAuditMainSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+        "preAuditTreeSha": "b04a3d49f28fdf5da730088bc4c31ecc37168fb2",
+        "independentlyVerifiedPreviousRelease": {
+          "runId": 41237691702,
+          "headSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+          "conclusion": "success"
+        },
+        "scope": "FIVE_ACTIVE_NETWORK_INVENTORY_FORMATS_TESTED_SOURCE_VARIANTS_ONLY",
+        "consentAndOriginalSha": "P1_TO_P2C5_SHA_BOUND_REPARSE_ATTESTED",
+        "manualConflictingLinkSource": "P2A_ATTESTED_FOR_TESTED_SOURCES",
+        "reimportReplacementAndReplay": "P2B_P2C1_READ_ONLY_EXPLICIT_APPROVAL_ATTESTED",
+        "ambiguousCompetingTablesAndUnmappedPrivacy": "P2C3_BLOCK_AND_WARNING_ATTESTED",
+        "flatDevicesAddressPrefixConflict": "P2C5_ALL_FIVE_BLOCKED_IN_SOURCE_AND_CHROMIUM",
+        "flatDevicesProbeModeledWindowsLinux": "P2C5_ALL_FIVE_FALSE_OFFLINK_UNKNOWN_DNS_CHROMIUM",
+        "compiledChromiumNativeFilePicker": "P1_ALL_FIVE",
+        "canonicalSixSheetPortValidation": "NOT_APPLICABLE",
+        "canonicalSixSheetModeledRuntimeBrowser": "NOT_APPLICABLE",
+        "canonicalSixSheetFalseUnknownChromium": "NOT_APPLICABLE",
+        "modeledBoundary": "NO_GUEST_COMMAND_EXECUTION",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
       }
     },
     {
@@ -217,7 +292,7 @@
         "review": "SOURCE_BOUND_EXPLICIT_LINK_CHOICE_AND_REIMPORT_APPROVAL",
         "projection": "EXPLICIT_DECLARED_NETWORK_WORKBOOK_OR_ENTERPRISE_BASELINE",
         "builder": "CONSENTED_QUICK_NETWORK_BUILDER_WITH_FRESH_SOURCE_RECHECK",
-        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_TESTED_BROWSER_SUBTYPE_PROBE_NOT_ATTESTED",
+        "modeledProbe": "IMPORTED_MODELED_RUNTIME_SOURCE_AND_CHROMIUM_VERIFIED",
         "replay": "SOURCE_BOUND_REIMPORT_REVIEW_AND_READ_ONLY_SAVED_REPORT",
         "ui": "QUICK_NETWORK_NATIVE_PICKER_AND_IMPORT_HELPER"
       },
@@ -241,11 +316,13 @@
         "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
         "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py",
         "tests/browser/run_ic020_p2c2_multisheet_tests.mjs",
-        "tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py"
+        "tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py",
+        "tests/browser/run_ic020_p2c5_truth_tests.mjs",
+        "tests/acceptance/run_ic020_p2c5_truth_real_browser.py"
       ],
-      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
-      "nextCheckpoint": "IC-020",
-      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C6_SOURCE_AND_BROWSER; SCOPED_EXIT_TRUTH_REGRESSION",
+      "nextCheckpoint": "IC-030",
+      "risk": "Only explicitly declared source records, connections and modeled Engine results are supported. Flat Devices all-five Chromium FALSE/UNKNOWN are not proof of canonical six-sheet subtype FALSE/UNKNOWN; only ODS six-sheet modeled Runtime interaction is separately attested. External network/guest commands/Parrot are NOT_RUN; unrelated planned import profiles remain non-active.",
       "ic020Refresh": {
         "checkpoint": "IC-020 P2c4",
         "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
@@ -265,6 +342,29 @@
         "compiledChromiumImportedModeledRuntime": "NOT_ATTESTED_FOR_THIS_SUBTYPE",
         "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
         "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      },
+      "ic020CurrentEvidence": {
+        "checkpoint": "IC-020 P2c6",
+        "preAuditMainSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+        "preAuditTreeSha": "b04a3d49f28fdf5da730088bc4c31ecc37168fb2",
+        "independentlyVerifiedPreviousRelease": {
+          "runId": 41237691702,
+          "headSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+          "conclusion": "success"
+        },
+        "scope": "FIVE_ACTIVE_NETWORK_INVENTORY_FORMATS_TESTED_SOURCE_VARIANTS_ONLY",
+        "consentAndOriginalSha": "P1_TO_P2C5_SHA_BOUND_REPARSE_ATTESTED",
+        "manualConflictingLinkSource": "P2A_ATTESTED_FOR_TESTED_SOURCES",
+        "reimportReplacementAndReplay": "P2B_P2C1_READ_ONLY_EXPLICIT_APPROVAL_ATTESTED",
+        "ambiguousCompetingTablesAndUnmappedPrivacy": "P2C3_BLOCK_AND_WARNING_ATTESTED",
+        "flatDevicesAddressPrefixConflict": "P2C5_ALL_FIVE_BLOCKED_IN_SOURCE_AND_CHROMIUM",
+        "flatDevicesProbeModeledWindowsLinux": "P2C5_ALL_FIVE_FALSE_OFFLINK_UNKNOWN_DNS_CHROMIUM",
+        "compiledChromiumNativeFilePicker": "P1_ALL_FIVE",
+        "canonicalSixSheetPortValidation": "P2C2_XLSX_ODS_TYPED_PORTS_SOURCE_AND_CHROMIUM",
+        "canonicalSixSheetModeledRuntimeBrowser": "NOT_ATTESTED_FOR_XLSX_SIX_SHEET_PROBE",
+        "canonicalSixSheetFalseUnknownChromium": "NOT_ATTESTED_FOR_CANONICAL_SIX_SHEET",
+        "modeledBoundary": "NO_GUEST_COMMAND_EXECUTION",
         "nativeParrotAndPhysicalNetwork": "NOT_RUN"
       }
     },
@@ -306,11 +406,13 @@
         "tests/acceptance/run_ic020_p2c1_saved_report_real_browser.py",
         "tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py",
         "tests/browser/run_ic020_p2c2_multisheet_tests.mjs",
-        "tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py"
+        "tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py",
+        "tests/browser/run_ic020_p2c5_truth_tests.mjs",
+        "tests/acceptance/run_ic020_p2c5_truth_real_browser.py"
       ],
-      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C3_SOURCE_AND_BROWSER; NEGATIVE_UNKNOWN_UI_EXIT_PENDING",
-      "nextCheckpoint": "IC-020",
-      "risk": "Modeled imports are declarations, not physical verification. Browser negative/UNKNOWN verdicts on imported source and broader contradictory typed field claims remain IC-020 exit gaps; only CSV and ODS have specifically attested imported Chromium Runtime/probe interaction.",
+      "ciCoverage": "REQUIRED_IC020_P1_TO_P2C6_SOURCE_AND_BROWSER; SCOPED_EXIT_TRUTH_REGRESSION",
+      "nextCheckpoint": "IC-030",
+      "risk": "Only explicitly declared source records, connections and modeled Engine results are supported. Flat Devices all-five Chromium FALSE/UNKNOWN are not proof of canonical six-sheet subtype FALSE/UNKNOWN; only ODS six-sheet modeled Runtime interaction is separately attested. External network/guest commands/Parrot are NOT_RUN; unrelated planned import profiles remain non-active.",
       "ic020Refresh": {
         "checkpoint": "IC-020 P2c4",
         "evidenceMainSha": "3c2d00d73c1204827c12be276b9d15855aadbd7f",
@@ -330,6 +432,29 @@
         "compiledChromiumImportedModeledRuntime": "ATTESTED_P2C2_ODS",
         "importedNegativeUnknownVerdictsInChromium": "NOT_ATTESTED",
         "crossRowContradictoryFactsReconciliation": "NOT_ATTESTED",
+        "nativeParrotAndPhysicalNetwork": "NOT_RUN"
+      },
+      "ic020CurrentEvidence": {
+        "checkpoint": "IC-020 P2c6",
+        "preAuditMainSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+        "preAuditTreeSha": "b04a3d49f28fdf5da730088bc4c31ecc37168fb2",
+        "independentlyVerifiedPreviousRelease": {
+          "runId": 41237691702,
+          "headSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+          "conclusion": "success"
+        },
+        "scope": "FIVE_ACTIVE_NETWORK_INVENTORY_FORMATS_TESTED_SOURCE_VARIANTS_ONLY",
+        "consentAndOriginalSha": "P1_TO_P2C5_SHA_BOUND_REPARSE_ATTESTED",
+        "manualConflictingLinkSource": "P2A_ATTESTED_FOR_TESTED_SOURCES",
+        "reimportReplacementAndReplay": "P2B_P2C1_READ_ONLY_EXPLICIT_APPROVAL_ATTESTED",
+        "ambiguousCompetingTablesAndUnmappedPrivacy": "P2C3_BLOCK_AND_WARNING_ATTESTED",
+        "flatDevicesAddressPrefixConflict": "P2C5_ALL_FIVE_BLOCKED_IN_SOURCE_AND_CHROMIUM",
+        "flatDevicesProbeModeledWindowsLinux": "P2C5_ALL_FIVE_FALSE_OFFLINK_UNKNOWN_DNS_CHROMIUM",
+        "compiledChromiumNativeFilePicker": "P1_ALL_FIVE",
+        "canonicalSixSheetPortValidation": "P2C2_XLSX_ODS_TYPED_PORTS_SOURCE_AND_CHROMIUM",
+        "canonicalSixSheetModeledRuntimeBrowser": "P2C2_ODS_PROBE_INTERACTION_VERDICT_NOT_RESTRICTED",
+        "canonicalSixSheetFalseUnknownChromium": "NOT_ATTESTED_FOR_CANONICAL_SIX_SHEET",
+        "modeledBoundary": "NO_GUEST_COMMAND_EXECUTION",
         "nativeParrotAndPhysicalNetwork": "NOT_RUN"
       }
     },
@@ -1009,5 +1134,13 @@
     "evidenceTreeSha": "25ab69f011f86dd22c4528b79846a8592f0e43e3",
     "releaseRun": 41234186594,
     "note": "Historical auditBaseline is intentionally unchanged; five active adapters only updated. Other 22 profile statuses remain the original IC-000 audit observations, not current full-feature certification. IC-020 exit remains open."
+  },
+  "auditRefreshP2c6": {
+    "basis": "FIVE_ACTIVE_ADAPTERS_SOURCE_AND_CHROMIUM_SCOPED_EXIT_EVIDENCE",
+    "preAuditMainSha": "8e43ee8341b1def9bea00ea75726889a592ce4b0",
+    "preAuditTreeSha": "b04a3d49f28fdf5da730088bc4c31ecc37168fb2",
+    "previousVerifiedIndependentRelease": 41237691702,
+    "status": "CODE_EVIDENCE_MET_P2C6_HEAD_CI_AND_POSTMERGE_RELEASE_REQUIRED_FOR_FINAL_VERIFICATION",
+    "note": "Previous IC-000 baseline and P2c4 snapshot retained exactly as historical observations. Only five active rows updated. Unchanged 22 other profiles are not certified; canonical six-sheet FALSE/UNKNOWN browser verdicts not claimed. The project-wide import issue remains open through IC-110."
   }
 }

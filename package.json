@@ -151,7 +151,8 @@
     "test:ic020-p2c3-unmapped": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic020_p2c3_unmapped_inventory_tests.mjs",
     "test:release-identity": "node tests/browser/run_release_identity_tests.mjs",
     "test:ic020-p2c4-matrix": "node tests/enterprise-import/run_ic020_p2c4_matrix_audit_tests.mjs",
-    "test:ic020-p2c5-truth": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic020_p2c5_truth_tests.mjs"
+    "test:ic020-p2c5-truth": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic020_p2c5_truth_tests.mjs",
+    "test:ic020-p2c6-exit": "node tests/enterprise-import/run_ic020_p2c6_scoped_exit_tests.mjs"
   },
   "dependencies": {
     "@xyflow/react": "12.11.6",
