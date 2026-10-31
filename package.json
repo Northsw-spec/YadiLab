@@ -138,6 +138,7 @@
     "test:imported-probes": "npm run test:network-topology-import && node tests/browser/run_import004_probe_runtime_tests.mjs",
     "test:ic000-capabilities": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_ic000_capability_audit_tests.mjs",
     "test:ic010-xml-discovery": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_ic010_xml_inspection_tests.mjs",
+    "test:ic010-p2-xml-ui": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic010_p2_shared_xml_ui_tests.mjs",
     "test:release-identity": "node tests/browser/run_release_identity_tests.mjs"
   },
   "dependencies": {

@@ -43,6 +43,7 @@ jobs:
           npm run test:imported-probes
           npm run test:ic000-capabilities
           npm run test:ic010-xml-discovery
+          npm run test:ic010-p2-xml-ui
           npm run test:simulation-clock
           npm run test:simulation-transitions
           npm run test:ospf-p2p-hello
@@ -98,6 +99,8 @@ jobs:
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_release_identity_real_browser.py \
             --url http://127.0.0.1:18995/ --expected-commit "$YADILAB_EXPECTED_COMMIT" \
             --evidence-dir /tmp/yadilab-required-ci-evidence
+          /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic010_p2_shared_xml_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
       - name: Preserve bounded verification evidence
         if: always()
         uses: actions/upload-artifact@v4

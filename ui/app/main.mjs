@@ -34,6 +34,8 @@ import guidedLinuxSsh from "../../curriculum/builtin/wave1/linux-ssh.json";
 import defaultEnterpriseMapping from "../../examples/enterprise-import/enterprise-import-template.mapping.json";
 import { previewNetworkTopologyFile } from "../src/browser/network-topology-import.js";
 import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
+import { inspectStructuredXmlFileReadOnly } from "../src/browser/structured-xml-inspection-file.js";
+import { StructuredXmlInspectionPanel } from "./structured-xml-inspection-panel.mjs";
 import { mapReviewedGraphmlToBuilder, GRAPHML_MANUAL_ROLE_OPTIONS } from "../../enterprise-import/src/graphml-review-mapping.js";
 import { GraphmlReadOnlyPanel } from "./graphml-preview-panel.mjs";
 import { previewNmapXmlFileReadOnly } from "../src/browser/nmap-xml-file-preview.js";
@@ -3142,7 +3144,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   );
 }
 
-function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, onInspectNmap, onInspectNmapReplay, onInspectNessus, onInspectNessusReplay, onInspectDrawio, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructuredXml, onInspectGraphml, onInspectNmap, onInspectNmapReplay, onInspectNessus, onInspectNessusReplay, onInspectDrawio, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   const networkPickerRef = useRef(null);
   // Opening the native picker happens synchronously within the user's click,
@@ -3197,6 +3199,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectGraphml, o
         workspace.mode === "runtime" ? e("button", { type: "button", onClick: clearAutosave, disabled: !workspace }, "Rensa autosparning") : null,
       ),
       e(WorkspaceMenu, { label: "Import / Export" },
+        e("button", { type: "button", "data-ic010-p2-open": "true", onClick: onInspectStructuredXml }, "Inspect structured XML (shared read-only)"),
         e("button", { type: "button", "data-import-network-action": "true", onClick: openNetworkPicker }, "Import Network from Excel / CSV"),
         e("button", { type: "button", "data-inspect-graphml": "PREVIEW_ONLY", onClick: onInspectGraphml }, "Inspect GraphML (read-only preview)"),
         e("button", { type: "button", "data-inspect-nmap": "EVIDENCE_ONLY", onClick: onInspectNmap }, "Inspect Nmap XML (observations only)"),
@@ -3369,6 +3372,7 @@ function App() {
   latestDrawioWorkspaceRef.current = workspace;
   const [importWorkbench, setImportWorkbench] = useState(() => emptyImportWorkbench());
   const [networkImportOpen, setNetworkImportOpen] = useState(false);
+  const [structuredXmlInspectionOpen, setStructuredXmlInspectionOpen] = useState(false);
   const [networkImportSelection, setNetworkImportSelection] = useState(null);
   const [graphmlPreviewOpen, setGraphmlPreviewOpen] = useState(false);
   const [nmapObservationOpen, setNmapObservationOpen] = useState(false);
@@ -3941,7 +3945,7 @@ function App() {
   return e("div", { className: "app-frame", "data-app-runtime": "ready", "data-runtime-scenario-id": workspace.mode === "runtime" ? workspace.scenario.scenarioId : workspace.source.scenarioId, "data-runtime-scenario-hash": workspace.mode === "runtime" ? workspace.scenario.sourceHash : "builder" },
     e("header", { className: "app-header" },
       e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version} · ${releaseIdentity.sourceCommit.slice(0,12)}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
-      e(MainActions, { onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectNmapReplay: () => setNmapReplayOpen(true), onInspectNessus: () => setNessusSeverityOpen(true), onInspectNessusReplay: () => setNessusReplayOpen(true),
+      e(MainActions, { onInspectStructuredXml: () => setStructuredXmlInspectionOpen(true), onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectNmapReplay: () => setNmapReplayOpen(true), onInspectNessus: () => setNessusSeverityOpen(true), onInspectNessusReplay: () => setNessusReplayOpen(true),
         onInspectDrawio: () => setDrawioStructureOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectAnsibleIniReplay: () => setAnsibleIniReplayOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
@@ -4365,6 +4369,12 @@ function App() {
         });
       },
       onClose: () => setNmapObservationOpen(false),
+    }) : null,
+    structuredXmlInspectionOpen ? e(StructuredXmlInspectionPanel, {
+      inspectFile: inspectStructuredXmlFileReadOnly,
+      workspaceIdentity: workspace,
+      getCurrentWorkspaceIdentity: () => latestDrawioWorkspaceRef.current,
+      onClose: () => setStructuredXmlInspectionOpen(false),
     }) : null,
     graphmlPreviewOpen ? e(GraphmlReadOnlyPanel, { inspectFile: previewGraphmlFileReadOnly,
       manualRoleOptions: GRAPHML_MANUAL_ROLE_OPTIONS,

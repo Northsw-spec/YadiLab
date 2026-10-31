@@ -33,6 +33,7 @@ jobs:
           npm run test:imported-probes
           npm run test:ic000-capabilities
           npm run test:ic010-xml-discovery
+          npm run test:ic010-p2-xml-ui
           npm run test:dev11-ui
           npm run test:ospf-p2p-dd
           npm run test:ospf-p2p-exchange
@@ -88,6 +89,8 @@ jobs:
           /tmp/yadilab-release-dom-venv/bin/python tests/acceptance/run_release_identity_real_browser.py \
             --url http://127.0.0.1:18995/ --expected-commit "$YADILAB_EXPECTED_COMMIT" \
             --evidence-dir /tmp/yadilab-release-dom-evidence
+          /tmp/yadilab-release-dom-venv/bin/python tests/acceptance/run_ic010_p2_shared_xml_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-release-dom-evidence
       - name: Preserve mounted release identity evidence
         if: always()
         uses: actions/upload-artifact@v4
