@@ -81,7 +81,7 @@ function consistent(m) {
         return false;
     }
     for (const path of [...p.sources, ...p.tests]) {
-      if (!/^(enterprise-import\/src|ui\/src\/browser|ui\/app|tests\/|\.github\/workflows)\//.test(path)
+      if (!/^(enterprise-import\/src\/|ui\/src\/browser\/|ui\/app\/|tests\/|\.github\/workflows\/)/.test(path)
         || !fs.existsSync(path) || !fs.statSync(path).isFile()) return false;
     }
   }
