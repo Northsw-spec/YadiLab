@@ -54,6 +54,7 @@ jobs:
           npm run test:ic020-p2c1-sidecar-replay
           npm run test:ic020-p2c2-multisheet
           npm run test:ic020-p2c3-unmapped
+          npm run test:ic020-p2c4-matrix
           npm run test:simulation-clock
           npm run test:simulation-transitions
           npm run test:ospf-p2p-hello
