@@ -35,6 +35,7 @@ import defaultEnterpriseMapping from "../../examples/enterprise-import/enterpris
 import { previewNetworkTopologyFile } from "../src/browser/network-topology-import.js";
 import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
 import { inspectSharedDocumentFileReadOnly } from "../src/browser/structured-document-inspection-file.js";
+import { reviewSharedStaticHostOriginalReference } from "../src/browser/shared-ansible-original-reference.js";
 import { StructuredXmlInspectionPanel } from "./structured-xml-inspection-panel.mjs";
 import { mapReviewedGraphmlToBuilder, GRAPHML_MANUAL_ROLE_OPTIONS } from "../../enterprise-import/src/graphml-review-mapping.js";
 import { GraphmlReadOnlyPanel } from "./graphml-preview-panel.mjs";
@@ -4374,6 +4375,37 @@ function App() {
       inspectFile: inspectSharedDocumentFileReadOnly,
       workspaceIdentity: workspace,
       getCurrentWorkspaceIdentity: () => latestDrawioWorkspaceRef.current,
+      model: workspace.mode === "builder" ? {
+        scenarioId: workspace.source.scenarioId,
+        sourceRevision: workspace.sourceRevision,
+        resources: workspace.source.resources.map(x => ({id:x.id,label:x.label})),
+      } : null,
+      onExportReviewed: async (file, expected, decision, isCurrent) => {
+        const getLiveModel = () => {
+          const w = latestDrawioWorkspaceRef.current;
+          return w.mode === "builder" ? {
+            scenarioId: w.source.scenarioId,
+            sourceRevision: w.sourceRevision,
+            resources: w.source.resources.map(x => ({id:x.id,label:x.label})),
+          } : null;
+        };
+        const before = getLiveModel();
+        if (!before || !isCurrent()) {
+          const error = new Error("IC010_P3B_STALE"); error.code = "IC010_P3B_STALE"; throw error;
+        }
+        const beforeIdentity = JSON.stringify(before);
+        const sidecar = await reviewSharedStaticHostOriginalReference(
+          file,expected,getLiveModel,decision,isCurrent);
+        if (!isCurrent() || JSON.stringify(getLiveModel()) !== beforeIdentity) {
+          const error = new Error("IC010_P3B_STALE"); error.code = "IC010_P3B_STALE"; throw error;
+        }
+        // Final local sidecar download has no asynchronous yield after live gate.
+        downloadJson({
+          filename: "ic010-unverified-host-" + sidecar.source.sha256.slice(0,12) + ".json",
+          mime: "application/json",
+          text: JSON.stringify(sidecar,null,2),
+        });
+      },
       onClose: () => setStructuredXmlInspectionOpen(false),
     }) : null,
     graphmlPreviewOpen ? e(GraphmlReadOnlyPanel, { inspectFile: previewGraphmlFileReadOnly,
