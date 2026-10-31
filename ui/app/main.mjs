@@ -33,6 +33,7 @@ import guidedLinuxFirewall from "../../curriculum/builtin/wave1/linux-firewall.j
 import guidedLinuxSsh from "../../curriculum/builtin/wave1/linux-ssh.json";
 import defaultEnterpriseMapping from "../../examples/enterprise-import/enterprise-import-template.mapping.json";
 import { previewNetworkTopologyFile, verifyNetworkTopologyOriginalForActivation } from "../src/browser/network-topology-import.js";
+import { compareCoreNetworkReimport } from "../src/browser/core-network-reimport-review.js";
 import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
 import { inspectSharedDocumentFileReadOnly } from "../src/browser/structured-document-inspection-file.js";
 import { reviewSharedStaticHostOriginalReference } from "../src/browser/shared-ansible-original-reference.js";
@@ -3052,12 +3053,20 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
   const [selectedLinkSource, setSelectedLinkSource] = useState(null);
+  const [reimportReview, setReimportReview] = useState(null);
+  const [reimportApproved, setReimportApproved] = useState(false);
+  // The previous source is the CURRENT live editable workspace, not a
+  // cryptographically attested past original file.
+  const isCoreReimport = (candidate) => Boolean(candidate?.ok && candidate?.source &&
+    candidate.source.scenarioId === "imported_network" &&
+    workspaceIdentity?.source?.scenarioId === candidate.source.scenarioId);
   const requestId = useRef(0);
   const selectedOriginal = useRef(null);
   const invalidated = () => {
     requestId.current++;
     selectedOriginal.current = null;
     setPreview(null); setFailure(""); setBusy(false); setSelectedLinkSource(null);
+    setReimportReview(null); setReimportApproved(false);
     setDiagnostics([]);
   };
   const close = () => { invalidated(); onClose(); };
@@ -3065,6 +3074,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     const current = ++requestId.current;
     selectedOriginal.current = file ?? null;
     setFailure(""); setPreview(null); setDiagnostics([]); setSelectedLinkSource(null);
+    setReimportReview(null); setReimportApproved(false);
     if (!file) { setBusy(false); return; }
     setBusy(true);
     try {
@@ -3092,6 +3102,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     }
     const current = ++requestId.current;
     setBusy(true); setFailure(""); setPreview(null); setDiagnostics([]);
+    setReimportReview(null); setReimportApproved(false);
     try {
       const next = await previewNetworkTopologyFile(original, { linkSourceChoice: choice });
       if (requestId.current !== current || selectedOriginal.current !== original) return;
@@ -3115,6 +3126,25 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       setFailure("IC020_P2A_SOURCE_CHANGED");
     } finally { if (requestId.current === current) setBusy(false); }
   };
+  const reviewCoreReimport = async () => {
+    if (busy || !preview?.ok || !preview.source || !isCoreReimport(preview)) return;
+    const candidate=preview, original=selectedOriginal.current, epoch=requestId.current;
+    const isCurrent=()=>Boolean(original) && requestId.current===epoch &&
+      selectedOriginal.current===original && getCurrentWorkspaceIdentity()===workspaceIdentity;
+    if(!isCurrent()){setFailure("IC020_P2B_BASELINE_CHANGED");return;}
+    setBusy(true);setFailure("");setReimportReview(null);setReimportApproved(false);
+    try{
+      await verifyNetworkTopologyOriginalForActivation(original,candidate,isCurrent);
+      const report=await compareCoreNetworkReimport(workspaceIdentity,candidate,isCurrent);
+      if(!isCurrent())throw new Error("IC020_P2B_BASELINE_CHANGED");
+      setReimportReview(report);
+    }catch{
+      if(requestId.current===epoch){
+        setFailure("IC020_P2B_BASELINE_CHANGED");
+        setReimportReview(null);setReimportApproved(false);
+      }
+    }finally{if(requestId.current===epoch)setBusy(false);}
+  };
   // A file picked directly from MAIN ACTIONS must enter the exact same
   // preview/validation path as a file picked from the dialog itself.
   useEffect(() => {
@@ -3133,6 +3163,13 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     if (!preview?.ok || !preview.source || busy) return;
     const original = selectedOriginal.current;
     const activationEpoch = requestId.current;
+    const needsReimportReview=isCoreReimport(preview);
+    if(needsReimportReview && (!reimportReview || !reimportApproved ||
+        reimportReview.incomingOriginalSourceSha256!==preview.sourceSha256 ||
+        reimportReview.currentWorkspaceRevision!==workspaceIdentity.sourceRevision ||
+        reimportReview.sourceLinkChoice!==preview.linkSourceChoice)){
+      setFailure("IC020_P2B_REVIEW_REQUIRED");return;
+    }
     if (preview.linkSourceConflict && (!preview.linkSourceChoice ||
         preview.linkSourceChoice !== selectedLinkSource)) {
       setFailure("IC020_P2A_REVIEW_REQUIRED");
@@ -3144,6 +3181,12 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       getCurrentWorkspaceIdentity() === workspaceIdentity;
     if (!isCurrent()) { setFailure("IC020_P1_STALE"); return; }
     setBusy(true); setFailure("");
+    const verifyReimportApproval=async()=>{
+      if(!needsReimportReview)return;
+      const current=await compareCoreNetworkReimport(workspaceIdentity,preview,isCurrent);
+      if(!isCurrent() || JSON.stringify(current)!==JSON.stringify(reimportReview))
+        throw new Error("IC020_P2B_BASELINE_CHANGED");
+    };
     try {
       let next = await compileBuilderWorkspace(createBuilderWorkspace(preview.source), compilerOptions);
       if (next.compile.status !== "valid") {
@@ -3174,10 +3217,12 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
           return;
         }
         await verifyNetworkTopologyOriginalForActivation(original, preview, isCurrent);
+        await verifyReimportApproval();
         if (!isCurrent()) throw new Error("IC020_P1_STALE");
         onActivate(runtime.workspace, true);
       } else {
         await verifyNetworkTopologyOriginalForActivation(original, preview, isCurrent);
+        await verifyReimportApproval();
         if (!isCurrent()) throw new Error("IC020_P1_STALE");
         onActivate(next, false);
       }
