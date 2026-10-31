@@ -57,7 +57,7 @@ const panelHtml=renderToStaticMarkup(React.createElement(StructuredXmlInspection
   inspectFile:inspectStructuredXmlFileReadOnly,onClose(){},workspaceIdentity:{},getCurrentWorkspaceIdentity(){return {};}
 }));
 for(const marker of ['role="dialog"','aria-modal="true"','data-ic010-p2-panel="READ_ONLY"',
-  'data-ic010-p2-file="true"','accept=".graphml,.drawio,.nessus,.xml"',
+  'data-ic010-p2-file="true"','accept=".graphml,.drawio,.nessus,.xml,.yml,.yaml,.ini"',
   'data-ic010-p2-consent="true"','data-ic010-p2-inspect="true"',
   'data-ic010-p2-close="true"','data-ic010-p2-empty="true"']){
   yes(panelHtml.includes(marker),"Shared UI marker "+marker);
