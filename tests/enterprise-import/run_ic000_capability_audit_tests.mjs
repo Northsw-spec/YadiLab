@@ -24,7 +24,7 @@ const rejects = (value, label) => { assert.equal(value, false, label); assertion
 const idSet = new Set();
 const validTracks = ["TOPOLOGY_DECLARED", "CONFIG_DOCUMENTED", "EVIDENCE_OBSERVED"];
 const validRegistries = ["ACTIVE_ADAPTER", "NATIVE_SCENARIO", "PLANNED_HINT"];
-const stages = ["detect", "parse", "preview", "review", "builder", "modeledProbe", "replay", "ui"];
+const stages = ["detect", "parse", "preview", "review", "projection", "builder", "modeledProbe", "replay", "ui"];
 const expectedActive = ["builtin.json", "builtin.csv", "builtin.tsv", "builtin.xlsx", "builtin.ods"];
 const active = builtinEnterpriseImportAdapters.map(x => x.id);
 const expectedDedicated = new Set([
@@ -71,7 +71,7 @@ function consistent(m) {
       // Specialized read-only parsers are not registered enterprise adapters.
       if (p.stage.parse !== (expectedDedicated.has(p.id) ? "BOUNDED_READ_ONLY" : "NONE")
         || p.stage.modeledProbe !== (p.id === "graphml.structural.v1" ? "NOT_ATTESTED" : "NONE")
-        || (p.id !== "graphml.structural.v1" && p.stage.builder !== "NONE")
+        || (p.id !== "graphml.structural.v1" && (p.stage.projection !== "NONE" || p.stage.builder !== "NONE"))
         || p.stage.builder === "DIRECT_ACTIVATION") return false;
       if (!expectedDedicated.has(p.id) && stages.some(s =>
         s !== "detect" && p.stage[s] !== "NONE")) return false;
@@ -180,6 +180,8 @@ rejects(changed(x=>x.profiles.find(p=>p.id==="pdf.digital-tables.v1").stage.pars
   "PDF cannot be promoted by documentation-only capability metadata");
 rejects(changed(x=>x.profiles.find(p=>p.id==="nmap.xml.v1").stage.builder="DIRECT_ACTIVATION"),
   "Nmap cannot become scenario activation evidence");
+rejects(changed(x=>x.profiles.find(p=>p.id==="nessus.xml.v1").stage.projection="SCENARIO_SOURCE"),
+  "Nessus evidence cannot be turned into a network scenario by matrix metadata");
 rejects(changed(x=>x.profiles.find(p=>p.id==="office.docx-tables.v1").stage.modeledProbe="YES"),
   "DOCX source reference is not an Engine probe");
 rejects(changed(x=>x.profiles.find(p=>p.id==="graphml.structural.v1").registry="ACTIVE_ADAPTER"),
