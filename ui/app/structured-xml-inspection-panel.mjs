@@ -4,7 +4,7 @@ const e = React.createElement;
 /** Aggregate-only, already validated producer metadata; no source content. */
 export function StructuredXmlInspectionDetails({ result }) {
   if (!result) return e("p", { "data-ic010-p2-empty": "true" },
-    "Choose a local XML-based source. Explicit consent is required before inspection.");
+    "Choose a supported local document. Explicit consent is required before inspection.");
   if (result.status === "BLOCKED") return e("section", {
     "data-ic010-p2-result": "BLOCKED", role: "alert", className: "helper-status blocked",
   }, "Inspection blocked: ", result.code,
@@ -15,8 +15,12 @@ export function StructuredXmlInspectionDetails({ result }) {
     ? "Reported hosts: " + result.summary.observedHosts + " · Scan-time ports: " + result.summary.reportedPorts
     : result.summary.kind === "NESSUS_REPORT"
     ? "Report hosts: " + result.summary.reportedHosts + " · Findings: " + result.summary.reportedFindings
-    : "Pages: " + result.summary.pages + " · Drawn vertices: " + result.summary.vertices +
-      " · Drawn edges: " + result.summary.drawnEdges;
+    : result.summary.kind === "DRAWIO_DIAGRAM"
+    ? "Pages: " + result.summary.pages + " · Drawn vertices: " + result.summary.vertices +
+      " · Drawn edges: " + result.summary.drawnEdges
+    : "Documented hosts: " + result.summary.documentedHosts +
+      " · Groups: " + result.summary.documentedGroups +
+      " · Source-bound host references: " + result.summary.originalHostLocatorCount;
   return e("section", {
     className: "network-import-preview",
     "data-ic010-p2-result": result.status,
@@ -32,7 +36,8 @@ export function StructuredXmlInspectionDetails({ result }) {
     e("p", { "data-ic010-p2-counts": result.summary.kind }, counts),
     e("p", { "data-ic010-p2-activation": "BLOCKED" },
       "Read-only inspection. No Builder or Runtime change, no modeled or live probe. ",
-      "Graph edges are not verified cables; Nmap/Nessus findings are historical observations, ",
+      "Graph edges are not verified cables; Nmap/Nessus findings are historical observations; " +
+      "Ansible inventory hosts and groups are only documented configuration, ",
       "not current Engine PASS or proven network state. Use a separately reviewed format-specific workflow when appropriate."),
   );
 }
@@ -109,7 +114,7 @@ export function StructuredXmlInspectionPanel({
       setResult(next);
     } catch (cause) {
       if (stillCurrent()) {
-        setError(typeof cause?.code === "string" && /^IC010_XML_[A-Z0-9_]+$/.test(cause.code)
+        setError(typeof cause?.code === "string" && /^IC010_(?:XML|STATIC|P3)_[A-Z0-9_]+$/.test(cause.code)
           ? cause.code : "IC010_XML_INSPECTION_BLOCKED");
       }
     } finally {
@@ -120,19 +125,19 @@ export function StructuredXmlInspectionPanel({
   return e("div", { className: "network-import-overlay", "data-ic010-p2-overlay": "true" },
     e("section", {
       className: "network-import-panel", role: "dialog", "aria-modal": "true",
-      "aria-label": "Shared XML source inspection (read-only)",
+      "aria-label": "Shared document source inspection (read-only)",
       ref: dialog, tabIndex: -1, "data-ic010-p2-panel": "READ_ONLY",
     },
       e("div", { className: "network-import-heading" },
-        e("div", null, e("h2", null, "Inspect structured XML — read-only"),
+        e("div", null, e("h2", null, "Inspect structured documents — read-only"),
           e("p", null, "Offline local file inspection. Verified profile, original-source hash and counts only.")),
         e("button", { type: "button", onClick: close,
-          "aria-label": "Close shared XML inspection", "data-ic010-p2-close-top": "true" }, "Close")),
+          "aria-label": "Close shared document inspection", "data-ic010-p2-close-top": "true" }, "Close")),
       e("p", { className: "helper-note" },
-        "Supported subsets: GraphML (.graphml), diagrams.net (.drawio), Nmap XML and Nessus v2 (.nessus/.xml). ",
-        "Unrecognized XML is blocked. Other document formats still use their separate entries."),
-      e("label", { className: "file-button" }, "Choose local XML-based file",
-        e("input", { type: "file", accept: ".graphml,.drawio,.nessus,.xml",
+        "Supported subsets: GraphML (.graphml), draw.io (.drawio), Nmap XML, Nessus v2 (.nessus/.xml), and static Ansible inventories (.yml/.yaml/.ini). ",
+        "Only strictly validated source profiles pass. Other document formats use separate workflows."),
+      e("label", { className: "file-button" }, "Choose supported local document",
+        e("input", { type: "file", accept: ".graphml,.drawio,.nessus,.xml,.yml,.yaml,.ini",
           "data-ic010-p2-file": "true", hidden: true,
           // Canceling the native picker is also a consent reset, including when
           // the browser emits only cancel and not change.
@@ -154,7 +159,7 @@ export function StructuredXmlInspectionPanel({
       e("div", { className: "network-import-actions" },
         e("button", { type: "button", disabled: !selection || !consent || busy,
           "data-ic010-p2-inspect": "true", onClick: () => { void inspect(); },
-        }, busy ? "Inspecting…" : "Inspect selected XML (read-only)"),
+        }, busy ? "Inspecting…" : "Inspect selected document (read-only)"),
         e("button", { type: "button", "data-ic010-p2-close": "true",
           onClick: close }, "Close without changes")),
       error ? e("p", { role: "alert", className: "helper-status blocked",
