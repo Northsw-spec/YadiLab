@@ -136,6 +136,7 @@
     "test:network-topology-import": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_network_topology_import_checkpoint.mjs && tsc -p tests/tsconfig.browser.json && node tests/browser/run_network_topology_checkpoint_tests.mjs",
     "test:import003-ui": "node tests/browser/run_import003_oneclick_version_tests.mjs",
     "test:imported-probes": "npm run test:network-topology-import && node tests/browser/run_import004_probe_runtime_tests.mjs",
+    "test:ic000-capabilities": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_ic000_capability_audit_tests.mjs",
     "test:release-identity": "node tests/browser/run_release_identity_tests.mjs"
   },
   "dependencies": {

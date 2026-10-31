@@ -14,6 +14,10 @@
 
 Five active enterprise adapters (JSON, CSV, TSV, XLSX, ODS) are **not** proof of complete import support for all planned formats. Specialized GraphML, draw.io, Ansible, DOCX, ODT, Nmap and Nessus reviews are **not** universally active import adapters; actual semantics, provenance, Builder mapping and eligible modeled probes must be verified per profile. PDF, Visio, lab-project, capture and log formats have further scoped work. Do not equate a parser PASS with network truth, an automatically generated physical cable, or permission to perform real external probes.
 
+## Import capability source-audit inventory
+
+[IC-000 live audit](architecture/IC_000_LIVE_IMPORT_CAPABILITY_AUDIT.md) and [versioned matrix](architecture/import-capability-matrix.v1.json) classify five active enterprise adapters, the separate native JSON scenario, eight specialized read-only preview/review modules, and thirteen planned-only profiles. The audit's evidence links and statuses are **not a blanket assertion that all format UI flows passed or that all files can create runnable topologies**. Consult current source, current CI and issue #3 for latest implemented capabilities. Default next import milestone after IC-000 verified: IC-010 shared profile entrypoint/provenance.
+
 ## GitHub issues, not automatically equivalent to bugs
 
 - [#1 AUDIT-006](https://github.com/Northsw-spec/YadiLab/issues/1): original provenance defects plus remaining Masterprompt/CLI scope. Track both fixes and unresolved backlog separately.
