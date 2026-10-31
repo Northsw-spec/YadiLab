@@ -50,7 +50,7 @@ assert.equal(marker.version, version);
 assert.equal(marker.marker, `yadilab-v${version}`);
 assert.equal(marker.checkpoint, checkpoint);
 const bundle = read('ui/dist/assets/app.js');
-assert.ok(bundle.includes('Import Excel / CSV \\u2192 Network Topology') || bundle.includes('Import JSON / Excel / CSV → Network Topology'));
+assert.ok(bundle.includes('Import JSON / Excel / CSV \\u2192 Network Topology') || bundle.includes('Import JSON / Excel / CSV → Network Topology'));
 assert.ok(bundle.includes('data-network-import-primary'));
 assert.ok(bundle.includes('data-network-import-file'));
 assert.ok(bundle.includes('data-network-import-quick-file'));
