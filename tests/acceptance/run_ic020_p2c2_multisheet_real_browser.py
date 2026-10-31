@@ -67,8 +67,10 @@ def case_builder(browser,url,fmt):
         data=build(fmt)
         picker(page,fmt,data)
         digest=preview(page,fmt,data)
-        require(exported_source(page)==baseline,
-            "Preview mutated active Builder")
+        # The modal is intentionally modal: don't click the underlying
+        # Builder export while its overlay intercepts pointer events.
+        # The unchanged-Builder assertion is made in every blocked-source
+        # case *after* the modal closes; activation is explicit here.
         page.locator('[data-network-import-activate]').click()
         expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
         source=exported_source(page)
