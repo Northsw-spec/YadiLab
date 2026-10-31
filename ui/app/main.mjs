@@ -32,7 +32,7 @@ import guidedLinuxDns from "../../curriculum/builtin/wave1/linux-dns.json";
 import guidedLinuxFirewall from "../../curriculum/builtin/wave1/linux-firewall.json";
 import guidedLinuxSsh from "../../curriculum/builtin/wave1/linux-ssh.json";
 import defaultEnterpriseMapping from "../../examples/enterprise-import/enterprise-import-template.mapping.json";
-import { previewNetworkTopologyFile } from "../src/browser/network-topology-import.js";
+import { previewNetworkTopologyFile, verifyNetworkTopologyOriginalForActivation } from "../src/browser/network-topology-import.js";
 import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
 import { inspectSharedDocumentFileReadOnly } from "../src/browser/structured-document-inspection-file.js";
 import { reviewSharedStaticHostOriginalReference } from "../src/browser/shared-ansible-original-reference.js";
@@ -3046,16 +3046,26 @@ function WorkspaceMenu({ label, children }) {
 }
 
 
-function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setDiagnostics, initialSelection }) {
+function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setDiagnostics, initialSelection, workspaceIdentity, getCurrentWorkspaceIdentity }) {
   const panelRef = useRef(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
   const requestId = useRef(0);
+  const selectedOriginal = useRef(null);
+  const invalidated = () => {
+    requestId.current++;
+    selectedOriginal.current = null;
+    setPreview(null); setFailure(""); setBusy(false);
+    setDiagnostics([]);
+  };
+  const close = () => { invalidated(); onClose(); };
   const chooseFile = async (file) => {
-    if (!file) return;
     const current = ++requestId.current;
-    setBusy(true); setFailure(""); setPreview(null);
+    selectedOriginal.current = file ?? null;
+    setFailure(""); setPreview(null); setDiagnostics([]);
+    if (!file) { setBusy(false); return; }
+    setBusy(true);
     try {
       const result = await previewNetworkTopologyFile(file);
       if (requestId.current !== current) return;
@@ -3076,13 +3086,21 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   }, [initialSelection]);
   useEffect(() => {
     const onEscape = (event) => {
-      if (event.key === "Escape" && !busy) onClose();
+      if (event.key === "Escape" && !busy) close();
     };
     document.addEventListener("keydown", onEscape);
     return () => document.removeEventListener("keydown", onEscape);
   }, [busy, onClose]);
+  useEffect(() => () => { requestId.current++; selectedOriginal.current = null; }, []);
   const activate = async (mode = "builder") => {
     if (!preview?.ok || !preview.source || busy) return;
+    const original = selectedOriginal.current;
+    const activationEpoch = requestId.current;
+    const isCurrent = () => Boolean(original) &&
+      requestId.current === activationEpoch &&
+      selectedOriginal.current === original &&
+      getCurrentWorkspaceIdentity() === workspaceIdentity;
+    if (!isCurrent()) { setFailure("IC020_P1_STALE"); return; }
     setBusy(true); setFailure("");
     try {
       let next = await compileBuilderWorkspace(createBuilderWorkspace(preview.source), compilerOptions);
@@ -3113,8 +3131,12 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
           setFailure("No explicitly declared Windows/Linux source hosts support modeled probes. Open Builder to edit device types; do not infer an OS from an IP address.");
           return;
         }
+        await verifyNetworkTopologyOriginalForActivation(original, preview, isCurrent);
+        if (!isCurrent()) throw new Error("IC020_P1_STALE");
         onActivate(runtime.workspace, true);
       } else {
+        await verifyNetworkTopologyOriginalForActivation(original, preview, isCurrent);
+        if (!isCurrent()) throw new Error("IC020_P1_STALE");
         onActivate(next, false);
       }
     } catch (error) {
@@ -3125,15 +3147,16 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   return e("div", { className: "network-import-overlay", "data-network-import-overlay": "true" },
     e("section", { id: "network-topology-import-panel", ref: panelRef, tabIndex: -1, role: "dialog", "aria-modal": "true", className: "network-import-panel", "data-network-import-panel": "ready", "aria-label": "Import Network from Excel / CSV" },
     e("div", { className: "network-import-heading" },
-      e("div", null, e("h2", null, "Import Network from Excel / CSV"), e("p", null, "Offline import: select → review → validate → open Runtime probes or Builder. Existing workspace remains unchanged until you confirm.")),
-      e("button", { type: "button", onClick: onClose, disabled: busy, "aria-label": "Close network import" }, "Close")),
-    e("p", { className: "helper-note" }, "Supported: .xlsx, .ods, .csv, .tsv. Use a Devices sheet (Asset ID, Hostname, Device Type, IP Address, Connected To), or a canonical Nodes + Links workbook. Connections require explicit endpoint IDs; IP addresses and gateways never imply cabling."),
-    e("label", { className: "file-button" }, busy ? "Reading network document…" : "Choose Excel / CSV network file",
-      e("input", { type: "file", accept: ".xlsx,.ods,.csv,.tsv", disabled: busy, "data-network-import-file": "true", onChange: (event) => { const selected = event.target.files?.[0]; event.target.value = ""; chooseFile(selected); }, hidden: true })),
+      e("div", null, e("h2", null, "Import Network from Excel / CSV"), e("p", null, "Offline import: select → review → validate → re-check original SHA-256 → open Runtime probes or Builder. Existing workspace remains unchanged until you confirm.")),
+      e("button", { type: "button", onClick: close, disabled: busy, "aria-label": "Close network import" }, "Close")),
+    e("p", { className: "helper-note" }, "Supported: .json, .xlsx, .ods, .csv, .tsv. Use a Devices table (Asset ID, Hostname, Device Type, IP Address, Connected To), or a canonical Nodes + Links workbook. Connections require explicit endpoint IDs; IP addresses and gateways never imply cabling."),
+    e("label", { className: "file-button" }, busy ? "Reading network document…" : "Choose JSON / Excel / CSV network file",
+      e("input", { type: "file", accept: ".json,.xlsx,.ods,.csv,.tsv", disabled: busy, "data-network-import-file": "true", onCancel: () => { void chooseFile(null); }, onChange: (event) => { const selected = event.target.files?.[0] ?? null; event.target.value = ""; void chooseFile(selected); }, hidden: true })),
     failure ? e("p", { role: "alert", className: "helper-status blocked" }, failure) : null,
     preview ? e("div", { className: "network-import-preview", "data-network-import-preview": preview.ok ? "READY" : "BLOCKED" },
       e("h3", null, "Preview – ", preview.filename),
-      e("p", null, `Found sheets: ${preview.sheets.join(", ") || "none"} · Devices: ${preview.devices} · Explicit links: ${preview.links}`),
+      e("p", null, `Found tables: ${preview.sheets.join(", ") || "none"} · Devices: ${preview.devices} · Explicit links: ${preview.links}`),
+      e("p", { "data-network-import-sha": "true", "data-network-import-byte-size": preview.sourceByteSize }, `Original SHA-256: ${preview.sourceSha256} · Bytes: ${preview.sourceByteSize}`),
       e("p", { className: "helper-note" }, preview.links === 0 ? "No physical connections provided. Devices will be shown without invented links." : "Only explicitly declared links will appear in the topology."),
       preview.diagnostics.length ? e("ul", { className: "validation-list" }, ...preview.diagnostics.slice(0, 30).map((d, i) => e("li", { key: i }, `${d.severity.toUpperCase()}: ${d.code} – ${d.message}`))) : e("p", null, "No import diagnostics."),
       e("div", { className: "network-import-actions" },
@@ -3169,9 +3192,9 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructured
       ),
     ),
     e("div", { className: "main-actions-primary-import", "data-network-import-entrypoint": "always-visible" },
-      e("button", { type: "button", className: "network-import-primary-button", "data-network-import-primary": "true", onClick: openNetworkPicker, disabled: busy, "aria-controls": "network-topology-import-panel" }, "Import Excel / CSV → Network Topology"),
-      e("input", { type: "file", ref: networkPickerRef, accept: ".xlsx,.ods,.csv,.tsv", onChange: acceptNetworkFile, style: { display: "none" }, tabIndex: -1, "aria-label": "Select network inventory document", "data-network-import-quick-file": "true" }),
-      e("span", null, "Select .xlsx / .ods / .csv / .tsv directly. A review dialog opens before topology replacement."),
+      e("button", { type: "button", className: "network-import-primary-button", "data-network-import-primary": "true", onClick: openNetworkPicker, disabled: busy, "aria-controls": "network-topology-import-panel" }, "Import JSON / Excel / CSV → Network Topology"),
+      e("input", { type: "file", ref: networkPickerRef, accept: ".json,.xlsx,.ods,.csv,.tsv", onChange: acceptNetworkFile, style: { display: "none" }, tabIndex: -1, "aria-label": "Select network inventory document", "data-network-import-quick-file": "true" }),
+      e("span", null, "Select .json / .xlsx / .ods / .csv / .tsv directly. A review dialog opens before topology replacement."),
     ),
     workspace.mode === "runtime" ? e("button", { type: "button", "data-open-active-probes": "true", className: "network-import-runtime-button", onClick: () => {
       const panel = document.querySelector('[data-active-probe-engine="wave2"]');
@@ -3958,7 +3981,9 @@ function App() {
         e("span", null, `Beroendedjup ${selectedGuidedLab.difficulty.dependencyDepth}`),
         e("span", null, `Evidenssynlighet ${selectedGuidedLab.difficulty.evidenceVisibility}`),
         e("span", null, `Åtgärdsbegränsningar ${selectedGuidedLab.difficulty.remediationConstraints}`))) : null,
-    networkImportOpen ? e(NetworkTopologyImportPanel, { compilerOptions, setDiagnostics, initialSelection: networkImportSelection, onClose: () => { setNetworkImportOpen(false); setNetworkImportSelection(null); }, onActivate: (next, openProbes) => { beginScenarioTransition(); setImportedProbeAutoOpen(Boolean(openProbes)); setWorkspace(next); setNetworkImportOpen(false); setNetworkImportSelection(null); } }) : null,
+    networkImportOpen ? e(NetworkTopologyImportPanel, { compilerOptions, setDiagnostics,
+      workspaceIdentity: workspace, getCurrentWorkspaceIdentity: () => latestDrawioWorkspaceRef.current,
+      initialSelection: networkImportSelection, onClose: () => { setNetworkImportOpen(false); setNetworkImportSelection(null); }, onActivate: (next, openProbes) => { beginScenarioTransition(); setImportedProbeAutoOpen(Boolean(openProbes)); setWorkspace(next); setNetworkImportOpen(false); setNetworkImportSelection(null); } }) : null,
     ansibleYamlReplayOpen ? e(AnsibleYamlSavedReferenceReplayPanel, {
       model: workspace.mode==="builder" ? {
         scenarioId:workspace.source.scenarioId,
