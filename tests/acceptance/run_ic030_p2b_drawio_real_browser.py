@@ -57,7 +57,14 @@ def select(page, edge=False, typed=False, third=False):
         require(page.locator('[data-drawio-candidate-confirm]').is_disabled(),
                 "Selected modeled connection accepted without separate acknowledgment")
         page.locator('[data-drawio-candidate-edge-ack="true"]').check()
-    if third:page.locator('[data-drawio-candidate-node="1:0"]').check()
+    if third:
+        page.locator('[data-drawio-candidate-node="1:0"]').check()
+        if edge:
+            require(page.locator('[data-drawio-candidate-confirm]').is_disabled(),
+                    "Adding a node after edge consent must revoke old consent")
+            require(not page.locator('[data-drawio-candidate-edge-ack="true"]').is_checked(),
+                    "Old modeled link approval survived a subsequent node change")
+            page.locator('[data-drawio-candidate-edge-ack="true"]').check()
     require(page.locator('[data-drawio-candidate-confirm]').is_enabled(),
             "Explicit chosen graph candidate not confirmed")
 
