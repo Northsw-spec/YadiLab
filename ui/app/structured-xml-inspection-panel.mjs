@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { SharedAnsibleOrdinalReview } from "./shared-ansible-ordinal-review.mjs";
+import { validateSharedSourceReviewResult, sharedSourceTrackMeaning, sharedReviewLifecycle } from "./shared-source-review-contract.mjs";
 const e = React.createElement;
 
 /** Aggregate-only, already validated producer metadata; no source content. */
@@ -35,6 +36,7 @@ export function StructuredXmlInspectionDetails({ result }) {
     e("h3", null, "Validated source profile"),
     e("p", { "data-ic010-p2-status": result.status }, "Status: " + result.status),
     e("p", { "data-ic010-p2-track": result.semanticTrack }, "Source classification: " + result.semanticTrack),
+    e("p", { "data-ic010-p3d-source-meaning": result.semanticTrack }, sharedSourceTrackMeaning(result.semanticTrack)),
     e("p", { "data-ic010-p2-profile-label": "true" }, "Profile: " + result.profileId),
     e("p", { "data-ic010-p2-sha": "true" }, "Original SHA-256: " + result.sourceSha256),
     e("p", { "data-ic010-p2-source-locator": result.documentLocator.kind },
@@ -113,16 +115,15 @@ export function StructuredXmlInspectionPanel({
     try {
       const next = await inspectFile(file);
       if (!stillCurrent()) return;
-      if (!next || next.canActivate !== false || next.modelMutated !== false ||
-          next.engineVerified !== false || next.physicalTopologyVerified !== false ||
-          !["BLOCKED", "EVIDENCE_ONLY", "PREVIEW_ONLY", "REVIEW_REQUIRED"].includes(next.status)) {
-        setError("IC010_XML_INSPECTION_INVALID");
-        return;
-      }
-      setResult(next);
+      // This final gateway rejects mismatched profile/status/track/source
+      // locators, unsafe extra keys and forged activation or probe claims.
+      // Preserve exact producer serialization for original-file P3b recheck.
+      const validated = validateSharedSourceReviewResult(next);
+      if (!stillCurrent()) return;
+      setResult(validated);
     } catch (cause) {
       if (stillCurrent()) {
-        setError(typeof cause?.code === "string" && /^IC010_(?:XML|STATIC|P3|P3C)_[A-Z0-9_]+$/.test(cause.code)
+        setError(typeof cause?.code === "string" && /^IC010_(?:XML|STATIC|P3|P3C|P3D)_[A-Z0-9_]+$/.test(cause.code)
           ? cause.code : "IC010_XML_INSPECTION_BLOCKED");
       }
     } finally {
@@ -159,6 +160,12 @@ export function StructuredXmlInspectionPanel({
         })),
       selection ? e("p", { "data-ic010-p2-selected": "true" },
         "Local file selected. No parsing performed yet.") : null,
+      e("p", { "data-ic010-p3d-lifecycle": sharedReviewLifecycle({
+          selected: Boolean(selection), consent, busy, result, error,
+        }) },
+        "Review lifecycle: " + sharedReviewLifecycle({
+          selected: Boolean(selection), consent, busy, result, error,
+        })),
       e("label", null,
         e("input", { type: "checkbox", checked: consent, disabled: !selection,
           "data-ic010-p2-consent": "true",
