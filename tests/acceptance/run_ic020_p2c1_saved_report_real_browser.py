@@ -88,7 +88,7 @@ def case_replay_fresh(browser,url,saved):
     require(page.locator('[data-network-import-panel]').count()==1,
       "Approval on its own should not replace workspace")
     page.locator('[data-network-import-activate]').click()
-    expect(page.locator('[data-network-import-panel]').to_have_count(0,timeout=45000)
+    expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
     new=exported_source(page)
     require({x["id"] for x in new["resources"]}=={"router01","switch01","pc01","linux01"},
       "New original inventory not actually imported after separate review and approval")
