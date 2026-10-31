@@ -165,7 +165,7 @@ export function normalizeNetworkInventoryDocument(
   // A discarded source does not contribute any modeled link.
   const useSheet = Boolean(explicitLinks) && (!conflicted || choice === "LINKS_SHEET");
   const links = useSheet ? explicitLinks!.records.map((row) => {
-    const pickLink = (names: readonly string[]) => pick(row, names, explicitLinks.tableId, diagnostics);
+    const pickLink = (names: readonly string[]) => pick(row, names, explicitLinks!.tableId, diagnostics);
     const id = pickLink(["linkId", "Link ID", "Connection ID"]);
     const from = pickLink(["nodeA", "From", "Source", "From Device", "Source Device"]);
     const to = pickLink(["nodeB", "To", "Destination", "To Device", "Target Device"]);
