@@ -35,7 +35,7 @@ import defaultEnterpriseMapping from "../../examples/enterprise-import/enterpris
 import { previewNetworkTopologyFile, verifyNetworkTopologyOriginalForActivation } from "../src/browser/network-topology-import.js";
 import { compareCoreNetworkReimport } from "../src/browser/core-network-reimport-review.js";
 import { savedCoreReimportReportText, readSavedCoreReimportReport, matchSavedCoreReimportReport } from "../src/browser/core-network-reimport-saved-report.js";
-import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
+import { previewGraphmlFileReadOnly, verifyGraphmlOriginalForReviewedActivation } from "../src/browser/graphml-import-preview.js";
 import { inspectSharedDocumentFileReadOnly } from "../src/browser/structured-document-inspection-file.js";
 import { reviewSharedStaticHostOriginalReference } from "../src/browser/shared-ansible-original-reference.js";
 import { StructuredXmlInspectionPanel } from "./structured-xml-inspection-panel.mjs";
@@ -4628,21 +4628,44 @@ function App() {
     graphmlPreviewOpen ? e(GraphmlReadOnlyPanel, { inspectFile: previewGraphmlFileReadOnly,
       manualRoleOptions: GRAPHML_MANUAL_ROLE_OPTIONS,
       onClose: () => setGraphmlPreviewOpen(false),
-      onConfirm: async (sourcePreview, decisions) => {
+      onConfirm: async (sourcePreview, decisions, originalFile, isCurrentSelection) => {
+        // Keep the exact live workspace identity and transition at the start of
+        // confirmation. Compilation/layout may yield while other actions change
+        // the active workspace; a stale reviewed GraphML must never replace it.
+        const liveBefore = latestDrawioWorkspaceRef.current;
+        const workspaceIdentity = JSON.stringify(liveBefore);
+        const transitionIdentity = scenarioTransitionRef.current;
+        const currentWorkspace = () => scenarioTransitionRef.current === transitionIdentity
+          && JSON.stringify(latestDrawioWorkspaceRef.current) === workspaceIdentity;
+        const checkCurrent = () => {
+          if (!currentWorkspace()) {
+            const error = new Error("IC030_P1_WORKSPACE_CHANGED");
+            error.code = "IC030_P1_WORKSPACE_CHANGED"; throw error;
+          }
+          if (typeof isCurrentSelection !== "function" || !isCurrentSelection()) {
+            const error = new Error("IC030_P1_STALE");
+            error.code = "IC030_P1_STALE"; throw error;
+          }
+        };
+        checkCurrent();
         const mapped = mapReviewedGraphmlToBuilder(sourcePreview, decisions);
         if (mapped.status !== "READY_FOR_COMPILATION" || !mapped.source) {
           throw new Error(`GraphML manual mapping blocked: ${mapped.diagnostics.map((d) => d.code).join(", ")}`);
         }
-        // Preparation is local: the current workspace remains completely intact
-        // unless compilation AND layout have both succeeded.
         let candidate = await compileBuilderWorkspace(createBuilderWorkspace(mapped.source), compilerOptions);
+        checkCurrent();
         if (candidate.compile.status !== "valid") {
           throw new Error(`GraphML Builder compilation blocked: ${candidate.compile.diagnostics.map((d) => d.code).join(", ")}`);
         }
         const layout = await autoLayoutBuilder(candidate, new ElkLayoutBackend());
+        checkCurrent();
         if (!layout.ok) {
           throw new Error(`GraphML Builder layout blocked: ${layout.diagnostics.map((d) => d.code).join(", ")}`);
         }
+        // No original-file byte trust is carried across asynchronous work.
+        // Re-read and reparse the ORIGINAL selected file before any mutation.
+        await verifyGraphmlOriginalForReviewedActivation(originalFile, sourcePreview, isCurrentSelection);
+        checkCurrent();
         beginScenarioTransition();
         setImportedProbeAutoOpen(false);
         setDiagnostics([...layout.diagnostics,
