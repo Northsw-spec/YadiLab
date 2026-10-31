@@ -3051,19 +3051,20 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
+  const [selectedLinkSource, setSelectedLinkSource] = useState(null);
   const requestId = useRef(0);
   const selectedOriginal = useRef(null);
   const invalidated = () => {
     requestId.current++;
     selectedOriginal.current = null;
-    setPreview(null); setFailure(""); setBusy(false);
+    setPreview(null); setFailure(""); setBusy(false); setSelectedLinkSource(null);
     setDiagnostics([]);
   };
   const close = () => { invalidated(); onClose(); };
   const chooseFile = async (file) => {
     const current = ++requestId.current;
     selectedOriginal.current = file ?? null;
-    setFailure(""); setPreview(null); setDiagnostics([]);
+    setFailure(""); setPreview(null); setDiagnostics([]); setSelectedLinkSource(null);
     if (!file) { setBusy(false); return; }
     setBusy(true);
     try {
@@ -3076,6 +3077,42 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
         setFailure(error instanceof Error ? error.message : String(error));
         setDiagnostics([{ code: "NETWORK_IMPORT_SOURCE_BLOCKED", severity: "error", message: error instanceof Error ? error.message : String(error) }]);
       }
+    } finally { if (requestId.current === current) setBusy(false); }
+  };
+  // Operator decision is source-bound: the initial unresolved source SHA and
+  // dual declared-link counts MUST agree with the newly parsed original.
+  // No default source or heuristic merging is permitted.
+  const reviewLinkSource = async (choice) => {
+    if (busy || !preview?.linkSourceConflict || preview.linkSourceChoice ||
+        !["LINKS_SHEET", "INLINE_CONNECTED_TO"].includes(choice)) return;
+    const initial = preview;
+    const original = selectedOriginal.current;
+    if (!original || getCurrentWorkspaceIdentity() !== workspaceIdentity) {
+      setFailure("IC020_P1_STALE"); return;
+    }
+    const current = ++requestId.current;
+    setBusy(true); setFailure(""); setPreview(null); setDiagnostics([]);
+    try {
+      const next = await previewNetworkTopologyFile(original, { linkSourceChoice: choice });
+      if (requestId.current !== current || selectedOriginal.current !== original) return;
+      if (getCurrentWorkspaceIdentity() !== workspaceIdentity) {
+        setFailure("IC020_P1_STALE"); return;
+      }
+      if (next.sourceSha256 !== initial.sourceSha256 ||
+          next.sourceByteSize !== initial.sourceByteSize ||
+          JSON.stringify(next.linkSourceConflict) !== JSON.stringify(initial.linkSourceConflict) ||
+          next.linkSourceChoice !== choice) {
+        selectedOriginal.current = null;
+        setFailure("IC020_P2A_SOURCE_CHANGED");
+        return;
+      }
+      setSelectedLinkSource(choice);
+      setPreview(next);
+      setDiagnostics(next.diagnostics.map((d) => ({code:d.code,severity:d.severity,message:d.message})));
+    } catch {
+      if (requestId.current !== current) return;
+      selectedOriginal.current = null;
+      setFailure("IC020_P2A_SOURCE_CHANGED");
     } finally { if (requestId.current === current) setBusy(false); }
   };
   // A file picked directly from MAIN ACTIONS must enter the exact same
@@ -3096,6 +3133,11 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
     if (!preview?.ok || !preview.source || busy) return;
     const original = selectedOriginal.current;
     const activationEpoch = requestId.current;
+    if (preview.linkSourceConflict && (!preview.linkSourceChoice ||
+        preview.linkSourceChoice !== selectedLinkSource)) {
+      setFailure("IC020_P2A_REVIEW_REQUIRED");
+      return;
+    }
     const isCurrent = () => Boolean(original) &&
       requestId.current === activationEpoch &&
       selectedOriginal.current === original &&
@@ -3157,6 +3199,23 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
       e("h3", null, "Preview – ", preview.filename),
       e("p", null, `Found tables: ${preview.sheets.join(", ") || "none"} · Devices: ${preview.devices} · Explicit links: ${preview.links}`),
       e("p", { "data-network-import-sha": "true", "data-network-import-byte-size": preview.sourceByteSize }, `Original SHA-256: ${preview.sourceSha256} · Bytes: ${preview.sourceByteSize}`),
+      preview.linkSourceConflict ? e("div", { "data-network-import-link-review": preview.linkSourceChoice ? "REVIEWED" : "REVIEW_REQUIRED" },
+        e("p", null, `Two competing declared link sources: Links table ${preview.linkSourceConflict.sheetDeclaredLinks} · Connected To ${preview.linkSourceConflict.inlineDeclaredLinks}. No source is automatically preferred or combined.`),
+        preview.linkSourceChoice
+          ? e("p", { "data-network-import-link-choice": preview.linkSourceChoice },
+              preview.linkSourceChoice === "LINKS_SHEET"
+                ? "Reviewed selection: ONLY Links table. Other declared connections excluded; still unverified."
+                : "Reviewed selection: ONLY Connected To column. Other declared connections excluded; still unverified.")
+          : e("div", { className: "network-import-actions" },
+              e("button", { type:"button", disabled:busy,
+                "data-network-import-link-source-sheet":"true",
+                onClick:() => reviewLinkSource("LINKS_SHEET") },
+                "Review: Use ONLY Links table"),
+              e("button", { type:"button", disabled:busy,
+                "data-network-import-link-source-inline":"true",
+                onClick:() => reviewLinkSource("INLINE_CONNECTED_TO") },
+                "Review: Use ONLY Connected To declarations"))
+      ) : null,
       e("p", { className: "helper-note" }, preview.links === 0 ? "No physical connections provided. Devices will be shown without invented links." : "Only explicitly declared links will appear in the topology."),
       preview.diagnostics.length ? e("ul", { className: "validation-list" }, ...preview.diagnostics.slice(0, 30).map((d, i) => e("li", { key: i }, `${d.severity.toUpperCase()}: ${d.code} – ${d.message}`))) : e("p", null, "No import diagnostics."),
       e("div", { className: "network-import-actions" },
