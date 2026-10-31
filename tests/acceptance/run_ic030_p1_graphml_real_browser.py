@@ -100,7 +100,8 @@ def case_fresh(browser,url):
         choose(page)
         require(page.evaluate("window.__ic030_original_reads")==1,
                 "Preview must first read one original GraphML file")
-        require(exported_source(page)==before,"Preview mutated active Builder")
+        require(page.locator(".app-frame").get_attribute("data-runtime-scenario-id")==before["scenarioId"],
+                "Preview unexpectedly changed the active scenario before consent")
         allow_modeled_edge(page)
         page.locator('[data-graphml-map-confirm]').click()
         expect(page.locator('[data-graphml-panel]')).to_have_count(0,timeout=45000)
@@ -140,9 +141,11 @@ def case_source_swap(browser,url):
                 "Same-length mutated original was not reread")
         require(page.locator('[data-graphml-panel]').count()==1,
                 "Source swapped but GraphML dialog closed as if accepted")
+        require(page.locator(".app-frame").get_attribute("data-runtime-scenario-id")==before["scenarioId"],
+                "Rejected original swap changed active scenario before dialog close")
+        close(page)
         require(exported_source(page)==before,
                 "Source swap mutated active Builder instead of failing closed")
-        close(page)
         checks(page,errors,outside)
         return {"case":"same_length_original_substitution_blocked","status":"PASS",
                 "sameSizeSourceSwap":True,"builderUnchanged":True}
@@ -165,9 +168,9 @@ def case_competing_workspace(browser,url):
                 "Changed workspace was not detected after original file reread")
         require(page.locator('.app-frame').get_attribute("data-runtime-scenario-id")!="graphml_reviewed",
                 "Stale GraphML overwrote a more recent Builder")
+        close(page)
         require(exported_source(page)!=before,
                 "Competing user workspace action did not actually occur")
-        close(page)
         checks(page,errors,outside)
         return {"case":"concurrent_real_workspace_change_prevents_stale_graphml_commit",
                 "status":"PASS","staleGraphRejected":True}
