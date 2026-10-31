@@ -34,7 +34,7 @@ import guidedLinuxSsh from "../../curriculum/builtin/wave1/linux-ssh.json";
 import defaultEnterpriseMapping from "../../examples/enterprise-import/enterprise-import-template.mapping.json";
 import { previewNetworkTopologyFile } from "../src/browser/network-topology-import.js";
 import { previewGraphmlFileReadOnly } from "../src/browser/graphml-import-preview.js";
-import { inspectStructuredXmlFileReadOnly } from "../src/browser/structured-xml-inspection-file.js";
+import { inspectSharedDocumentFileReadOnly } from "../src/browser/structured-document-inspection-file.js";
 import { StructuredXmlInspectionPanel } from "./structured-xml-inspection-panel.mjs";
 import { mapReviewedGraphmlToBuilder, GRAPHML_MANUAL_ROLE_OPTIONS } from "../../enterprise-import/src/graphml-review-mapping.js";
 import { GraphmlReadOnlyPanel } from "./graphml-preview-panel.mjs";
@@ -3199,7 +3199,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructured
         workspace.mode === "runtime" ? e("button", { type: "button", onClick: clearAutosave, disabled: !workspace }, "Rensa autosparning") : null,
       ),
       e(WorkspaceMenu, { label: "Import / Export" },
-        e("button", { type: "button", "data-ic010-p2-open": "true", onClick: onInspectStructuredXml }, "Inspect structured XML (shared read-only)"),
+        e("button", { type: "button", "data-ic010-p2-open": "true", onClick: onInspectStructuredXml }, "Inspect structured documents (XML + static Ansible, read-only)"),
         e("button", { type: "button", "data-import-network-action": "true", onClick: openNetworkPicker }, "Import Network from Excel / CSV"),
         e("button", { type: "button", "data-inspect-graphml": "PREVIEW_ONLY", onClick: onInspectGraphml }, "Inspect GraphML (read-only preview)"),
         e("button", { type: "button", "data-inspect-nmap": "EVIDENCE_ONLY", onClick: onInspectNmap }, "Inspect Nmap XML (observations only)"),
@@ -4371,7 +4371,7 @@ function App() {
       onClose: () => setNmapObservationOpen(false),
     }) : null,
     structuredXmlInspectionOpen ? e(StructuredXmlInspectionPanel, {
-      inspectFile: inspectStructuredXmlFileReadOnly,
+      inspectFile: inspectSharedDocumentFileReadOnly,
       workspaceIdentity: workspace,
       getCurrentWorkspaceIdentity: () => latestDrawioWorkspaceRef.current,
       onClose: () => setStructuredXmlInspectionOpen(false),
