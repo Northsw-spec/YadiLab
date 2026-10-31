@@ -79,7 +79,7 @@ def case_positive(browser,url):
     pick(page,"unmapped.json",JSON_SOURCE)
     accepted(page,"unmapped.json",JSON_SOURCE)
     page.locator('[data-network-import-activate]').click()
-    expect(page.locator('[data-network-import-panel]').to_have_count(0,timeout=45000)
+    expect(page.locator('[data-network-import-panel]')).to_have_count(0,timeout=45000)
     doc=exported_source(page)
     require(set(x['id'] for x in doc['resources'])=={"rtr01","sw01","win01"},
       "Extra unknown source columns fabricated assets")
