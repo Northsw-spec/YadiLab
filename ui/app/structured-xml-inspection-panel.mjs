@@ -134,6 +134,10 @@ export function StructuredXmlInspectionPanel({
       e("label", { className: "file-button" }, "Choose local XML-based file",
         e("input", { type: "file", accept: ".graphml,.drawio,.nessus,.xml",
           "data-ic010-p2-file": "true", hidden: true,
+          // Canceling the native picker is also a consent reset, including when
+          // the browser emits only cancel and not change.
+          onClick: () => reset(),
+          onCancel: () => reset(),
           onChange: (event) => {
             const file = event.currentTarget.files?.[0] ?? null;
             event.currentTarget.value = "";
