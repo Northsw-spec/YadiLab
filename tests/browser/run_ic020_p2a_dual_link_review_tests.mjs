@@ -105,9 +105,14 @@ for(const [label,review] of [["Links",sheet],["ConnectedTo",inline]]){
  yes(model.sources.some(x=>x.id==="lin01"&&x.os==="linux"),"Real Linux source was declared, not inferred");
  for(const os of ["windows","linux"]){
    const sourceDevice=model.sources.find(x=>x.os===os);
-   const probe=model.probes.find(x=>x.probeId===os+".ping");
-   const dest=model.destinations.find(x=>x.id==="rtr01");
-   yes(Boolean(sourceDevice&&probe&&dest),"Only explicit modeled probe sources/destinations");
+   yes(Boolean(sourceDevice),"Source is an explicitly OS-declared endpoint");
+   // Probe definitions and destinations are source-dependent: refresh both
+   // from the actual Engine model for THIS selected Windows/Linux endpoint.
+   const selected=buildRuntimeActiveProbeModel(runtime.workspace,sourceDevice.id);
+   const probe=selected.probes.find(x=>x.probeId===os+".ping");
+   const dest=selected.destinations.find(x=>x.id==="rtr01") ??
+     selected.destinations.find(x=>x.id!==sourceDevice.id);
+   yes(Boolean(probe&&dest),"Only actual selectable modeled probes/destinations");
    const before=JSON.stringify(runtime.workspace.engineState);
    const result=runRuntimeActiveProbe(runtime.workspace,{
      sourceId:sourceDevice.id,probeId:probe.probeId,destinationId:dest.id,
