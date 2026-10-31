@@ -48,6 +48,7 @@ jobs:
           npm run test:ic020-p2c5-truth
           npm run test:ic020-p2c6-exit
           npm run test:ic030-p1-graphml-freshness
+          npm run test:ic030-p2a-drawio-candidate
           npm run test:dev11-ui
           npm run test:ospf-p2p-dd
           npm run test:ospf-p2p-exchange
