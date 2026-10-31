@@ -174,13 +174,16 @@ ok(empty.includes('data-ic010-p2-panel="READ_ONLY"'),"Old P2 modal DOM selector 
 ok(empty.includes('accept=".graphml,.drawio,.nessus,.xml,.yml,.yaml,.ini,.docx,.odt"'),
   "All eight producer subsets retained");
 for(const needle of [
-  "IC010_P3D_RESULT_INVALID",
   "validateSharedSourceReviewResult(next)",
   "sharedReviewLifecycle({",
+  "P3C|P3D)_[A-Z0-9_]+$",
 ]){
   ok(fs.readFileSync("ui/app/structured-xml-inspection-panel.mjs","utf8").includes(needle),
      "Shared panel actually enforces P3d source guard: "+needle);
 }
+ok(fs.readFileSync("ui/app/shared-source-review-contract.mjs","utf8")
+     .includes("IC010_P3D_RESULT_INVALID"),
+  "P3d contract module exports fixed safe rejection code");
 eq(builtinEnterpriseImportAdapters.map(x=>x.id),
   ["builtin.json","builtin.csv","builtin.tsv","builtin.xlsx","builtin.ods"],
   "Active enterprise adapter contract unchanged");
