@@ -34,3 +34,33 @@ export async function previewGraphmlFileReadOnly(file: GraphmlReadableFile): Pro
   }
   return { filename: file.name, preview: await previewGraphmlReadOnly(bytes) };
 }
+
+/**
+ * IC-030 P1 activation barrier. The same immutable-looking File handle is
+ * actually re-read; an original may change between preview and confirmation.
+ * Reparse and compare ALL structural fields (including source locators and
+ * directed edges), not just the filename/declared byte count.
+ */
+export async function verifyGraphmlOriginalForReviewedActivation(
+  original: GraphmlReadableFile,
+  expected: GraphmlReadOnlyPreview,
+  isCurrent: () => boolean,
+): Promise<void> {
+  if (!isCurrent()) {
+    throw new EnterpriseImportError("IC030_P1_STALE", "The reviewed GraphML selection is no longer current.");
+  }
+  if (!expected || expected.profileId !== "graphml.structural.v1" ||
+      expected.status !== "REVIEW_REQUIRED" || expected.canActivate !== false ||
+      !/^[0-9a-f]{64}$/.test(expected.sourceSha256)) {
+    throw new EnterpriseImportError("IC030_P1_SOURCE_CHANGED", "The reviewed GraphML source identity is invalid.");
+  }
+  // The existing bounded preview bridge validates extension, declared size,
+  // actual bytes and the safe no-DTD GraphML grammar on every fresh read.
+  const current = await previewGraphmlFileReadOnly(original);
+  if (!isCurrent()) {
+    throw new EnterpriseImportError("IC030_P1_STALE", "The reviewed GraphML selection changed during revalidation.");
+  }
+  if (JSON.stringify(current.preview) !== JSON.stringify(expected)) {
+    throw new EnterpriseImportError("IC030_P1_SOURCE_CHANGED", "Original GraphML bytes or structural evidence changed after review.");
+  }
+}
