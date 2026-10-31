@@ -31,6 +31,7 @@ jobs:
         run: |
           npm run test:network-topology-import
           npm run test:imported-probes
+          npm run test:ic000-capabilities
           npm run test:dev11-ui
           npm run test:ospf-p2p-dd
           npm run test:ospf-p2p-exchange
