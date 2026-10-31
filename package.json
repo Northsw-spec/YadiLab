@@ -149,7 +149,8 @@
     "test:ic020-p2c1-sidecar-replay": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic020_p2c1_saved_report_replay_tests.mjs",
     "test:ic020-p2c2-multisheet": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic020_p2c2_multisheet_tests.mjs",
     "test:ic020-p2c3-unmapped": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic020_p2c3_unmapped_inventory_tests.mjs",
-    "test:release-identity": "node tests/browser/run_release_identity_tests.mjs"
+    "test:release-identity": "node tests/browser/run_release_identity_tests.mjs",
+    "test:ic020-p2c4-matrix": "node tests/enterprise-import/run_ic020_p2c4_matrix_audit_tests.mjs"
   },
   "dependencies": {
     "@xyflow/react": "12.11.6",
