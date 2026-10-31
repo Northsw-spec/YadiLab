@@ -122,6 +122,7 @@ jobs:
           /tmp/yadilab-release-dom-venv/bin/python tests/acceptance/run_ic020_p2c2_multisheet_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-release-dom-evidence
           /tmp/yadilab-release-dom-venv/bin/python tests/acceptance/run_ic020_p2c3_unmapped_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-release-dom-evidence
           /tmp/yadilab-release-dom-venv/bin/python tests/acceptance/run_ic020_p2c5_truth_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-release-dom-evidence
       - name: Preserve mounted release identity evidence
