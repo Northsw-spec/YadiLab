@@ -1,0 +1,162 @@
+import React, { useEffect, useRef, useState } from "react";
+const e = React.createElement;
+
+/** Aggregate-only, already validated producer metadata; no source content. */
+export function StructuredXmlInspectionDetails({ result }) {
+  if (!result) return e("p", { "data-ic010-p2-empty": "true" },
+    "Choose a local XML-based source. Explicit consent is required before inspection.");
+  if (result.status === "BLOCKED") return e("section", {
+    "data-ic010-p2-result": "BLOCKED", role: "alert", className: "helper-status blocked",
+  }, "Inspection blocked: ", result.code,
+    e("p", null, "No file data was imported and no network state was changed."));
+  const counts = result.summary.kind === "GRAPH_STRUCTURE"
+    ? "Nodes: " + result.summary.nodes + " · Graph edges: " + result.summary.graphEdges
+    : result.summary.kind === "NMAP_OBSERVATIONS"
+    ? "Reported hosts: " + result.summary.observedHosts + " · Scan-time ports: " + result.summary.reportedPorts
+    : result.summary.kind === "NESSUS_REPORT"
+    ? "Report hosts: " + result.summary.reportedHosts + " · Findings: " + result.summary.reportedFindings
+    : "Pages: " + result.summary.pages + " · Drawn vertices: " + result.summary.vertices +
+      " · Drawn edges: " + result.summary.drawnEdges;
+  return e("section", {
+    className: "network-import-preview",
+    "data-ic010-p2-result": result.status,
+    "data-ic010-p2-profile": result.profileId,
+  },
+    e("h3", null, "Validated source profile"),
+    e("p", { "data-ic010-p2-status": result.status }, "Status: " + result.status),
+    e("p", { "data-ic010-p2-track": result.semanticTrack }, "Source classification: " + result.semanticTrack),
+    e("p", { "data-ic010-p2-profile-label": "true" }, "Profile: " + result.profileId),
+    e("p", { "data-ic010-p2-sha": "true" }, "Original SHA-256: " + result.sourceSha256),
+    e("p", { "data-ic010-p2-source-locator": result.documentLocator.kind },
+      "Original locator: source-document · SHA-256 bound"),
+    e("p", { "data-ic010-p2-counts": result.summary.kind }, counts),
+    e("p", { "data-ic010-p2-activation": "BLOCKED" },
+      "Read-only inspection. No Builder or Runtime change, no modeled or live probe. ",
+      "Graph edges are not verified cables; Nmap/Nessus findings are historical observations, ",
+      "not current Engine PASS or proven network state. Use a separately reviewed format-specific workflow when appropriate."),
+  );
+}
+
+/**
+ * No onConfirm/onActivate, no Builder setter, no Engine access and no remote IO.
+ * File changes, consent withdrawal, close and workspace changes invalidate
+ * pending reads and all previously displayed source metadata.
+ */
+export function StructuredXmlInspectionPanel({
+  inspectFile, onClose, workspaceIdentity, getCurrentWorkspaceIdentity,
+}) {
+  const [selection, setSelection] = useState(null);
+  const [consent, setConsent] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const epoch = useRef(0);
+  const selectedFile = useRef(null);
+  const consentNow = useRef(false);
+  const dialog = useRef(null);
+
+  const reset = (file = null) => {
+    epoch.current++;
+    selectedFile.current = file;
+    consentNow.current = false;
+    setSelection(file === null ? null : "PENDING");
+    setConsent(false);
+    setResult(null);
+    setError("");
+    setBusy(false);
+  };
+  const close = () => { reset(); onClose(); };
+  useEffect(() => {
+    dialog.current?.focus();
+    return () => { epoch.current++; selectedFile.current = null; consentNow.current = false; };
+  }, []);
+  useEffect(() => { reset(); }, [workspaceIdentity]);
+  useEffect(() => {
+    const onKey = (event) => { if (event.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const changeConsent = (value) => {
+    epoch.current++;
+    consentNow.current = value;
+    setConsent(value);
+    setResult(null);
+    setError("");
+    setBusy(false);
+  };
+
+  const inspect = async () => {
+    const file = selectedFile.current;
+    if (!file || !consentNow.current || busy ||
+        getCurrentWorkspaceIdentity() !== workspaceIdentity) return;
+    const request = ++epoch.current;
+    setBusy(true);
+    setResult(null);
+    setError("");
+    const stillCurrent = () => epoch.current === request &&
+      selectedFile.current === file && consentNow.current &&
+      getCurrentWorkspaceIdentity() === workspaceIdentity;
+    try {
+      const next = await inspectFile(file);
+      if (!stillCurrent()) return;
+      if (!next || next.canActivate !== false || next.modelMutated !== false ||
+          next.engineVerified !== false || next.physicalTopologyVerified !== false ||
+          !["BLOCKED", "EVIDENCE_ONLY", "PREVIEW_ONLY", "REVIEW_REQUIRED"].includes(next.status)) {
+        setError("IC010_XML_INSPECTION_INVALID");
+        return;
+      }
+      setResult(next);
+    } catch (cause) {
+      if (stillCurrent()) {
+        setError(typeof cause?.code === "string" && /^IC010_XML_[A-Z0-9_]+$/.test(cause.code)
+          ? cause.code : "IC010_XML_INSPECTION_BLOCKED");
+      }
+    } finally {
+      if (stillCurrent()) setBusy(false);
+    }
+  };
+
+  return e("div", { className: "network-import-overlay", "data-ic010-p2-overlay": "true" },
+    e("section", {
+      className: "network-import-panel", role: "dialog", "aria-modal": "true",
+      "aria-label": "Shared XML source inspection (read-only)",
+      ref: dialog, tabIndex: -1, "data-ic010-p2-panel": "READ_ONLY",
+    },
+      e("div", { className: "network-import-heading" },
+        e("div", null, e("h2", null, "Inspect structured XML — read-only"),
+          e("p", null, "Offline local file inspection. Verified profile, original-source hash and counts only.")),
+        e("button", { type: "button", onClick: close,
+          "aria-label": "Close shared XML inspection", "data-ic010-p2-close-top": "true" }, "Close")),
+      e("p", { className: "helper-note" },
+        "Supported subsets: GraphML (.graphml), diagrams.net (.drawio), Nmap XML and Nessus v2 (.nessus/.xml). ",
+        "Unrecognized XML is blocked. Other document formats still use their separate entries."),
+      e("label", { className: "file-button" }, "Choose local XML-based file",
+        e("input", { type: "file", accept: ".graphml,.drawio,.nessus,.xml",
+          "data-ic010-p2-file": "true", hidden: true,
+          onChange: (event) => {
+            const file = event.currentTarget.files?.[0] ?? null;
+            event.currentTarget.value = "";
+            reset(file);
+          },
+        })),
+      selection ? e("p", { "data-ic010-p2-selected": "true" },
+        "Local file selected. No parsing performed yet.") : null,
+      e("label", null,
+        e("input", { type: "checkbox", checked: consent, disabled: !selection,
+          "data-ic010-p2-consent": "true",
+          onChange: (event) => changeConsent(event.currentTarget.checked),
+        }), " I authorize local, offline, read-only inspection of this selected file."),
+      e("div", { className: "network-import-actions" },
+        e("button", { type: "button", disabled: !selection || !consent || busy,
+          "data-ic010-p2-inspect": "true", onClick: () => { void inspect(); },
+        }, busy ? "Inspecting…" : "Inspect selected XML (read-only)"),
+        e("button", { type: "button", "data-ic010-p2-close": "true",
+          onClick: close }, "Close without changes")),
+      error ? e("p", { role: "alert", className: "helper-status blocked",
+        "data-ic010-p2-error": "BLOCKED" }, error) : null,
+      e(StructuredXmlInspectionDetails, { result }),
+      e("p", { "data-ic010-p2-truth-boundary": "true" },
+        "This panel cannot import nodes, create links, run probes, verify identities or change the active scenario."),
+    ));
+}
