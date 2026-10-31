@@ -30,9 +30,42 @@ export function validateNetworkWorkbook(document: ImportDocument): readonly Impo
   if (nodeNames.length !== new Set(nodeNames).size) diagnostics.push({ code: "WORKBOOK_DUPLICATE_NODE_ID", severity: "error", message: "Nodes.nodeId values must be unique.", table: "Nodes" });
   if (rows(tables, "Nodes").length === 0) diagnostics.push({ code: "WORKBOOK_NO_NODES", severity: "error", message: "At least one network node is required.", table: "Nodes" });
   const nodeIds = new Set(rows(tables, "Nodes").map((record) => text(record, "nodeId")).filter((id): id is string => Boolean(id)));
-  for (const record of rows(tables, "Interfaces")) { const nodeId = text(record, "nodeId"); const id = text(record, "interfaceId") ?? text(record, "name"); if (!nodeId || !nodeIds.has(nodeId)) diagnostics.push(diagnostic("WORKBOOK_INTERFACE_NODE_UNKNOWN", `Interface references unknown node '${nodeId ?? ""}'.`, "Interfaces", record.recordIndex, "nodeId")); if (!id || !ID.test(id)) diagnostics.push(diagnostic("WORKBOOK_INTERFACE_ID_INVALID", "Interfaces.interfaceId must be a stable canonical ID.", "Interfaces", record.recordIndex, "interfaceId")); const mtu = integer(record, "MTU"); if (value(record, "MTU") !== undefined && mtu === undefined) diagnostics.push(diagnostic("WORKBOOK_MTU_INVALID", "Interfaces.MTU must be an integer.", "Interfaces", record.recordIndex, "MTU")); }
+  // A declared port on a link is a topology assertion: require that exact
+  // interface on the specific endpoint node. Never guess it from IP, subnet,
+  // gateway, switch role or link order.
+  const interfacesByNode = new Map<string, Set<string>>();
+  for (const record of rows(tables, "Interfaces")) {
+    const nodeId = text(record, "nodeId");
+    const id = text(record, "interfaceId") ?? text(record, "name");
+    if (!nodeId || !nodeIds.has(nodeId)) diagnostics.push(diagnostic("WORKBOOK_INTERFACE_NODE_UNKNOWN", `Interface references unknown node '${nodeId ?? ""}'.`, "Interfaces", record.recordIndex, "nodeId"));
+    if (!id || !ID.test(id)) diagnostics.push(diagnostic("WORKBOOK_INTERFACE_ID_INVALID", "Interfaces.interfaceId must be a stable canonical ID.", "Interfaces", record.recordIndex, "interfaceId"));
+    if (nodeId && id && nodeIds.has(nodeId) && ID.test(id)) {
+      const declared = interfacesByNode.get(nodeId) ?? new Set<string>();
+      if (declared.has(id)) diagnostics.push(diagnostic("WORKBOOK_DUPLICATE_INTERFACE_ID",
+        "A device declares the same interfaceId more than once; links cannot resolve the duplicate.",
+        "Interfaces", record.recordIndex, "interfaceId"));
+      declared.add(id);
+      interfacesByNode.set(nodeId, declared);
+    }
+    const mtu = integer(record, "MTU");
+    if (value(record, "MTU") !== undefined && mtu === undefined) diagnostics.push(diagnostic("WORKBOOK_MTU_INVALID", "Interfaces.MTU must be an integer.", "Interfaces", record.recordIndex, "MTU"));
+  }
   for (const record of rows(tables, "Zones")) { const id = text(record, "zoneId"); const kind = text(record, "kind"); if (!id || !ID.test(id)) diagnostics.push(diagnostic("WORKBOOK_ZONE_ID_INVALID", "Zones.zoneId must be a stable canonical ID.", "Zones", record.recordIndex, "zoneId")); if (kind && !KINDS.has(kind)) diagnostics.push(diagnostic("WORKBOOK_ZONE_KIND_INVALID", `Unknown zone kind '${kind}'.`, "Zones", record.recordIndex, "kind")); }
-  for (const record of rows(tables, "Links")) { const id = text(record, "linkId"); const a = text(record, "nodeA"); const b = text(record, "nodeB"); if (!id || !ID.test(id)) diagnostics.push(diagnostic("WORKBOOK_LINK_ID_INVALID", "Links.linkId must be a stable canonical ID.", "Links", record.recordIndex, "linkId")); if (!a || !nodeIds.has(a)) diagnostics.push(diagnostic("WORKBOOK_LINK_ENDPOINT_UNKNOWN", `Links.nodeA references unknown node '${a ?? ""}'.`, "Links", record.recordIndex, "nodeA")); if (!b || !nodeIds.has(b)) diagnostics.push(diagnostic("WORKBOOK_LINK_ENDPOINT_UNKNOWN", `Links.nodeB references unknown node '${b ?? ""}'.`, "Links", record.recordIndex, "nodeB")); }
+  for (const record of rows(tables, "Links")) {
+    const id = text(record, "linkId"), a = text(record, "nodeA"), b = text(record, "nodeB");
+    const portA = text(record, "interfaceA"), portB = text(record, "interfaceB");
+    if (!id || !ID.test(id)) diagnostics.push(diagnostic("WORKBOOK_LINK_ID_INVALID", "Links.linkId must be a stable canonical ID.", "Links", record.recordIndex, "linkId"));
+    if (!a || !nodeIds.has(a)) diagnostics.push(diagnostic("WORKBOOK_LINK_ENDPOINT_UNKNOWN", `Links.nodeA references unknown node '${a ?? ""}'.`, "Links", record.recordIndex, "nodeA"));
+    if (!b || !nodeIds.has(b)) diagnostics.push(diagnostic("WORKBOOK_LINK_ENDPOINT_UNKNOWN", `Links.nodeB references unknown node '${b ?? ""}'.`, "Links", record.recordIndex, "nodeB"));
+    if (a && portA && nodeIds.has(a) && !interfacesByNode.get(a)?.has(portA))
+      diagnostics.push(diagnostic("WORKBOOK_LINK_PORT_UNKNOWN",
+        "Links.interfaceA references a port not declared on its specified endpoint node.",
+        "Links", record.recordIndex, "interfaceA"));
+    if (b && portB && nodeIds.has(b) && !interfacesByNode.get(b)?.has(portB))
+      diagnostics.push(diagnostic("WORKBOOK_LINK_PORT_UNKNOWN",
+        "Links.interfaceB references a port not declared on its specified endpoint node.",
+        "Links", record.recordIndex, "interfaceB"));
+  }
   const linkNames = rows(tables, "Links").map((record) => text(record, "linkId")).filter((id): id is string => Boolean(id));
   if (linkNames.length !== new Set(linkNames).size) diagnostics.push({ code: "WORKBOOK_DUPLICATE_LINK_ID", severity: "error", message: "Links.linkId values must be unique.", table: "Links" });
   return diagnostics;
