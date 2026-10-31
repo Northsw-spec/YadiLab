@@ -19,9 +19,14 @@ export function StructuredXmlInspectionDetails({ result }) {
     : result.summary.kind === "DRAWIO_DIAGRAM"
     ? "Pages: " + result.summary.pages + " · Drawn vertices: " + result.summary.vertices +
       " · Drawn edges: " + result.summary.drawnEdges
-    : "Documented hosts: " + result.summary.documentedHosts +
+    : result.summary.kind === "ANSIBLE_YAML_INVENTORY" || result.summary.kind === "ANSIBLE_INI_INVENTORY"
+    ? "Documented hosts: " + result.summary.documentedHosts +
       " · Groups: " + result.summary.documentedGroups +
-      " · Source-bound host references: " + result.summary.originalHostLocatorCount;
+      " · Source-bound host references: " + result.summary.originalHostLocatorCount
+    : "Tables: " + result.summary.declaredTables +
+      " · Rows: " + result.summary.declaredRows +
+      " · Structural cells: " + result.summary.structuralCells +
+      " · Source-bound cell references: " + result.summary.sourceBoundCellLocators;
   return e("section", {
     className: "network-import-preview",
     "data-ic010-p2-result": result.status,
@@ -38,8 +43,9 @@ export function StructuredXmlInspectionDetails({ result }) {
     e("p", { "data-ic010-p2-activation": "BLOCKED" },
       "Read-only inspection. No Builder or Runtime change, no modeled or live probe. ",
       "Graph edges are not verified cables; Nmap/Nessus findings are historical observations; " +
-      "Ansible inventory hosts and groups are only documented configuration, ",
-      "not current Engine PASS or proven network state. Use a separately reviewed format-specific workflow when appropriate."),
+      "Ansible host/group records and Office document cells are only documented structure, ",
+      "not verified network devices, host identities, Engine PASS or proven network state. ",
+      "For individual Office cells, use the separate source-bound and consented format-specific review."),
   );
 }
 
@@ -116,7 +122,7 @@ export function StructuredXmlInspectionPanel({
       setResult(next);
     } catch (cause) {
       if (stillCurrent()) {
-        setError(typeof cause?.code === "string" && /^IC010_(?:XML|STATIC|P3)_[A-Z0-9_]+$/.test(cause.code)
+        setError(typeof cause?.code === "string" && /^IC010_(?:XML|STATIC|P3|P3C)_[A-Z0-9_]+$/.test(cause.code)
           ? cause.code : "IC010_XML_INSPECTION_BLOCKED");
       }
     } finally {
@@ -136,10 +142,10 @@ export function StructuredXmlInspectionPanel({
         e("button", { type: "button", onClick: close,
           "aria-label": "Close shared document inspection", "data-ic010-p2-close-top": "true" }, "Close")),
       e("p", { className: "helper-note" },
-        "Supported subsets: GraphML (.graphml), draw.io (.drawio), Nmap XML, Nessus v2 (.nessus/.xml), and static Ansible inventories (.yml/.yaml/.ini). ",
-        "Only strictly validated source profiles pass. Other document formats use separate workflows."),
+        "Supported subsets: GraphML (.graphml), draw.io (.drawio), Nmap XML, Nessus v2 (.nessus/.xml), static Ansible inventories (.yml/.yaml/.ini), and structural DOCX/ODT tables (.docx/.odt). ",
+        "Only strictly validated source profiles pass. Office cell contents are never displayed here; per-cell review remains separate."),
       e("label", { className: "file-button" }, "Choose supported local document",
-        e("input", { type: "file", accept: ".graphml,.drawio,.nessus,.xml,.yml,.yaml,.ini",
+        e("input", { type: "file", accept: ".graphml,.drawio,.nessus,.xml,.yml,.yaml,.ini,.docx,.odt",
           "data-ic010-p2-file": "true", hidden: true,
           // Canceling the native picker is also a consent reset, including when
           // the browser emits only cancel and not change.

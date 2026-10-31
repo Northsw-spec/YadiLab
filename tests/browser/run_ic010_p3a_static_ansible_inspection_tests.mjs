@@ -132,7 +132,7 @@ const panel=renderToStaticMarkup(React.createElement(StructuredXmlInspectionPane
   inspectFile:inspectSharedDocumentFileReadOnly,onClose(){},workspaceIdentity:{},
   getCurrentWorkspaceIdentity(){return {};}
 }));
-for(const needle of ['accept=".graphml,.drawio,.nessus,.xml,.yml,.yaml,.ini"',
+for(const needle of ['accept=".graphml,.drawio,.nessus,.xml,.yml,.yaml,.ini,.docx,.odt"',
   'data-ic010-p2-file="true"','data-ic010-p2-consent="true"',
   'data-ic010-p2-inspect="true"','data-ic010-p2-close="true"',
   "static Ansible inventories"]){
