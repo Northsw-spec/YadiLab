@@ -32,7 +32,7 @@ function pick(record: ImportRecord, candidates: readonly string[], table: string
   const wanted = new Set(candidates.map(key));
   const fields = Object.keys(record.fields).filter((h) => wanted.has(key(h)));
   if (fields.length > 1) {
-    diagnostics.push({ code: "NETWORK_IMPORT_FIELD_AMBIGUOUS", severity: "error", message: `Multiple candidate columns for '${candidates[0]}': ${fields.join(", ")}. Resolve duplicate columns before import.`, table, row: record.recordIndex });
+    diagnostics.push({ code: "NETWORK_IMPORT_FIELD_AMBIGUOUS", severity: "error", message: "Multiple candidate headers declare the same mapped field. Resolve the ambiguity before import; original column names are not shown.", table, row: record.recordIndex });
     return undefined;
   }
   return fields.length ? record.fields[fields[0]!] : undefined;
@@ -60,7 +60,7 @@ function roleType(value: string | undefined, table: string, row: number, diagnos
   const normalized = key(value);
   if (types[normalized]) return types[normalized];
   if (/^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/.test(value)) return value;
-  diagnostics.push({ code: "NETWORK_IMPORT_ROLE_UNKNOWN", severity: "warning", message: `Device type '${value}' is not mapped; rendered as generic resource.`, table, row });
+  diagnostics.push({ code: "NETWORK_IMPORT_ROLE_UNKNOWN", severity: "warning", message: "An unrecognized device role was not mapped; rendered as a generic resource. Original role text is not displayed.", table, row });
   return "resource.generic";
 }
 function canonicalRecord(index: number, table: string, values: Record<string, { value: string; source?: ImportCell | undefined }>): ImportRecord {
@@ -138,12 +138,30 @@ export function normalizeNetworkInventoryDocument(
     if (declaredGateway) nodeValues.gateway = { value: declaredGateway, source: fields.gateway };
     nodes.push(canonicalRecord(row.recordIndex, "Nodes", nodeValues));
     const cidr = stringCell(fields.cidr), ip = stringCell(fields.ip), prefix = stringCell(fields.prefix);
-    let address = ip, subnetPrefix = prefix;
-    if (ip?.includes("/")) { const match = /^(.*)\/(\d{1,2})$/.exec(ip); if (match) { address = match[1]; subnetPrefix = match[2]; } }
-    if (cidr) { const match = /^(.*)\/(\d{1,2})$/.exec(cidr); if (match) { address = match[1]; subnetPrefix = match[2]; } else address = cidr; }
+    // Independent source fields cannot establish competing IPv4/prefix truth.
+    // Previously CIDR silently overwrote a different IP Address or prefix.
+    const inline = ip ? /^(.*)\/(\d{1,2})$/.exec(ip) : null;
+    const cidrParts = cidr ? /^(.*)\/(\d{1,2})$/.exec(cidr) : null;
+    const ipHost = inline ? inline[1] : ip;
+    const cidrHost = cidrParts ? cidrParts[1] : cidr;
+    const presentPrefixes = [prefix, inline?.[2], cidrParts?.[2]]
+      .filter((value): value is string => value !== undefined);
+    const conflictingAddress = Boolean(ipHost && cidrHost && ipHost !== cidrHost);
+    const conflictingPrefix = presentPrefixes.length > 1 &&
+      presentPrefixes.some((value) => Number(value) !== Number(presentPrefixes[0]));
+    if (conflictingAddress || conflictingPrefix) {
+      diagnostics.push({
+        code: "NETWORK_IMPORT_ADDRESS_CONFLICT", severity: "error",
+        message: "Independent nonblank address or prefix declarations disagree. No value was automatically preferred or activated.",
+        table: inventory.tableId, row: row.recordIndex,
+      });
+      continue;
+    }
+    const address = cidrHost ?? ipHost;
+    const subnetPrefix = cidrParts?.[2] ?? inline?.[2] ?? prefix;
     if (address) {
       if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(address) || address.split(".").some((x) => Number(x) > 255) || (subnetPrefix !== undefined && !positiveInt(subnetPrefix))) {
-        diagnostics.push({ code: "NETWORK_IMPORT_IP_INVALID", severity: "error", message: `Invalid IPv4 address/prefix for ${id}: ${address}${subnetPrefix ? "/" + subnetPrefix : ""}.`, table: inventory.tableId, row: row.recordIndex });
+        diagnostics.push({ code: "NETWORK_IMPORT_IP_INVALID", severity: "error", message: "Invalid documented IPv4 address or prefix. Original address and device identity are not shown.", table: inventory.tableId, row: row.recordIndex });
       } else {
         const values: Record<string, { value: string; source?: ImportCell | undefined }> = {
           nodeId: { value: id, source: fields.id }, interfaceId: { value: "primary", source: fields.id }, name: { value: "primary", source: fields.id }, IPv4: { value: address, source: fields.ip ?? fields.cidr },
@@ -155,8 +173,8 @@ export function normalizeNetworkInventoryDocument(
     }
     const gateway = stringCell(fields.gateway);
     if (gateway) {
-      if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(gateway) || gateway.split(".").some((x) => Number(x) > 255)) diagnostics.push({ code: "NETWORK_IMPORT_GATEWAY_INVALID", severity: "error", message: `Invalid declared gateway '${gateway}' for ${id}.`, table: inventory.tableId, row: row.recordIndex });
-      else diagnostics.push({ code: "NETWORK_IMPORT_GATEWAY_NOT_LINK", severity: "warning", message: `Gateway '${gateway}' for ${id} is retained as a source note; no cable or route was inferred.`, table: inventory.tableId, row: row.recordIndex });
+      if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(gateway) || gateway.split(".").some((x) => Number(x) > 255)) diagnostics.push({ code: "NETWORK_IMPORT_GATEWAY_INVALID", severity: "error", message: "Invalid documented default gateway; original gateway and device identity are not shown.", table: inventory.tableId, row: row.recordIndex });
+      else diagnostics.push({ code: "NETWORK_IMPORT_GATEWAY_NOT_LINK", severity: "warning", message: "A declared gateway is retained only as a source note; no physical connection or modeled route is inferred.", table: inventory.tableId, row: row.recordIndex });
     }
     const target = stringCell(fields.target);
     if (target) inlineLinks.push(canonicalRecord(row.recordIndex, "Links", {
