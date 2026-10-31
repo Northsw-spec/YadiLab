@@ -108,7 +108,8 @@ await blocked(previewNetworkTopologyFile(binary("empty.csv",new Uint8Array())),"
 await blocked(previewNetworkTopologyFile({name:"fake.json",size:10,
  async arrayBuffer(){return new ArrayBuffer(16*1024*1024+1)}}),"IC020_P1_SOURCE_SIZE_INVALID");
 await blocked(previewNetworkTopologyFile(binary("wrong.xlsx",csv)),"IMPORT_WORKBOOK_ARCHIVE_INVALID");
-await blocked(previewNetworkTopologyFile(binary("bad.json",enc.encode("{"))),"IMPORT_INVALID_JSON");
+const invalidJsonBytes = enc.encode("{");
+await blocked(previewNetworkTopologyFile(binary("bad.json", invalidJsonBytes)), "IMPORT_INVALID_JSON");
 const scenario=enc.encode(JSON.stringify({formatId:"infrastructure-cyber-lab.scenario-source",
  scenarioId:"untrusted",schemaVersion:"0.1.0"}));
 const scenarioPreview=await previewNetworkTopologyFile(binary("scenario.json",scenario));
