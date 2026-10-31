@@ -62,8 +62,10 @@ for(const marker of ['role="dialog"','aria-modal="true"','data-ic010-p2-panel="R
   'data-ic010-p2-close="true"','data-ic010-p2-empty="true"']){
   yes(panelHtml.includes(marker),"Shared UI marker "+marker);
 }
-yes(/data-ic010-p2-consent="true"[^>]*disabled/.test(panelHtml),"Consent starts disabled");
-yes(/data-ic010-p2-inspect="true"[^>]*disabled/.test(panelHtml),"Inspection starts disabled");
+const consentTag=panelHtml.match(/<input[^>]*data-ic010-p2-consent="true"[^>]*>/)?.[0] ?? "";
+const inspectTag=panelHtml.match(/<button[^>]*data-ic010-p2-inspect="true"[^>]*>/)?.[0] ?? "";
+yes(consentTag.includes("disabled"),"Consent starts disabled");
+yes(inspectTag.includes("disabled"),"Inspection starts disabled");
 eq(/data-network-import-activate|data-active-probe-engine|data-graphml-map-confirm/.test(panelHtml),false,
   "No activation or probe controls in shared panel");
 const safeError=renderToStaticMarkup(React.createElement(StructuredXmlInspectionDetails,{
