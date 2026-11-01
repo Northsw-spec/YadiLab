@@ -298,9 +298,12 @@ def case_p2_reciprocal_peer(browser,url,ext,original):
         page.locator('[data-office-p1b-confirm="true"]').click()
         expect(page.locator('[data-office-p1b-error="BLOCKED"]')).to_contain_text(
             "IC040_P2_DUPLICATE_CONNECTION",timeout=45000)
+        # A rejected modal deliberately remains open and intercepts pointer
+        # events; dismiss it before opening the underlying export menu.
+        page.locator('[data-office-p1b-cancel]').click()
+        expect(page.locator('[data-office-p1b-panel]')).to_have_count(0,timeout=12000)
         require(exported_source(page)==before,
                 "Reciprocal document declaration silently created two parallel cables")
-        page.locator('[data-office-p1b-cancel]').click()
         clean(errors,external)
         return {"format":ext,"case":"reciprocal_peer_pair_blocked_without_phantom_cable","status":"PASS"}
     finally:page.close()
