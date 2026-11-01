@@ -105,7 +105,9 @@ export async function mapReviewedOfficeOriginalToConnections(
         return blocked(sha,"IC040_P2_LINK_ENDPOINT_UNKNOWN");
       }
       if(peer===from)return blocked(sha,"IC040_P2_SELF_CONNECTION");
-      const pair=from+"\u0000"+peer;
+      // P2 has no port identity. Reverse declarations of the same peer pair
+      // are not evidence of two distinct physical cables; reject the second.
+      const pair=[from,peer].sort().join("\u0000");
       if(selectedPairs.has(pair))return blocked(sha,"IC040_P2_DUPLICATE_CONNECTION");
       selectedPairs.add(pair);
       const id="office_link_"+(index+1);
