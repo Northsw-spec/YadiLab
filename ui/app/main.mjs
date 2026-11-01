@@ -71,6 +71,8 @@ import { reviewAnsibleIniOriginalFileAssociations } from "../src/browser/ansible
 import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
 import { previewDocxFileStructure, reviewDocxFileCell } from "../src/browser/docx-file-structural-preview.js";
 import { DocxTableStructurePanel } from "./docx-structure-panel.mjs";
+import { OfficeReviewedBuilderPanel } from "./office-reviewed-builder-panel.mjs";
+import { previewOfficeNodesFile, verifyOfficeCandidateFile } from "../src/browser/office-reviewed-nodes-file.js";
 import { previewOdtFileStructure, reviewOdtFileCell } from "../src/browser/odt-file-structural-preview.js";
 import { OdtStructurePanel } from "./odt-structure-panel.mjs";
 import { replaySavedDocxReportFiles } from "../src/browser/docx-report-replay-file.js";
@@ -3363,7 +3365,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   );
 }
 
-function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructuredXml, onInspectGraphml, onInspectNmap, onInspectNmapReplay, onInspectNessus, onInspectNessusReplay, onInspectDrawio, onReviewDrawioBuilder, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructuredXml, onInspectGraphml, onInspectNmap, onInspectNmapReplay, onInspectNessus, onInspectNessusReplay, onInspectDrawio, onReviewDrawioBuilder, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onReviewOfficeBuilder, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   const networkPickerRef = useRef(null);
   // Opening the native picker happens synchronously within the user's click,
@@ -3433,6 +3435,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructured
         e("button", { type: "button", "data-inspect-ansible-ini": "CONFIG_DOCUMENTED", onClick: onInspectAnsibleIni }, "Inspect Ansible INI (read-only inventory)"),
         e("button", { type: "button", "data-inspect-ansible-ini-replay": "CONFIG_DOCUMENTED", onClick: onInspectAnsibleIniReplay }, "Inspect saved Ansible INI references (read-only replay)"),
         e("button", { type: "button", "data-inspect-docx": "CONFIG_DOCUMENTED", onClick: onInspectDocx }, "Inspect Word DOCX (structure only)"),
+        e("button", { type: "button", "data-review-office-builder": "REVIEW_REQUIRED", onClick: onReviewOfficeBuilder }, "Review DOCX / ODT nodes into Builder"),
         e("button", { type: "button", "data-inspect-docx-replay": "CONFIG_DOCUMENTED", onClick: onInspectDocxReplay }, "Inspect saved DOCX references (read-only)"),
         e("button", { type: "button", "data-inspect-odt": "CONFIG_DOCUMENTED", onClick: onInspectOdt }, "Inspect OpenDocument ODT (structure only)"),
         e("button", { type: "button", "data-inspect-odt-replay": "CONFIG_DOCUMENTED", onClick: onInspectOdtReplay }, "Inspect saved ODT references (read-only)"),
@@ -3607,6 +3610,7 @@ function App() {
   const [ansibleIniOpen, setAnsibleIniOpen] = useState(false);
   const [ansibleIniReplayOpen, setAnsibleIniReplayOpen] = useState(false);
   const [docxStructureOpen, setDocxStructureOpen] = useState(false);
+  const [officeReviewedBuilderOpen, setOfficeReviewedBuilderOpen] = useState(false);
   const [docxReplayOpen, setDocxReplayOpen] = useState(false);
   const [odtReplayOpen, setOdtReplayOpen] = useState(false);
   const [odtStructureOpen, setOdtStructureOpen] = useState(false);
@@ -4167,7 +4171,7 @@ function App() {
     e("header", { className: "app-header" },
       e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version} · ${releaseIdentity.sourceCommit.slice(0,12)}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
       e(MainActions, { onInspectStructuredXml: () => setStructuredXmlInspectionOpen(true), onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectNmapReplay: () => setNmapReplayOpen(true), onInspectNessus: () => setNessusSeverityOpen(true), onInspectNessusReplay: () => setNessusReplayOpen(true),
-        onInspectDrawio: () => setDrawioStructureOpen(true), onReviewDrawioBuilder: () => setDrawioBuilderReviewOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectAnsibleIniReplay: () => setAnsibleIniReplayOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
+        onInspectDrawio: () => setDrawioStructureOpen(true), onReviewDrawioBuilder: () => setDrawioBuilderReviewOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectAnsibleIniReplay: () => setAnsibleIniReplayOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onReviewOfficeBuilder: () => setOfficeReviewedBuilderOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
     selectedGuidedLab ? e("section", { className: "curriculum-strip", "data-curriculum-wave": "guided_troubleshooting_wave1" },
@@ -4325,6 +4329,59 @@ function App() {
         return replaySavedDocxReportFiles(docxFile, reportFile, currentModel, acknowledged);
       },
       onClose: () => setDocxReplayOpen(false),
+    }) : null,
+    officeReviewedBuilderOpen ? e(OfficeReviewedBuilderPanel, {
+      inspectFile: previewOfficeNodesFile,
+      manualRoleOptions: GRAPHML_MANUAL_ROLE_OPTIONS,
+      onClose: () => setOfficeReviewedBuilderOpen(false),
+      onConfirm: async (expected, decision, originalFile, isCurrentSelection) => {
+        // Never let an awaited read/compiler/layout overwrite a newer Builder
+        // change, a scenario transition or a revoked original-cell consent.
+        const liveBefore = latestDrawioWorkspaceRef.current;
+        const workspaceIdentity = JSON.stringify(liveBefore);
+        const transitionIdentity = scenarioTransitionRef.current;
+        const blocked = code => { const error = new Error(code); error.code = code; throw error; };
+        const checkCurrent = () => {
+          if (scenarioTransitionRef.current !== transitionIdentity ||
+              JSON.stringify(latestDrawioWorkspaceRef.current) !== workspaceIdentity)
+            blocked("IC040_P1B_WORKSPACE_CHANGED");
+          if (typeof isCurrentSelection !== "function" || !isCurrentSelection())
+            blocked("IC040_P1B_STALE");
+        };
+        checkCurrent();
+        const mapped = await verifyOfficeCandidateFile(originalFile, expected, decision, isCurrentSelection);
+        checkCurrent();
+        // Exact P1a source-only node candidate, no links, interfaces or probes.
+        if (mapped.status !== "READY_FOR_COMPILATION" || !mapped.source ||
+            mapped.source.connections.length || mapped.source.tests.length ||
+            mapped.canActivate !== false || mapped.engineVerified !== false)
+          blocked("IC040_P1B_CANDIDATE_BLOCKED");
+        const compiled = await compileBuilderWorkspace(
+          createBuilderWorkspace(mapped.source), compilerOptions);
+        checkCurrent();
+        if (compiled.compile.status !== "valid") blocked("IC040_P1B_COMPILE_BLOCKED");
+        const layout = await autoLayoutBuilder(compiled, new ElkLayoutBackend());
+        checkCurrent();
+        if (!layout.ok) blocked("IC040_P1B_LAYOUT_BLOCKED");
+        // Final source read AFTER real compilation/layout. Never trust a
+        // previously saved byte copy or a filename/same-size-only comparison.
+        const refreshed = await verifyOfficeCandidateFile(
+          originalFile, expected, decision, isCurrentSelection);
+        checkCurrent();
+        if (JSON.stringify(refreshed.source) !== JSON.stringify(mapped.source) ||
+            JSON.stringify(refreshed.origins) !== JSON.stringify(mapped.origins) ||
+            refreshed.sourceSha256 !== mapped.sourceSha256)
+          blocked("IC040_P1B_SOURCE_CHANGED");
+        checkCurrent(); // no await between final live check and commit
+        beginScenarioTransition();
+        setImportedProbeAutoOpen(false);
+        setDiagnostics([...layout.diagnostics, {
+          severity: "warning", code: "IC040_P1B_MODELED_NODES_NOT_VERIFIED",
+          message: "Only independently consented original DOCX/ODT node-ID cells and operator roles entered Builder. No private unselected cells, physical cables, interfaces, IPs, real devices, reachability, Engine or Runtime PASS verified."
+        }]);
+        setWorkspace(layout.workspace);
+        setOfficeReviewedBuilderOpen(false);
+      },
     }) : null,
     docxStructureOpen ? e(DocxTableStructurePanel, {
       inspectFile: previewDocxFileStructure,
