@@ -427,7 +427,7 @@ function JourneyPacket({ mode, motionPath, duration, source, target }) {
     );
 }
 
-function SemanticJourneyEdge({ id, source, target, sourceHandle, targetHandle, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }) {
+function SemanticJourneyEdge({ id, source, target, sourceHandleId, targetHandleId, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }) {
   const [basePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   const journey = data?.journey;
   const journeyEndpoint = data?.journeyEndpoint;
@@ -482,8 +482,8 @@ function SemanticJourneyEdge({ id, source, target, sourceHandle, targetHandle, s
       "data-connection-source": source,
       "data-connection-target": target,
       // Actual ReactFlow handle IDs, not guessed from source document text.
-      "data-connection-source-port": sourceHandle?.startsWith("out:") ? sourceHandle.slice(4) : undefined,
-      "data-connection-target-port": targetHandle?.startsWith("in:") ? targetHandle.slice(3) : undefined,
+      "data-connection-source-port": sourceHandleId?.startsWith("out:") ? sourceHandleId.slice(4) : undefined,
+      "data-connection-target-port": targetHandleId?.startsWith("in:") ? targetHandleId.slice(3) : undefined,
       "data-link-enabled": visual.enabled ? "true" : "false",
     }),
     e("text", { x: labelX, y: labelY - 7, className: `semantic-edge-label tone-${visual.tone}`, textAnchor: "middle", "aria-hidden": "true" }, visual.accessibleLabel),
