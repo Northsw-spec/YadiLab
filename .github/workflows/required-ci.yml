@@ -1,4 +1,8 @@
 name: YadiLab required CI
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
   pull_request:
     branches: [main]
@@ -60,6 +64,7 @@ jobs:
           npm run test:ic030-p1-graphml-freshness
           npm run test:ic030-p2a-drawio-candidate
           node tests/ci/run_ubuntu_browser_mirror_contract_tests.mjs
+          node tests/ci/run_pr_concurrency_contract_tests.mjs
           npm run test:ic030-p2b-drawio-ui
           npm run test:simulation-clock
           npm run test:simulation-transitions
