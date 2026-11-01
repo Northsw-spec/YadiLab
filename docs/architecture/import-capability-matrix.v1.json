@@ -521,7 +521,7 @@
         "tests/acceptance/run_ic030_p1_graphml_real_browser.py"
       ],
       "ciCoverage": "REQUIRED_AND_POSTMERGE_SOURCE_PLUS_REAL_CHROMIUM_GATES_CHECK_EXACT_SHA",
-      "nextCheckpoint": "IC-030_P3_SCOPED_EXIT_GATE",
+      "nextCheckpoint": "IC-040_AFTER_VERIFIED_P3_RELEASE",
       "risk": "GraphML is a manually reviewed Builder candidate, not a verified topology. UI individually exposes only first 80 node roles and edge choices, leaves remaining nodes generic and remaining edges unselected; directed edges cannot be mapped to undirected connections. No automatic Runtime, modeled probe end-to-end, physical cable, reachability or native Parrot attested."
     },
     {
@@ -629,7 +629,7 @@
         "tests/acceptance/run_ic030_p2b_drawio_real_browser.py"
       ],
       "ciCoverage": "REQUIRED_AND_POSTMERGE_P1P6_AND_P2B_SOURCE_PLUS_REAL_CHROMIUM_CHECK_EXACT_SHA",
-      "nextCheckpoint": "IC-030_P3_SCOPED_EXIT_GATE",
+      "nextCheckpoint": "IC-040_AFTER_VERIFIED_P3_RELEASE",
       "risk": "Existing .xml/.drawio read-only metadata association and P4-P6 replay are separate from P2b's .drawio-only reviewed Builder candidate; P2b supports at most 20 deliberately selected vertex ordinals and 20 acknowledged drawn connections, not diagram source values/physical links. Candidate has no saved replay or automatic Runtime/Engine/probe truth; modeled probe E2E, real network and native Parrot NOT_ATTESTED."
     },
     {

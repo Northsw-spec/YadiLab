@@ -42,7 +42,7 @@ assert.ok(graphml.ciCoverage.startsWith("REQUIRED_AND_POSTMERGE_"),
 assert.ok(drawio.ciCoverage.startsWith("REQUIRED_AND_POSTMERGE_"),
   "P2b actual Chromium evidence must be reflected, not marked reference-only");
 for (const p of [graphml, drawio]) {
-  assert.equal(p.nextCheckpoint, "IC-030_P3_SCOPED_EXIT_GATE");
+  assert.equal(p.nextCheckpoint, "IC-040_AFTER_VERIFIED_P3_RELEASE");
   assert.match(p.risk, /NOT_ATTESTED|not attested/i,
     "Unverified modeled probes/physical truth must be explained");
   for (const file of [...p.sources, ...p.tests]) assert.doesNotThrow(
