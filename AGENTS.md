@@ -27,20 +27,17 @@ A document parser or planned registry entry never equals full import, network vi
 
 Updates to this active priority or its acceptance criteria must be made by reviewed, documented GitHub changes and reflected in issue #3. Root AGENTS controls developer workflow; the plan controls import sequence and semantic scope. Neither overrides fresh current main code as source authority.
 
-## YADILAB-CI-CONCURRENCY-001 — superseded PR workflow cancellation (owner-approved; IMPLEMENTED_IN_PR / CI_PENDING)
+## YADILAB-CI-CONCURRENCY-001 — verified PR-supersession policy
 
-**Permanent owner decision (2026-11-01). Status: APPROVED / IMPLEMENTED_IN_PR / CI_PENDING.** Every future YadiLab development session MUST read this decision and [issue #3](https://github.com/Northsw-spec/YadiLab/issues/3). Workflow guards and test contract exist on the separate CI branch, but do not claim deployment until actual PR-head CI PASS, protected merge and independent release verification.
+**Permanent owner decision (2026-11-01). Status: CI_PASS / PROTECTED_MERGED / INDEPENDENT_RELEASE_VERIFIED.** The current `main` includes verified workflow-scoped PR cancellation. [PR #93](https://github.com/Northsw-spec/YadiLab/pull/93) passed **43/43** latest-head checks and protected squash-merged; its exact-main [independent Linux release #41267693694](https://github.com/Northsw-spec/YadiLab/actions/runs/41267693694) completed SUCCESS with actual compiled Chromium, mounted DOM identity and Linux artifacts. A controlled second commit cancelled **42 obsolete PR check-runs**, while the replacement head passed independently. This evidence applies to that exact delivery, not to future commits.
 
-**Required delivery order:** Do not change PR #92 or create more workflow runs to implement this policy while IC-030 P2b is waiting for its exact-head CI. First verify all required P2b checks, protected squash merge, and the independent exact-new-`main` Linux release (including real mounted Chromium identity and artifacts). **Only after that verified delivery**, implement this CI infrastructure improvement in a **separate reviewed PR** from the then-current protected `main`, with frozen source and acceptance oracles before CI edits.
+**Mandatory enduring rules:**
+1. Use top-level `concurrency` and `cancel-in-progress` to cancel only older unfinished runs superseded by newer commits to the **same PR and same workflow**. Group identity must isolate other PRs and workflows; cancellation is PR-only.
+2. Never automatically cancel or suppress protected `main`, Linux/postmerge/tagged releases, or independent manual/dispatch evidence. The required `yadilab-required-ci` branch-protection check remains mandatory; never bypass it.
+3. Preserve full pinned `playwright install --with-deps chromium`, Engine, import, negative security, package, AUDIT-006 and provenance tests. CANCELLED is not PASS. The latest PR head must independently complete all required checks before a protected merge.
+4. Every future workflow expansion or change must update and rerun `tests/ci/run_pr_concurrency_contract_tests.mjs`, then verify exact PR-head tests and an independent release. Preserve actual run/commit/artifact evidence in issue #3. GitHub-hosted Ubuntu CI is sufficient for automated work; no routine manual Parrot tests.
 
-**Mandatory implementation and acceptance contract:**
-1. Configure GitHub Actions `concurrency` and `cancel-in-progress` so that new commits to **the same pull request** cancel superseded, unfinished `pull_request` test runs **within the same workflow**. Cancellation groups must isolate both workflow identity and PR identity. Do not let different PRs or separate workflows cancel each other.
-2. **Do not cancel or suppress** protected `main` runs, independent postmerge Linux-release runs, tagged releases, manual/dispatch evidence runs, or the latest PR-head run. For non-PR events, use isolated groups with cancellation disabled or retain separate non-canceling behavior. Never weaken branch protection or bypass required `yadilab-required-ci`.
-3. Preserve the full existing test, dependency, Playwright `--with-deps`, real Chromium, Engine, import, negative/adversarial, AUDIT-006 and source/provenance verification gates. A cancelled obsolete job is **CANCELLED**, not a test PASS. The newest PR commit must complete its own mandatory checks before merge.
-4. Validate with **actual GitHub Actions** on a controlled test PR: after two successive commits, the older run is cancelled while the newest executes all mandatory tests; no cross-PR/cross-workflow cancellation; `main` and postmerge release evidence remain unaffected. Record exact SHAs, run/job URLs, cancellation reason, verified latest-head SUCCESS and independent release in issue #3.
-5. Update this instruction and the import masterplan after verified implementation; until then report `IMPLEMENTED_IN_PR / CI_PENDING` accurately. Do not re-trigger CI merely to poll status, and do not require manual Parrot tests for Ubuntu-automatable assertions.
-
-**Frozen CI policy oracles:** [YADILAB_CI_CONCURRENCY_001_FROZEN_ORACLES.md](docs/architecture/YADILAB_CI_CONCURRENCY_001_FROZEN_ORACLES.md). Use actual GitHub results, not this document, to determine completion.
+**Frozen original policy oracles:** [YADILAB_CI_CONCURRENCY_001_FROZEN_ORACLES.md](docs/architecture/YADILAB_CI_CONCURRENCY_001_FROZEN_ORACLES.md).
 
 ## Mandatory checkpoint handoff
 

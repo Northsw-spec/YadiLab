@@ -530,6 +530,44 @@ const browserPaths = [
   "run_ic020_p2c3_unmapped_real_browser.py",
   "run_ic020_p2c5_truth_real_browser.py"
 ];
+// Historical IC-000/P2c4 evidence above remains byte-for-byte frozen. Only
+// these two independently delivered IC-030 specialized Builder profiles can
+// advance beyond the historical read-only snapshot; no other profile relaxes.
+const acceptedIc030P3 = {
+  "graphml.structural.v1": {
+    registry: "PLANNED_HINT",
+    stage: {
+      detect: "SPECIALIZED_GRAPHML_FILE_ENTRY",
+      parse: "BOUNDED_GRAPHML_ORIGINAL_XML_SHA",
+      preview: "ORIGINAL_SHA_READ_ONLY_SPECIALIZED_MODAL",
+      review: "MANUAL_NODE_ROLES_FIRST_80_AND_UNDIRECTED_EDGES_ACK",
+      projection: "EXPLICIT_REVIEWED_GRAPHML_WORKBOOK_CANDIDATE",
+      builder: "REAL_COMPILER_ELK_ORIGINAL_REREAD_WORKSPACE_GATE",
+      modeledProbe: "NOT_ATTESTED_NO_AUTOMATIC_RUNTIME",
+      replay: "NO_SAVED_REPORT_ORIGINAL_REREAD_AT_COMMIT",
+      ui: "SPECIALIZED_REVIEW_MODAL_BUILDER_CONFIRM_ONLY",
+    },
+    ciCoverage: "REQUIRED_AND_POSTMERGE_SOURCE_PLUS_REAL_CHROMIUM_GATES_CHECK_EXACT_SHA",
+    nextCheckpoint: "IC-040_AFTER_VERIFIED_P3_RELEASE"
+  },
+  "diagrams.drawio.v1": {
+    registry: "PLANNED_HINT",
+    stage: {
+      detect: "SPECIALIZED_DRAWIO_P1P6_XML_READ_ONLY_AND_P2B_DRAWIO_ONLY",
+      parse: "BOUNDED_2MIB_16P_1000V_2000E_RAW_DEFLATE_SHA",
+      preview: "SEPARATE_READ_ONLY_AND_ORDINAL_ONLY_P2B_MODALS",
+      review: "P1P6_REFERENCE_ONLY_OR_P2B_1_TO_20_EXPLICIT_NODES_EDGES_ACK",
+      projection: "P2B_EXPLICIT_REVIEWED_DRAWIO_GRAPH_CANDIDATE_ONLY",
+      builder: "P2B_REAL_COMPILER_ELK_LAST_ORIGINAL_REREAD_WORKSPACE_GATE",
+      modeledProbe: "NOT_ATTESTED_NO_AUTOMATIC_RUNTIME",
+      replay: "P1P6_REFERENCE_REPORT_ONLY_P2B_CANDIDATE_NOT_REPLAYED",
+      ui: "SEPARATE_READ_ONLY_AND_P2B_REVIEWED_BUILDER_MODALS",
+    },
+    ciCoverage: "REQUIRED_AND_POSTMERGE_P1P6_AND_P2B_SOURCE_PLUS_REAL_CHROMIUM_CHECK_EXACT_SHA",
+    nextCheckpoint: "IC-040_AFTER_VERIFIED_P3_RELEASE"
+  }
+};
+const ic030ScopedIds = new Set(Object.keys(acceptedIc030P3));
 const read=p=>fs.readFileSync(p,"utf8");
 const matrix=JSON.parse(read("docs/architecture/import-capability-matrix.v1.json"));
 const workflows=[
@@ -548,7 +586,21 @@ function consistent(model) {
    JSON.stringify(model.auditRefreshP2c4)!==JSON.stringify(historicalP2c4Audit)) return false;
  const other=model.profiles.filter(p=>p.registry!=="ACTIVE_ADAPTER")
    .map(p=>({id:p.id,registry:p.registry,stage:p.stage,ciCoverage:p.ciCoverage,nextCheckpoint:p.nextCheckpoint}));
- if(JSON.stringify(other)!==JSON.stringify(untouchedProfiles)) return false;
+ // P2c6 freezes the historical 22 non-active snapshots. Preserve all 20
+ // unaffected records identically, and verify both later IC-030 exceptions
+ // against independent exact source/Builder/probe-nonclaim expectations.
+ const historicalOther=untouchedProfiles.filter(p=>!ic030ScopedIds.has(p.id));
+ const currentOther=other.filter(p=>!ic030ScopedIds.has(p.id));
+ if(JSON.stringify(currentOther)!==JSON.stringify(historicalOther)) return false;
+ if(other.filter(p=>ic030ScopedIds.has(p.id)).length!==2) return false;
+ for(const [id, expected] of Object.entries(acceptedIc030P3)){
+   const p=other.find(x=>x.id===id);
+   if(!p || JSON.stringify(p)!==JSON.stringify({id,...expected})) return false;
+   const full=model.profiles.find(x=>x.id===id);
+   if(!full || full.track!=="TOPOLOGY_DECLARED" ||
+      !full.sources.every(f=>fs.existsSync(f)) ||
+      !full.tests.every(f=>fs.existsSync(f))) return false;
+ }
  const active=model.profiles.filter(p=>p.registry==="ACTIVE_ADAPTER");
  if(JSON.stringify(active.map(p=>p.id))!==JSON.stringify(profileIds) ||
    JSON.stringify(active.map(p=>({id:p.id,ic020Refresh:p.ic020Refresh})))!==JSON.stringify(historicalP2c4)) return false;
@@ -641,6 +693,12 @@ reject(m=>m.profiles.find(p=>p.id==="pdf.digital-tables.v1").stage.builder="DIRE
  "Cannot invent PDF Builder support");
 reject(m=>m.profiles.find(p=>p.id==="builtin.ods").tests=[],
  "Cannot lose referenced oracle evidence");
+reject(m=>m.profiles.find(p=>p.id==="graphml.structural.v1").stage.modeledProbe="VERIFIED_RUNTIME",
+ "Future GraphML probe claims may not rewrite historical IC-020 evidence");
+reject(m=>m.profiles.find(p=>p.id==="diagrams.drawio.v1").stage.builder="NONE",
+ "Later delivered P2b Builder cannot be erased from source truth");
+reject(m=>m.profiles.find(p=>p.id==="diagrams.drawio.v1").stage.projection="AUTO_PHYSICAL_TOPOLOGY",
+ "Drawn edges never prove physical network connectivity");
 reject(m=>m.profiles.find(p=>p.id==="builtin.json").ic020CurrentEvidence.flatDevicesAddressPrefixConflict="INFERRED",
  "Cannot transform explicit conflicts into inferred truth");
 reject(m=>m.profiles.find(p=>p.id==="builtin.csv").nextCheckpoint="COMPLETE_ALL_IMPORTS",
