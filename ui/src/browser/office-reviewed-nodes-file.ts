@@ -2,6 +2,8 @@ import { previewDocxTableStructure } from "../../../enterprise-import/src/docx-t
 import { previewOdtTableStructure } from "../../../enterprise-import/src/odt-tables-structural-preview.js";
 import { mapReviewedOfficeOriginalToNodes, type OfficeReviewedNodesDecision,
   type OfficeReviewedNodesCandidate } from "../../../enterprise-import/src/office-reviewed-node-candidate.js";
+import { mapReviewedOfficeOriginalToConnections, type OfficeReviewedConnectionsDecision,
+  type OfficeReviewedConnectionsCandidate } from "../../../enterprise-import/src/office-reviewed-connection-candidate.js";
 import { EnterpriseImportError } from "../../../enterprise-import/src/types.js";
 
 export interface OfficeReviewedReadableFile {
@@ -51,9 +53,9 @@ export async function previewOfficeNodesFile(file: OfficeReviewedReadableFile): 
 export async function verifyOfficeCandidateFile(
   file: OfficeReviewedReadableFile,
   expected: OfficeReviewedPreview,
-  decision: OfficeReviewedNodesDecision,
+  decision: OfficeReviewedNodesDecision | OfficeReviewedConnectionsDecision,
   isCurrent: () => boolean,
-): Promise<OfficeReviewedNodesCandidate> {
+): Promise<OfficeReviewedNodesCandidate | OfficeReviewedConnectionsCandidate> {
   if (typeof isCurrent !== "function" || !isCurrent()) return deny("IC040_P1B_STALE");
   if (!expected || !expected.preview || (expected.format !== "docx" && expected.format !== "odt") ||
       expected.format !== decision?.format ||
@@ -71,7 +73,9 @@ export async function verifyOfficeCandidateFile(
   if (JSON.stringify(refreshed) !== JSON.stringify(expected.preview)) {
     return deny("IC040_P1B_SOURCE_CHANGED");
   }
-  const mapped = await mapReviewedOfficeOriginalToNodes(raw, decision);
+  const mapped = "connections" in decision
+    ? await mapReviewedOfficeOriginalToConnections(raw, decision)
+    : await mapReviewedOfficeOriginalToNodes(raw, decision);
   if (!isCurrent()) return deny("IC040_P1B_STALE");
   if (mapped.status !== "READY_FOR_COMPILATION" || !mapped.source ||
       mapped.canActivate !== false || mapped.engineVerified !== false ||
