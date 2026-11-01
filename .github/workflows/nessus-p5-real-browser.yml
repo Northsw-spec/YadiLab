@@ -36,6 +36,7 @@ jobs:
         run: |
           python3 -m venv /tmp/nessus-p5-venv
           /tmp/nessus-p5-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/nessus-p5-venv/bin/python -m playwright install --with-deps chromium
       - name: Exact source and independent synthetic original-XML security cases
         run: |

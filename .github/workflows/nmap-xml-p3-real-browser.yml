@@ -42,6 +42,7 @@ jobs:
         run: |
           python3 -m venv /tmp/yadilab-nmap-browser-venv
           /tmp/yadilab-nmap-browser-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/yadilab-nmap-browser-venv/bin/python -m playwright install --with-deps chromium
       - name: Verify source, Nmap source ordinal pagination and build actual YadiLab
         run: |
