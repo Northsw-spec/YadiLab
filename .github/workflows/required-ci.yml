@@ -41,6 +41,7 @@ jobs:
           set -Eeuo pipefail
           go test -count=1 -v ./launcher/... -run '^TestAudit007P5'
           go test -count=1 -v ./launcher/... -run '^TestAudit007P6'
+          go test -count=1 -v ./launcher/... -run '^TestAudit007P7'
           go test ./launcher/...
       - name: Adversarial release source and existing regression gates
         run: |
