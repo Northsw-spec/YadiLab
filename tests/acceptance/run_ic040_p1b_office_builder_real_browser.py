@@ -482,9 +482,9 @@ P4_LINKS=[
     ["sw01","srv01","eth3","eth0"],
 ]
 
-def make_p4_office(ext,links=None):
+def make_p4_office(ext,links=None,devices=None):
     source_links=links if links is not None else P4_LINKS
-    tables=[P4_DEVICES,source_links]
+    tables=[devices if devices is not None else P4_DEVICES,source_links]
     if ext=="docx":
         cell=lambda value:'<w:tc><w:tcPr/><w:p><w:r><w:t>'+value+'</w:t></w:r></w:p></w:tc>'
         body=('<w:document xmlns:w="'+WORD+'"><w:body>'+
@@ -660,6 +660,143 @@ def case_p4_blocked_link(browser,url,ext,kind):
         return {"format":ext,"case":"blocked_separate_link_"+kind,"status":"PASS"}
     finally:page.close()
 
+
+# P5: same original-document semantics, now explicitly six devices / five links.
+P5_DEVICES=P4_DEVICES+[
+    ["pc01","PRIVATE_P5_NODE_5605"],["pc02","PRIVATE_P5_NODE_5606"]]
+P5_LINKS=P4_LINKS+[
+    ["sw01","pc01","eth4","eth0"],["sw01","pc02","eth5","eth0"]]
+P5_ROLES=[
+    "network.switch","network.firewall","network.router","server.generic",
+    "endpoint.windows","endpoint.linux"]
+
+def choose_p5_capacity(page):
+    page.locator('[data-office-p5-capacity-toggle="true"]').check()
+    require(page.locator('[data-office-p1b-selected-count="0"]').count()==1,
+            "P5 mode switch retained stale P4 node IDs or consents")
+    for i,role in enumerate(P5_ROLES):
+        k="0:"+str(i+1)+":0"
+        page.locator('[data-office-p1b-cell-ordinal="true"]').select_option(k)
+        page.locator('[data-office-p1b-add="true"]').click()
+        page.locator('[data-office-p1b-role="'+k+'"]').select_option(role)
+        page.locator('[data-office-p1b-cell-ack="'+k+'"]').check()
+    expect(page.locator('[data-office-p1b-selected-count="6"]')).to_be_visible(timeout=12000)
+    for row in range(1,6):
+        k="1:"+str(row)
+        page.locator('[data-office-p4-row-choice="true"]').select_option(k)
+        page.locator('[data-office-p4-from-choice="true"]').select_option("0")
+        page.locator('[data-office-p4-to-choice="true"]').select_option("1")
+        page.locator('[data-office-p4-source-port-choice="true"]').select_option("2")
+        page.locator('[data-office-p4-target-port-choice="true"]').select_option("3")
+        page.locator('[data-office-p4-add="true"]').click()
+        require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+                "P5 permitted committing original cell values without explicit consent")
+        for attr in ["from","to","source-port","target-port"]:
+            page.locator('[data-office-p4-'+attr+'-ack="'+k+'"]').check()
+    expect(page.locator('[data-office-p4-count="5"]')).to_be_visible(timeout=12000)
+    require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+            "P5 global modeled port/link consent missing")
+    page.locator('[data-office-p4-modeled-ack="true"]').check()
+    page.locator('[data-office-p1b-modeled-ack="true"]').check()
+    expect(page.locator('[data-office-p1b-confirm="true"]')).to_be_enabled()
+
+def case_p5_six_by_five(browser,url,ext):
+    page,errors,external=setup(browser,url)
+    try:
+        opening(page)
+        choose(page,ext,make_p4_office(ext,P5_LINKS,P5_DEVICES))
+        choose_p5_capacity(page)
+        require(all(row[1] not in page.locator('[data-office-p1b-panel]').inner_html()
+                    for row in P5_DEVICES[1:]),
+                "P5 private original node column was exposed without selection")
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-panel]')).to_have_count(0,timeout=45000)
+        source=exported_source(page)
+        roles={x["id"]:x["type"] for x in source["resources"]}
+        require(roles==dict(zip(["sw01","fw01","rt01","srv01","pc01","pc02"],P5_ROLES)),
+                "P5 wrong six original node IDs or assigned roles")
+        expected={
+            ("sw01","eth1","fw01","eth0"),("sw01","eth2","rt01","eth0"),
+            ("sw01","eth3","srv01","eth0"),("sw01","eth4","pc01","eth0"),
+            ("sw01","eth5","pc02","eth0"),
+        }
+        source_links={(x["from"]["resource"],x["from"].get("port"),
+                       x["to"]["resource"],x["to"].get("port"))
+                      for x in source["connections"]}
+        require(len(source["connections"])==5 and source_links==expected,
+                "P5 canonical Builder missing or invented source endpoint port connections")
+        require(source["completion"]["path"]=="office_manual_verification" and source["tests"]==[],
+                "P5 falsely self-certified Engine objectives/probes")
+        require(all(row[1] not in json.dumps(source) for row in P5_DEVICES[1:]),
+                "P5 copied unreviewed private original cells to exported Builder")
+        panel=page.locator(".topology-panel")
+        nodes=panel.locator('.react-flow__node[data-id]')
+        edges=panel.locator('.react-flow__edge[data-id]')
+        expect(nodes).to_have_count(6,timeout=30000)
+        expect(edges).to_have_count(5,timeout=30000)
+        family={"sw01":"switch","fw01":"firewall","rt01":"router",
+                "srv01":"server","pc01":"client","pc02":"client"}
+        displayed={}
+        handles=set()
+        for node in nodes.all():
+            n=node.get_attribute("data-id")
+            shape=node.locator('.resource-node[data-device-family]')
+            require(shape.count()==1,"P5 missing actual ReactFlow resource shape "+str(n))
+            displayed[n]=shape.get_attribute("data-device-family")
+            handles.update((n,h.get_attribute("data-interface-id"))
+                           for h in node.locator('[data-interface-id]').all())
+        require(displayed==family,
+                "P5 actual drawn node ID/role family not equal six reviewed source nodes; "+
+                "actual="+repr(displayed))
+        required_handles={("sw01","eth"+str(i)) for i in range(1,6)}
+        required_handles.update((id,"eth0") for id in ["fw01","rt01","srv01","pc01","pc02"])
+        require(required_handles.issubset(handles),
+                "P5 actual ReactFlow interface handles missing source-declared port")
+        rendered=set()
+        for edge in edges.all():
+            p=edge.locator('path.react-flow__edge-path.semantic-edge')
+            require(p.count()==1 and bool(p.get_attribute("d")),
+                    "P5 real semantic SVG path absent or malformed")
+            require(p.get_attribute("data-connection-kind")=="network",
+                    "P5 rendered wrong edge kind")
+            rendered.add((p.get_attribute("data-connection-source"),
+                          p.get_attribute("data-connection-source-port"),
+                          p.get_attribute("data-connection-target"),
+                          p.get_attribute("data-connection-target-port")))
+        require(rendered==expected,
+                "P5 actual drawn SVG endpoints and exact port names mismatch original; "+
+                "observed="+repr(sorted(rendered))+" expected="+repr(sorted(expected)))
+        require(page.locator(".app-frame").get_attribute("data-runtime-scenario-hash")=="builder",
+                "P5 accidentally entered Engine Runtime")
+        clean(errors,external)
+        return {"format":ext,"case":"six_nodes_five_exact_source_and_drawn_port_links",
+                "status":"PASS"}
+    finally:page.close()
+
+def case_p5_bad_six_by_five(browser,url,ext,mode):
+    links=[list(row) for row in P5_LINKS]
+    if mode=="unknown":
+        links[5][1]="ghost";code="IC040_P4_LINK_ENDPOINT_UNKNOWN"
+    elif mode=="reused":
+        links[5][2]="eth1";code="IC040_P4_PORT_REUSED"
+    elif mode=="secret":
+        links[5][2]="PASSWORD=canary"
+        code="DOCX_CELL_SENSITIVE_BLOCKED" if ext=="docx" else "ODT_CELL_SENSITIVE_BLOCKED"
+    else:raise AssertionError("Unknown P5 bad fixture "+mode)
+    page,errors,external=setup(browser,url)
+    try:
+        before=exported_source(page)
+        opening(page);choose(page,ext,make_p4_office(ext,links,P5_DEVICES))
+        choose_p5_capacity(page)
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-error="BLOCKED"]')).to_contain_text(code,timeout=45000)
+        page.locator('[data-office-p1b-cancel]').click()
+        require(exported_source(page)==before,
+                "P5 failed original source decision overwrote current Builder")
+        clean(errors,external)
+        return {"format":ext,"case":"six_by_five_"+mode+"_blocked","status":"PASS"}
+    finally:page.close()
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--url",required=True)
@@ -695,6 +832,9 @@ def main():
                 cases.append(case_p2_unknown_peer(browser,args.url,ext,unknown))
                 cases.append(case_p3_real_ports(browser,args.url,ext))
                 cases.append(case_p4_separate_rows(browser,args.url,ext,True))
+                cases.append(case_p5_six_by_five(browser,args.url,ext))
+                for p5mode in ["unknown","reused","secret"]:
+                    cases.append(case_p5_bad_six_by_five(browser,args.url,ext,p5mode))
                 cases.append(case_p4_separate_rows(browser,args.url,ext,False))
                 for p4kind in ["unknown","reuse","secret"]:
                     cases.append(case_p4_blocked_link(browser,args.url,ext,p4kind))
@@ -718,6 +858,7 @@ def main():
     print("PASS IC-040 P2 actual compiled Chromium DOCX/ODT exact SVG peer links, unknown and reciprocal peer duplicates blocked")
     print("PASS IC-040 P3 actual DOCX/ODT Chromium source, port handles, exact drawn endpoint port identities and negative denial")
     print("PASS IC-040 P4 actual compiled DOCX/ODT separate Links rows, three switch links, source/rendered endpoints/ports and no-guess negatives")
+    print("PASS IC-040 P5 actual compiled DOCX/ODT six source-selected devices/five source-declared links, exact rendered role/port/endpoint SVG parity and block cases")
     print(json.dumps(report,indent=2))
 
 if __name__=="__main__":
