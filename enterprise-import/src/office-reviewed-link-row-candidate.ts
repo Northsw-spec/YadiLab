@@ -185,7 +185,7 @@ export async function mapReviewedOfficeOriginalToLinkRows(
         decision:"USER_CONSENTED_ORIGINAL_SEPARATE_LINK_ROW",
       });
       if(sourcePortLocator&&targetPortLocator)
-        ports.push({targetLinkId:id,sourcePortLocator,targetPortLocator:targetPortLocator});
+        ports.push({targetLinkId:id,sourcePortLocator,peerPortLocator:targetPortLocator});
     }
     const resources:Scenariosourceresource[]=base.source.resources.map(resource=>({
       ...resource,
