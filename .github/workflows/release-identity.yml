@@ -56,6 +56,7 @@ jobs:
           npm run test:audit007-p1-engine-inputs
           npm run test:audit007-p2a-canonical-json
           npm run test:audit007-p2b-import-fields
+          npm run test:audit007-p3-address-contract
           npm run test:ic030-p2b-drawio-ui
           npm run test:dev11-ui
           npm run test:ospf-p2p-dd

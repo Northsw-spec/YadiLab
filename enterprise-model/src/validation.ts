@@ -1,17 +1,11 @@
 import type { EnterpriseBaseline } from "../../core-model/src/generated/contracts.js";
 type EnterpriseFact = EnterpriseBaseline["facts"][number];
+import { parseCidr, parseIpAddress } from "../../core-model/src/network-address.js";
 import { canonicalEnterpriseJson, computeEnterpriseBaselineIdentity } from "./canonical.js";
 import type { EnterpriseBaselineVerification, EnterpriseHashProvider, EnterpriseModelDiagnostic } from "./types.js";
 
-const IPV4 = /^(?:0|[1-9][0-9]{0,2})(?:\.(?:0|[1-9][0-9]{0,2})){3}$/;
 const MAC = /^(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/;
-const CIDR4 = /^(?:0|[1-9][0-9]{0,2})(?:\.(?:0|[1-9][0-9]{0,2})){3}\/(?:[0-9]|[12][0-9]|3[0-2])$/;
 const SOURCE_ID = /^src_([0-9a-f]{64})$/;
-
-function validIpv4(value: unknown): boolean {
-  if (typeof value !== "string" || !IPV4.test(value)) return false;
-  return value.split(".").every((part) => Number(part) <= 255);
-}
 
 function valueMatchesType(type: EnterpriseFact["valueType"], value: unknown): boolean {
   switch (type) {
@@ -19,9 +13,9 @@ function valueMatchesType(type: EnterpriseFact["valueType"], value: unknown): bo
     case "integer": return typeof value === "number" && Number.isSafeInteger(value);
     case "number": return typeof value === "number" && Number.isFinite(value);
     case "string": return typeof value === "string";
-    case "ipv4": return validIpv4(value);
-    case "ipv6": return typeof value === "string" && value.includes(":");
-    case "cidr": return typeof value === "string" && (CIDR4.test(value) || value.includes(":") && /\/[0-9]{1,3}$/.test(value));
+    case "ipv4": return typeof value === "string" && !value.includes("/") && parseIpAddress(value)?.family === 4;
+    case "ipv6": return typeof value === "string" && !value.includes("/") && parseIpAddress(value)?.family === 6;
+    case "cidr": return typeof value === "string" && value.includes("/") && parseCidr(value) !== undefined;
     case "mac": return typeof value === "string" && MAC.test(value);
     case "port": return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 65535;
     case "protocol": return typeof value === "string" && /^[a-z][a-z0-9_-]{0,31}$/.test(value);

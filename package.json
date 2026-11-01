@@ -159,7 +159,8 @@
     "test:ic040-p1a-office-nodes": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_ic040_p1a_office_node_candidate_tests.mjs",
     "test:audit007-p1-engine-inputs": "tsc -p tests/tsconfig.engine.json && node tests/engine/run_audit007_p1_network_input_safety_tests.mjs",
     "test:audit007-p2a-canonical-json": "tsc -p tests/tsconfig.compiler.json && tsc -p tests/tsconfig.enterprise.json && node tests/security/run_audit007_p2a_canonical_json_tests.mjs",
-    "test:audit007-p2b-import-fields": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_audit007_p2b_import_field_integrity_tests.mjs"
+    "test:audit007-p2b-import-fields": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_audit007_p2b_import_field_integrity_tests.mjs",
+    "test:audit007-p3-address-contract": "tsc -p tests/tsconfig.engine.json && tsc -p tests/tsconfig.enterprise.json && node tests/security/run_audit007_p3_network_address_contract_tests.mjs"
   },
   "dependencies": {
     "@xyflow/react": "12.11.6",
