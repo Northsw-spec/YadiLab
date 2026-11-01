@@ -106,9 +106,17 @@ for(const {format,make,preview,secretCode} of tests) {
   await blocked(bytes,{...agreed,sourceSha256:"hacked"},"IC040_P1A_DECISION_INVALID");
   await blocked(bytes,{...agreed,extraUnknown:1},"IC040_P1A_DECISION_INVALID");
   await blocked(bytes,{...agreed,nodes:[{...selection(),providedRawText:"ignore this"}]},"IC040_P1A_NODE_DECISION_INVALID");
-  const swapped=await make(originalRows.map((row,i)=>i===1?[row[0].replace("01","04"),row[1]]:row));
-  eq(swapped.byteLength,bytes.byteLength,format+" adversarial replacement same byte length");
-  await blocked(swapped,agreed,"IC040_P1A_SOURCE_CHANGED");
+  // A real independent package rewriter must produce another valid same-size
+  // ZIP, not a CRC-broken byte overwrite. Search only bounded numeric variants.
+  let swapped;
+  for(const digit of ["4","5","6","7","8","9","0"]) {
+    const altered=await make(originalRows.map((row,i)=>i===1?["node0"+digit,row[1]]:row));
+    if(altered.byteLength===bytes.byteLength && sha(altered)!==sha(bytes)){
+      swapped=altered;break;
+    }
+  }
+  yes(swapped,format+" independent same-length valid original replacement");
+  if(swapped)await blocked(swapped,agreed,"IC040_P1A_SOURCE_CHANGED");
   const forgedFormat={...agreed,format:format==="docx"?"odt":"docx"};
   const other=await mapReviewedOfficeOriginalToNodes(bytes,forgedFormat);
   eq(other.status,"BLOCKED",format+" original bytes not accepted as another package profile");
