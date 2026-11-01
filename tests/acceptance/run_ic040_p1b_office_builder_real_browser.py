@@ -269,7 +269,16 @@ def case_p2_real_links(browser,url,ext,original):
             require(path.get_attribute("data-connection-kind")=="network","P2 wrong drawn edge kind")
             actual.add((path.get_attribute("data-connection-source"),
                         path.get_attribute("data-connection-target")))
-        require(actual==pairs,"P2 visible ReactFlow link endpoints differ from document")
+        require(actual==pairs,
+                "P2 visible ReactFlow link endpoints differ from document; "+
+                "observed="+repr(sorted(actual))+" expected="+repr(sorted(pairs))+
+                " edge_elements="+repr([
+                    {"id":edge.get_attribute("data-id"),
+                     "source":edge.get_attribute("data-source"),
+                     "target":edge.get_attribute("data-target"),
+                     "path_source":edge.locator("path.semantic-edge").get_attribute("data-connection-source"),
+                     "path_target":edge.locator("path.semantic-edge").get_attribute("data-connection-target")}
+                    for edge in edges.all()]))
         require(page.locator(".app-frame").get_attribute("data-runtime-scenario-hash")=="builder",
                 "P2 unexpectedly entered Engine Runtime")
         clean(errors,external)
@@ -482,7 +491,12 @@ def main():
                 peers=make_reviewed_peers(raw,part,ext)
                 unknown=make_reviewed_peers(raw,part,ext,missing=True)
                 reciprocal=make_reviewed_peers(raw,part,ext,reciprocal=True)
-                cases.append(case_p2_real_links(browser,args.url,ext,peers))
+                # Independent release previously failed here while PR CI passed.
+                # Repeat distinct actual browser imports to expose nondeterministic
+                # rendered-graph identity, NOT merely static source parity.
+                for stability_run in range(4):
+                    result=case_p2_real_links(browser,args.url,ext,peers)
+                    cases.append({**result,"stability_run":stability_run+1})
                 cases.append(case_p2_unknown_peer(browser,args.url,ext,unknown))
                 cases.append(case_p3_real_ports(browser,args.url,ext))
                 for mode in ["reused","invalid","sensitive"]:
