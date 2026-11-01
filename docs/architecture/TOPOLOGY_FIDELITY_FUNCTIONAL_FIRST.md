@@ -12,7 +12,7 @@ Imported documents are **evidence of declared topology, not independent physical
 
 - CSV/TSV, Excel/ODS, JSON: explicit Devices/Links or `Connected To` are mapped. Audit graph parity, actual Builder visualization and false PASS first.
 - GraphML and diagrams.net: separate reviewed, consented graph mappings exist. Preserve selected-original edge identities and assert no additional edges or role guesses.
-- DOCX/ODT IC-040 P1a/P1b: **reviewed nodes only, no links/interfaces yet**. The user's requested full connected document topology is NOT currently implemented. Introduce bounded reviewed source-origin peer/port mapping and real visual parity tests; if evidence is ambiguous, ask review instead of inventing cables. This gap may be addressed as part of highest-priority functional correctness; no need to finish all-file security auditing first.
+- DOCX/ODT IC-040 P2: **four reviewed node IDs and four explicitly consented peer links maximum; interfaces/ports not yet mapped**. Source-grounded original cells, actual compiled/visible ReactFlow endpoints, duplicate/unknown peers and original/workspace race protection passed on protected `main=da6cd7ef6f2bd3d1ee989042cc851aba51550e3a`, independent Linux release #41340396235. It is a partial bounded capability, NOT full document-topology recovery. P3 must separately review both endpoint port cells and verify source/Builder/DOM parity without inventing cables from IP, names or table proximity. Arbitrary document topology remains incomplete.
 - Unsupported PDF/prose/complex diagrams: report limitations and source-grounded uncertainty; do not claim arbitrary document-to-network automatic reconstruction.
 
 ## Required implementation/verifications

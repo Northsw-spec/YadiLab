@@ -427,7 +427,7 @@ function JourneyPacket({ mode, motionPath, duration, source, target }) {
     );
 }
 
-function SemanticJourneyEdge({ id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }) {
+function SemanticJourneyEdge({ id, source, target, sourceHandle, targetHandle, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }) {
   const [basePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   const journey = data?.journey;
   const journeyEndpoint = data?.journeyEndpoint;
@@ -481,6 +481,9 @@ function SemanticJourneyEdge({ id, source, target, sourceX, sourceY, targetX, ta
       // a document label, edge ID, IP, layout order or imported source cache.
       "data-connection-source": source,
       "data-connection-target": target,
+      // Actual ReactFlow handle IDs, not guessed from source document text.
+      "data-connection-source-port": sourceHandle?.startsWith("out:") ? sourceHandle.slice(4) : undefined,
+      "data-connection-target-port": targetHandle?.startsWith("in:") ? targetHandle.slice(3) : undefined,
       "data-link-enabled": visual.enabled ? "true" : "false",
     }),
     e("text", { x: labelX, y: labelY - 7, className: `semantic-edge-label tone-${visual.tone}`, textAnchor: "middle", "aria-hidden": "true" }, visual.accessibleLabel),
@@ -4377,6 +4380,7 @@ function App() {
         if (JSON.stringify(refreshed.source) !== JSON.stringify(mapped.source) ||
             JSON.stringify(refreshed.origins) !== JSON.stringify(mapped.origins) ||
             JSON.stringify(refreshed.connectionOrigins ?? []) !== JSON.stringify(mapped.connectionOrigins ?? []) ||
+             JSON.stringify(refreshed.portOrigins ?? []) !== JSON.stringify(mapped.portOrigins ?? []) ||
             refreshed.sourceSha256 !== mapped.sourceSha256)
           blocked("IC040_P1B_SOURCE_CHANGED");
         checkCurrent(); // no await between final live check and commit
@@ -4384,7 +4388,7 @@ function App() {
         setImportedProbeAutoOpen(false);
         setDiagnostics([...layout.diagnostics, {
           severity: "warning", code: "IC040_P1B_MODELED_NODES_NOT_VERIFIED",
-          message: "Only independently consented DOCX/ODT node-ID cells, operator roles and selected original peer-ID cells entered Builder. Peer connections are modeled, NOT independently verified physical cables. No invented ports, IPs, routes, real devices, reachability, Engine or Runtime PASS."
+          message: "Only independently consented DOCX/ODT node-ID cells, operator roles and selected original peer-ID cells entered Builder. Peer connections and any individually reviewed original port cells are MODELED, NOT independently verified physical cables. No unselected or invented ports, IPs, routes, real devices, reachability, Engine or Runtime PASS."
         }]);
         setWorkspace(layout.workspace);
         setOfficeReviewedBuilderOpen(false);

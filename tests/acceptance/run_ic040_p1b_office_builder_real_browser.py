@@ -9,8 +9,8 @@ import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright, expect
-from run_docx_p2_real_browser import make_bytes as docx_bytes, CANARY as DOCX_CANARY
-from run_odt_p2_real_browser import make_odt as odt_bytes, CANARY as ODT_CANARY
+from run_docx_p2_real_browser import make_bytes as docx_bytes, CANARY as DOCX_CANARY, WORD, OPC_REL, OPC_TYPES, OFFICE_REL, MAIN_TYPE
+from run_odt_p2_real_browser import make_odt as odt_bytes, CANARY as ODT_CANARY, MIME, OFFICE, TABLE, TEXT, MANIFEST
 from run_ic010_p2_shared_xml_real_browser import setup, exported_source, require, menu
 
 def make_changed(original,filename):
@@ -308,6 +308,154 @@ def case_p2_reciprocal_peer(browser,url,ext,original):
         return {"format":ext,"case":"reciprocal_peer_pair_blocked_without_phantom_cable","status":"PASS"}
     finally:page.close()
 
+P3_PRIVATE_CANARY="PRIVATE_PORTS_ORIGINAL_NOT_DISCLOSED_3001"
+P3_ROWS=[
+    ["Device","Peer","Local Port","Remote Port","Private"],
+    ["fw01","sw01","eth0","eth1",P3_PRIVATE_CANARY],
+    ["sw01","rt01","eth2","eth0","SECOND_PRIVATE_PORTS_3002"],
+    ["rt01","","","","THIRD_PRIVATE_PORTS_3003"],
+]
+
+def make_p3_office(ext,rows=None):
+    rows=rows or P3_ROWS
+    if ext=="docx":
+        cell=lambda s:'<w:tc><w:tcPr/><w:p><w:r><w:t>'+s+'</w:t></w:r></w:p></w:tc>'
+        body=('<w:document xmlns:w="'+WORD+'"><w:body><w:tbl><w:tblPr/><w:tblGrid/>'+
+             ''.join('<w:tr>'+''.join(cell(value) for value in row)+'</w:tr>' for row in rows)+
+             '</w:tbl></w:body></w:document>')
+        types=('<Types xmlns="'+OPC_TYPES+'"><Override PartName="/word/document.xml" ContentType="'+
+               MAIN_TYPE+'"/></Types>')
+        rels=('<Relationships xmlns="'+OPC_REL+'"><Relationship Id="rId1" Type="'+
+              OFFICE_REL+'" Target="word/document.xml"/></Relationships>')
+        out=io.BytesIO()
+        with zipfile.ZipFile(out,"w",zipfile.ZIP_DEFLATED) as package:
+            for name,data in [("[Content_Types].xml",types),
+                              ("_rels/.rels",rels),("word/document.xml",body)]:
+                package.writestr(name,data)
+        return out.getvalue()
+    cell=lambda s:'<table:table-cell office:value-type="string"><text:p>'+s+'</text:p></table:table-cell>'
+    table=('<table:table table:name="Inventory"><table:table-column/>'+
+           ''.join('<table:table-row>'+''.join(cell(value) for value in row)+
+                   '</table:table-row>' for row in rows)+'</table:table>')
+    body=('<office:document-content xmlns:office="'+OFFICE+
+          '" xmlns:table="'+TABLE+'" xmlns:text="'+TEXT+
+          '" office:version="1.3"><office:body><office:text>'+
+          table+'</office:text></office:body></office:document-content>')
+    manifest=('<manifest:manifest xmlns:manifest="'+MANIFEST+'" manifest:version="1.3">'+
+              '<manifest:file-entry manifest:full-path="/" manifest:media-type="'+MIME+'"/>'+
+              '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'+
+              '</manifest:manifest>')
+    out=io.BytesIO()
+    with zipfile.ZipFile(out,"w") as package:
+        info=zipfile.ZipInfo("mimetype",(1980,1,1,0,0,0))
+        info.compress_type=zipfile.ZIP_STORED
+        info.extra=b""
+        package.writestr(info,MIME.encode("ascii"))
+        package.writestr("content.xml",body.encode(),compress_type=zipfile.ZIP_DEFLATED)
+        package.writestr("META-INF/manifest.xml",manifest.encode(),compress_type=zipfile.ZIP_DEFLATED)
+    return out.getvalue()
+
+def choose_p3_ports(page):
+    choose_reviewed_peers(page)
+    for index in range(2):
+        index_text=str(index)
+        page.locator('[data-office-p3-link-choice="true"]').select_option(index_text)
+        page.locator('[data-office-p3-source-choice="true"]').select_option("2")
+        page.locator('[data-office-p3-peer-choice="true"]').select_option("3")
+        page.locator('[data-office-p3-add="true"]').click()
+        require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+                "P3 allowed import before explicit separate port-cell consent")
+        page.locator('[data-office-p3-source-ack="'+index_text+'"]').check()
+        page.locator('[data-office-p3-peer-ack="'+index_text+'"]').check()
+    require(page.locator('[data-office-p3-selected-count="2"]').count()==1,
+            "P3 did not review exactly two port pairs")
+    require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+            "P3 missing modeled-port acknowledgment enabled import")
+    page.locator('[data-office-p2-modeled-ack="true"]').check()
+    page.locator('[data-office-p1b-modeled-ack="true"]').check()
+    page.locator('[data-office-p3-modeled-ack="true"]').check()
+    expect(page.locator('[data-office-p1b-confirm="true"]')).to_be_enabled()
+
+def case_p3_real_ports(browser,url,ext):
+    page,errors,external=setup(browser,url)
+    try:
+        original=make_p3_office(ext)
+        opening(page);choose(page,ext,original);choose_p3_ports(page)
+        require(P3_PRIVATE_CANARY not in page.locator('[data-office-p1b-panel]').inner_html(),
+                "Unselected original port-document private cell was exposed")
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-panel]')).to_have_count(0,timeout=45000)
+        source=exported_source(page)
+        require({x["id"]:x["type"] for x in source["resources"]}==
+                {"fw01":"network.firewall","sw01":"network.switch","rt01":"network.router"},
+                "P3 source IDs/roles not source and review accurate")
+        ifaces={x["id"]:sorted(i["id"] for i in x.get("interfaces",[]))
+                for x in source["resources"]}
+        require(ifaces=={"fw01":["eth0"],"sw01":["eth1","eth2"],"rt01":["eth0"]},
+                "P3 invented, lost or reassigned port interface IDs")
+        actual={c["id"]:(c["from"]["resource"],c["from"].get("port"),
+                        c["to"]["resource"],c["to"].get("port"))
+                for c in source["connections"]}
+        require(len(actual)==2 and set(actual.values())==
+                {("fw01","eth0","sw01","eth1"),("sw01","eth2","rt01","eth0")},
+                "P3 real Builder source endpoint ports differ from original Office cells")
+        require(source["completion"]["path"]=="office_manual_verification" and source["tests"]==[],
+                "P3 falsely certified Engine completion or probes")
+        require(all(secret not in json.dumps(source) for secret in
+                [P3_PRIVATE_CANARY,"SECOND_PRIVATE_PORTS_3002","THIRD_PRIVATE_PORTS_3003"]),
+                "P3 copied unreviewed private Office original cell")
+        panel=page.locator(".topology-panel")
+        expect(panel.locator('.react-flow__node[data-id]')).to_have_count(3,timeout=30000)
+        expect(panel.locator('.react-flow__edge[data-id]')).to_have_count(2,timeout=30000)
+        seen={}
+        for edge in panel.locator('.react-flow__edge[data-id]').all():
+            path=edge.locator("path.react-flow__edge-path.semantic-edge")
+            require(path.count()==1,"P3 missing actual rendered semantic edge")
+            geom=path.get_attribute("d")
+            require(bool(geom and geom.strip()) and "NaN" not in geom,
+                    "P3 invalid drawn SVG edge geometry")
+            seen[edge.get_attribute("data-id")]=(
+                path.get_attribute("data-connection-source"),
+                path.get_attribute("data-connection-source-port"),
+                path.get_attribute("data-connection-target"),
+                path.get_attribute("data-connection-target-port"))
+        require(seen==actual,"P3 actual ReactFlow SVG port/endpoint identities differ from source")
+        handles={(node.get_attribute("data-id"),
+                   handle.get_attribute("data-interface-id"))
+                 for node in panel.locator('.react-flow__node[data-id]').all()
+                 for handle in node.locator('[data-interface-id]').all()}
+        require(all((node,port) in handles for node,ports in ifaces.items() for port in ports),
+                "P3 actual visible resource node missing original interface handle")
+        require(page.locator(".app-frame").get_attribute("data-runtime-scenario-hash")=="builder",
+                "P3 silently activated Engine/Runtime")
+        clean(errors,external)
+        return {"format":ext,"case":"original_four_ports_two_exact_drawn_endpoints","status":"PASS"}
+    finally:page.close()
+
+def case_p3_bad_port(browser,url,ext,mode):
+    page,errors,external=setup(browser,url)
+    try:
+        rows=[list(row) for row in P3_ROWS]
+        if mode=="reused":
+            rows[2][2]="eth1"
+            expected="IC040_P3_PORT_REUSED"
+        elif mode=="invalid":
+            rows[1][2]="Gi1/0/1"
+            expected="IC040_P3_PORT_INVALID"
+        elif mode=="sensitive":
+            rows[1][2]="PASSWORD=canary"
+            expected="DOCX_CELL_SENSITIVE_BLOCKED" if ext=="docx" else "ODT_CELL_SENSITIVE_BLOCKED"
+        else:raise AssertionError("Unknown P3 fixture "+mode)
+        before=exported_source(page)
+        opening(page);choose(page,ext,make_p3_office(ext,rows));choose_p3_ports(page)
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-error="BLOCKED"]')).to_contain_text(expected,timeout=45000)
+        page.locator('[data-office-p1b-cancel]').click()
+        require(exported_source(page)==before,"P3 blocked port decision replaced workspace")
+        clean(errors,external)
+        return {"format":ext,"case":mode+"_original_port_denied","status":"PASS"}
+    finally:page.close()
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--url",required=True)
@@ -336,6 +484,9 @@ def main():
                 reciprocal=make_reviewed_peers(raw,part,ext,reciprocal=True)
                 cases.append(case_p2_real_links(browser,args.url,ext,peers))
                 cases.append(case_p2_unknown_peer(browser,args.url,ext,unknown))
+                cases.append(case_p3_real_ports(browser,args.url,ext))
+                for mode in ["reused","invalid","sensitive"]:
+                    cases.append(case_p3_bad_port(browser,args.url,ext,mode))
                 cases.append(case_p2_reciprocal_peer(browser,args.url,ext,reciprocal))
                 for run in [
                     lambda:case_cancel(browser,args.url,ext,raw),
@@ -352,6 +503,7 @@ def main():
     (args.evidence_dir/"ic040-p1b-office-builder-real-chromium.json").write_text(json.dumps(report,indent=2)+"\n")
     print("PASS IC-040 P1b actual compiled Chromium DOCX/ODT original-cell consent, final reread and live Builder race denial")
     print("PASS IC-040 P2 actual compiled Chromium DOCX/ODT exact SVG peer links, unknown and reciprocal peer duplicates blocked")
+    print("PASS IC-040 P3 actual DOCX/ODT Chromium source, port handles, exact drawn endpoint port identities and negative denial")
     print(json.dumps(report,indent=2))
 
 if __name__=="__main__":
