@@ -522,7 +522,7 @@
       ],
       "ciCoverage": "REQUIRED_AND_POSTMERGE_SOURCE_PLUS_REAL_CHROMIUM_GATES_CHECK_EXACT_SHA",
       "nextCheckpoint": "IC-040_AFTER_VERIFIED_P3_RELEASE",
-      "risk": "GraphML is a manually reviewed Builder candidate, not a verified topology. UI individually exposes only first 80 node roles and edge choices, leaves remaining nodes generic and remaining edges unselected; directed edges cannot be mapped to undirected connections. No automatic Runtime, modeled probe end-to-end, physical cable, reachability or native Parrot attested."
+      "risk": "GraphML is a manually reviewed Builder candidate, not a verified topology. UI individually exposes only first 80 node roles and edge choices, leaves remaining nodes generic and remaining edges unselected; directed edges cannot be mapped to undirected connections. No automatic Runtime or Engine PASS; modeled probe end-to-end, physical links, reachability and native Parrot are NOT_ATTESTED."
     },
     {
       "id": "nmap.xml.v1",
