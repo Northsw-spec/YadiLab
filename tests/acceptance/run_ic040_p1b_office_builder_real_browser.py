@@ -179,20 +179,22 @@ def case_invalid(browser,url,ext,original):
 
 # P2 uses the same actual compiled Chromium and original-source reread chain.
 # An explicitly selected original peer cell is NOT proof of physical cabling.
-def make_reviewed_peers(original,part,ext,missing=False):
+def make_reviewed_peers(original,part,ext,missing=False,reciprocal=False):
+    require(not (missing and reciprocal),"Mutually exclusive source fixture variants")
+    second_peer=b"fw01" if reciprocal else b"rt01"
     target=b"ghost" if missing else b"sw01"
     if ext=="docx":
         def xmlcell(value):
             return b"<w:tc><w:tcPr/><w:p><w:r><w:t>"+value+b"</w:t></w:r></w:p></w:tc>"
         additions=b"".join(b"<w:tr>"+xmlcell(a)+xmlcell(b)+b"</w:tr>" for a,b in
-                           [(b"sw01",b"rt01"),(b"rt01",b"")])
+                           [(b"sw01",second_peer),(b"rt01",b"")])
         closing=b"</w:tbl>"
         canary=DOCX_CANARY.encode()
     else:
         def xmlcell(value):
             return b'<table:table-cell office:value-type="string"><text:p>'+value+b"</text:p></table:table-cell>"
         additions=b"".join(b"<table:table-row>"+xmlcell(a)+xmlcell(b)+b"</table:table-row>" for a,b in
-                           [(b"sw01",b"rt01"),(b"rt01",b"")])
+                           [(b"sw01",second_peer),(b"rt01",b"")])
         closing=b"</table:table>"
         canary=ODT_CANARY.encode()
     out=io.BytesIO()
@@ -288,6 +290,21 @@ def case_p2_unknown_peer(browser,url,ext,original):
         return {"format":ext,"case":"unknown_peer_blocked_workspace_unchanged","status":"PASS"}
     finally:page.close()
 
+def case_p2_reciprocal_peer(browser,url,ext,original):
+    page,errors,external=setup(browser,url)
+    try:
+        before=exported_source(page)
+        opening(page);choose(page,ext,original);choose_reviewed_peers(page)
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-error="BLOCKED"]')).to_contain_text(
+            "IC040_P2_DUPLICATE_CONNECTION",timeout=45000)
+        require(exported_source(page)==before,
+                "Reciprocal document declaration silently created two parallel cables")
+        page.locator('[data-office-p1b-cancel]').click()
+        clean(errors,external)
+        return {"format":ext,"case":"reciprocal_peer_pair_blocked_without_phantom_cable","status":"PASS"}
+    finally:page.close()
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--url",required=True)
@@ -313,8 +330,10 @@ def main():
                 # P2 must use independently valid original ZIPs and real SVG endpoint proof.
                 peers=make_reviewed_peers(raw,part,ext)
                 unknown=make_reviewed_peers(raw,part,ext,missing=True)
+                reciprocal=make_reviewed_peers(raw,part,ext,reciprocal=True)
                 cases.append(case_p2_real_links(browser,args.url,ext,peers))
                 cases.append(case_p2_unknown_peer(browser,args.url,ext,unknown))
+                cases.append(case_p2_reciprocal_peer(browser,args.url,ext,reciprocal))
                 for run in [
                     lambda:case_cancel(browser,args.url,ext,raw),
                     lambda:case_success(browser,args.url,ext,raw),
@@ -329,7 +348,7 @@ def main():
       "cases":cases,"runtimeActivated":False,"physicalTopologyVerified":False}
     (args.evidence_dir/"ic040-p1b-office-builder-real-chromium.json").write_text(json.dumps(report,indent=2)+"\n")
     print("PASS IC-040 P1b actual compiled Chromium DOCX/ODT original-cell consent, final reread and live Builder race denial")
-    print("PASS IC-040 P2 actual compiled Chromium DOCX/ODT original peer rows, exact drawn SVG endpoints and unknown peer blocked")
+    print("PASS IC-040 P2 actual compiled Chromium DOCX/ODT exact SVG peer links, unknown and reciprocal peer duplicates blocked")
     print(json.dumps(report,indent=2))
 
 if __name__=="__main__":
