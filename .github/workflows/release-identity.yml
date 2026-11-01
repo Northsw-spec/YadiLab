@@ -31,6 +31,7 @@ jobs:
         run: |
           go test -count=1 -v ./launcher/... -run '^TestAudit007P5'
           go test -count=1 -v ./launcher/... -run '^TestAudit007P6'
+          go test -count=1 -v ./launcher/... -run '^TestAudit007P7'
           go test ./launcher/...
           npm run test:network-topology-import
           npm run test:imported-probes

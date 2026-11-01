@@ -121,6 +121,10 @@ func (s *staticServer) openStaticFile(requestPath string) (*os.File, error) {
 		flags := syscall.O_RDONLY | syscall.O_CLOEXEC | syscall.O_NOFOLLOW
 		if i != len(components)-1 {
 			flags |= syscall.O_DIRECTORY
+		} else {
+			// Opening a FIFO for reading blocks before f.Stat can reject it.
+			// Nonblocking has no effect on normal static regular-file reads.
+			flags |= syscall.O_NONBLOCK
 		}
 		nextFD, err := syscall.Openat(currentFD, part, flags, 0)
 		if err != nil {
@@ -141,7 +145,7 @@ func (s *staticServer) openStaticFile(requestPath string) (*os.File, error) {
 		// Directory index is opened relative to that actual directory FD;
 		// even a concurrent directory rename/symlink swap cannot redirect it.
 		nextFD, err := syscall.Openat(currentFD, "index.html",
-			syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+			syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 		if err != nil {
 			return nil, err
 		}
