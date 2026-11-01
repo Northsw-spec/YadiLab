@@ -25,8 +25,7 @@ for(const [name,adapter,delimiter,media] of [
   ["TSV",tsvImportAdapter,"\t","text/tab-separated-values"],
 ]){
   const parsed=await adapter.parse({
-    bytes:enc(names.join(delimiter)+"\n"+"canary".repeat(4).split("canary").slice(0,0).join("") +
-    ["explicit","own","method","node01"].join(delimiter)+"\n"),
+    bytes:enc(names.join(delimiter)+"\n"+["explicit","own","method","node01"].join(delimiter)+"\n"),
     mediaType:media,
   },{options:{tableName:"Devices"}});
   const record=parsed.document.tables[0].records[0];
@@ -55,9 +54,9 @@ for(const [name,adapter,delimiter,media] of [
     'node01'+delimiter+'"alpha""tail',
   ]){
     await assert.rejects(
-      ()=>Promise.resolve(adapter.parse({
+      async ()=>adapter.parse({
         bytes:enc("id"+delimiter+"comment\n"+malformed+"\n"),mediaType:media,
-      },{options:{}})),
+      },{options:{}}),
       e=>e instanceof EnterpriseImportError&&e.code==="IMPORT_MALFORMED_QUOTE",
       name+" rejects unquoted suffix after closing quote");assertions++;
   }
