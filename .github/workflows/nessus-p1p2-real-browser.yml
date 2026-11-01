@@ -32,6 +32,7 @@ jobs:
         run: |
           python3 -m venv /tmp/nessus-test-venv
           /tmp/nessus-test-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/nessus-test-venv/bin/python -m playwright install --with-deps chromium
       - name: Source, XML adversarial, privacy, SSR and existing import regressions
         run: |

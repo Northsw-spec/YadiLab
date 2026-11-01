@@ -33,6 +33,7 @@ jobs:
         run: |
           python3 -m venv /tmp/drawio-p4-venv
           /tmp/drawio-p4-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/drawio-p4-venv/bin/python -m playwright install --with-deps chromium
       - name: PREP frozen source/security tests and upstream import regressions
         run: |

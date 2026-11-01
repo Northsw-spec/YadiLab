@@ -29,6 +29,7 @@ jobs:
         run: |
           python3 -m venv /tmp/drawio-p6-venv
           /tmp/drawio-p6-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/drawio-p6-venv/bin/python -m playwright install --with-deps chromium
       - name: P6 frozen 45/1000-source assertions, P1-P5 and independent security regressions
         run: |

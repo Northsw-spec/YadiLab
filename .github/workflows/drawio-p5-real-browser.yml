@@ -32,6 +32,7 @@ jobs:
         run: |
           python3 -m venv /tmp/drawio-p5-venv
           /tmp/drawio-p5-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/drawio-p5-venv/bin/python -m playwright install --with-deps chromium
       - name: Exact source identity, P1 through P5 and independent security regression
         run: |
