@@ -73,6 +73,7 @@ const record = (sheet: string, row: number, values: Readonly<Record<string, stri
 export async function mapReviewedOfficeOriginalToNodes(
   original: Uint8Array,
   decision: OfficeReviewedNodesDecision,
+  maxNodes: 4 | 6 = OFFICE_REVIEWED_NODES_MAX,
 ): Promise<OfficeReviewedNodesCandidate> {
   const sha = typeof decision?.sourceSha256 === "string" && VALID_SHA.test(decision.sourceSha256)
     ? decision.sourceSha256 : "";
@@ -81,7 +82,7 @@ export async function mapReviewedOfficeOriginalToNodes(
       (decision.format !== "docx" && decision.format !== "odt") || !sha ||
       decision.acknowledgeModeledResources !== true ||
       !Array.isArray(decision.nodes) || decision.nodes.length < 1 ||
-      decision.nodes.length > OFFICE_REVIEWED_NODES_MAX) {
+      decision.nodes.length > maxNodes) {
     return blocked(sha, "IC040_P1A_DECISION_INVALID");
   }
   const seenRows = new Set<string>();

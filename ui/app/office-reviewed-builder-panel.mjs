@@ -100,8 +100,11 @@ export function OfficeReviewedNodeChoices({
         [linkTargetPortChoice,setLinkTargetPortChoice]=useState(""),
         [linkRows,setLinkRows]=useState([]),
         [linkRowAck,setLinkRowAck]=useState(false),
+        [capacityMode,setCapacityMode]=useState(false),
         [modeledAck,setModeledAck]=useState(false),[sending,setSending]=useState(false),
         [localError,setLocalError]=useState("");
+  const nodeLimit=capacityMode?6:MAX;
+  const linkLimit=capacityMode?5:MAX;
   const choices=[];
   for(const table of result.preview.tables.slice(0,4)){
     for(const row of table.rows.slice(1,21)){
@@ -140,7 +143,12 @@ export function OfficeReviewedNodeChoices({
     ?result.preview.tables[selectedLinkRow.tableOrdinal]
       ?.rows[selectedLinkRow.rowOrdinal]?.cells.slice(0,4).map(x=>x.cellOrdinal)??[]
     :[];
-  const canSubmit=nodes.length>=1 && nodes.length<=MAX &&
+  const canSubmit=nodes.length>=1 && nodes.length<=nodeLimit &&
+    (!capacityMode||(nodes.length===6 && linkRows.length===5 &&
+      connections.length===0 && portSelections.length===0 &&
+      linkRows.every(v=>v.sourcePortCellOrdinal!==null &&
+        v.targetPortCellOrdinal!==null &&
+        v.acknowledgeSourcePortCell===true && v.acknowledgeTargetPortCell===true))) &&
     nodes.every(n=>n.acknowledgeCell===true)&&modeledAck&&
     connections.every(c=>c.acknowledgePeerCell===true)&&
     (connections.length===0||connectionAck)&&
@@ -159,7 +167,7 @@ export function OfficeReviewedNodeChoices({
   };
   const add=()=>{
     const available=selectable.get(choice);
-    if(!available || present.has(choice) || nodes.length>=MAX){
+    if(!available || present.has(choice) || nodes.length>=nodeLimit){
       setLocalError("IC040_P1B_NODE_DECISION_INVALID");return;
     }
     setNodes(prev=>[...prev,{...available,role:"resource.generic",acknowledgeCell:false}]);
@@ -180,7 +188,7 @@ export function OfficeReviewedNodeChoices({
   };
   const addConnection=()=>{
     const selected=peerAvailable.get(peerChoice);
-    if(!selected||peerPresent.has(peerChoice)||connections.length>=MAX||linkRows.length){
+    if(!selected||peerPresent.has(peerChoice)||connections.length>=MAX||linkRows.length||capacityMode){
       setLocalError("IC040_P2_LINK_DECISION_INVALID");return;
     }
     setConnections(prev=>[...prev,{...selected,acknowledgePeerCell:false}]);
@@ -224,7 +232,8 @@ export function OfficeReviewedNodeChoices({
     const portA=linkSourcePortChoice===""?null:Number(linkSourcePortChoice);
     const portB=linkTargetPortChoice===""?null:Number(linkTargetPortChoice);
     const columns=[from,to,...(portA===null?[]:[portA]),...(portB===null?[]:[portB])];
-    if(!row||linkRows.length>=MAX||connections.length>0||
+    if(!row||linkRows.length>=linkLimit||connections.length>0||
+      (capacityMode&&(portA===null||portB===null))||
       linkFromChoice===""||linkToChoice===""||
       !selectedLinkCells.includes(from)||!selectedLinkCells.includes(to)||
       (portA===null)!==(portB===null)||
@@ -243,6 +252,18 @@ export function OfficeReviewedNodeChoices({
     setLinkRows(prev=>prev.map(x=>linkRowKey(x)===key?{...x,...patch}:x));clear();
   };
   const removeLinkRow=key=>{setLinkRows(prev=>prev.filter(x=>linkRowKey(x)!==key));clear();};
+  const changeCapacityMode=checked=>{
+    if(busy||sending)return;
+    setCapacityMode(checked);
+    // Changing profile must discard ALL prior cell/role/peer/port consents:
+    // ordinal limits and the decision shape have changed.
+    setNodes([]);setConnections([]);setLinkRows([]);setPortSelections([]);
+    setChoice("");setPeerChoice("");setPortLinkChoice("");
+    setSourcePortChoice("");setPeerPortChoice("");
+    setLinkRowChoice("");setLinkFromChoice("");setLinkToChoice("");
+    setLinkSourcePortChoice("");setLinkTargetPortChoice("");
+    clear();
+  };
   const submit=async()=>{
     if(!canSubmit)return;
     setSending(true);setBusy(true);setError("");setLocalError("");
@@ -252,6 +273,9 @@ export function OfficeReviewedNodeChoices({
     if(linkRows.length){
       decision.linkRows=linkRows.map(x=>({...x}));
       decision.acknowledgeModeledLinkRows=linkRowAck;
+      if(capacityMode){
+        decision.capacityProfile="office.reviewed-network-tables.six-by-five.v1";
+      }
     }
     // Keep P1a/P1b/P2/P3 exact legacy shapes when P4 is not selected.
     if(connections.length){
@@ -273,6 +297,18 @@ export function OfficeReviewedNodeChoices({
       "Tables: "+result.preview.tables.length+" · structural cells: "+result.preview.totalCells),
     e("p",{"data-office-p1b-truth-boundary":"true"},
       "Only first four tables, first 20 non-header rows and first four cells per row can be selected. Only individually acknowledged peer cells and optional separately reviewed port cells may become modeled links/interface references; no unselected source text, OS, IP, physical cabling, Runtime or Engine PASS is inferred."),
+    e("section",{"data-office-p5-capacity":"REVIEW_REQUIRED"},
+      e("label",null,e("input",{type:"checkbox",
+        "data-office-p5-capacity-toggle":"true",checked:capacityMode,
+        disabled:busy||sending,onChange:event=>changeCapacityMode(event.currentTarget.checked)}),
+        " Enable separately reviewed P5: exactly 6 original device IDs and "+
+        "5 port-annotated Links-table rows (not P1b/P2/P3/P4)."),
+      e("p",{"data-office-p5-capacity-boundary":"UNVERIFIED"},
+        "P5 requires SIX individually approved original node-ID cells "+
+        "and FIVE independently reviewed two-endpoint Links-table rows, "+
+        "each with separately approved local and remote port cells. "+
+        "Changing profile clears all earlier selections and consents. "+
+        "No physical cables, inferred connectivity or Engine PASS.")),
     e("label",null,"Original cell position (never the header)",
       e("select",{value:choice,disabled:busy||sending,
         "data-office-p1b-cell-ordinal":"true",onChange:event=>{
@@ -282,10 +318,10 @@ export function OfficeReviewedNodeChoices({
         ...choices.map(n=>e("option",{key:keyOf(n),value:keyOf(n)},
           "Table "+(n.tableOrdinal+1)+" · row "+(n.rowOrdinal+1)+
           " · cell "+(n.nodeIdCellOrdinal+1))))),
-    e("button",{type:"button",disabled:!choice||present.has(choice)||nodes.length>=MAX||busy||sending,
+    e("button",{type:"button",disabled:!choice||present.has(choice)||nodes.length>=nodeLimit||busy||sending,
       "data-office-p1b-add":"true",onClick:add},"Add cell for individual consent"),
     e("p",{"data-office-p1b-selected-count":String(nodes.length)},
-      "Cells selected: "+nodes.length+" / "+MAX+"; no unselected cell may become a node."),
+      "Cells selected: "+nodes.length+" / "+nodeLimit+"; no unselected cell may become a node."),
     e("ol",{className:"validation-list"},...nodes.map(n=>{
       const key=keyOf(n);
       return e("li",{key,"data-office-p1b-selection":key},
@@ -309,7 +345,7 @@ export function OfficeReviewedNodeChoices({
       "It must contain another selected node ID, or import BLOCKS. At most four connections; "+
       "no port, cable, interface, physical verification or network PASS inferred."),
     e("label",null,"Original row's peer cell position",
-      e("select",{value:peerChoice,disabled:busy||sending||nodes.length<2||linkRows.length>0,
+      e("select",{value:peerChoice,disabled:busy||sending||nodes.length<2||linkRows.length>0||capacityMode,
         "data-office-p2-peer-choice":"true",
         onChange:event=>{setPeerChoice(event.currentTarget.value);clear();}},
         e("option",{value:""},"Choose explicitly documented peer cell…"),
@@ -437,13 +473,14 @@ export function OfficeReviewedNodeChoices({
           ...selectedLinkCells.map(index=>e("option",{key:index,value:String(index)},
             "Original cell "+(index+1)))))),
       e("button",{type:"button",disabled:busy||sending||!selectedLinkRow||
-        connections.length>0||linkRows.length>=MAX||linkRowPresent.has(linkRowChoice)||
+        connections.length>0||linkRows.length>=linkLimit||linkRowPresent.has(linkRowChoice)||
+        (capacityMode&&(linkSourcePortChoice===""||linkTargetPortChoice===""))||
         linkFromChoice===""||linkToChoice===""||linkFromChoice===linkToChoice||
         (linkSourcePortChoice==="")!==(linkTargetPortChoice===""),
         "data-office-p4-add":"true",onClick:addLinkRow},
         "Review both endpoints of this original Links row"),
       e("p",{"data-office-p4-count":String(linkRows.length)},
-        "Individually selected Links rows: "+linkRows.length+" / "+MAX),
+        "Individually selected Links rows: "+linkRows.length+" / "+linkLimit),
       e("ol",{className:"validation-list"},...linkRows.map(link=>{
         const k=linkRowKey(link),portPair=link.sourcePortCellOrdinal!==null;
         return e("li",{key:k,"data-office-p4-selection":k},

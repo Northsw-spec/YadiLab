@@ -74,13 +74,19 @@ function cellKey(row:OfficeReviewedLinkRowSelection,col:number):string {
 }
 export async function mapReviewedOfficeOriginalToLinkRows(
   original:Uint8Array,decision:OfficeReviewedLinkRowsDecision,
+  capacity?:{readonly maxNodes:6;readonly maxLinks:5},
 ):Promise<OfficeReviewedLinkRowsCandidate> {
   const sha=typeof decision?.sourceSha256==="string"&&SHA.test(decision.sourceSha256)
     ?decision.sourceSha256:"";
+  if(capacity!==undefined &&
+    (!exact(capacity,["maxNodes","maxLinks"])||
+      capacity.maxNodes!==6||capacity.maxLinks!==5))
+    return blocked(sha,"IC040_P5_CAPACITY_DECISION_INVALID");
+  const linkLimit=capacity?.maxLinks??OFFICE_REVIEWED_NODES_MAX;
   if(!(original instanceof Uint8Array)||!exact(decision,decisionKeys)||
     (decision.format!=="docx"&&decision.format!=="odt")||!sha||
     !Array.isArray(decision.nodes)||!Array.isArray(decision.linkRows)||
-    decision.linkRows.length<1||decision.linkRows.length>OFFICE_REVIEWED_NODES_MAX||
+    decision.linkRows.length<1||decision.linkRows.length>linkLimit||
     decision.acknowledgeModeledResources!==true||
     decision.acknowledgeModeledLinkRows!==true)
     return blocked(sha,"IC040_P4_DECISION_INVALID");
@@ -116,7 +122,8 @@ export async function mapReviewedOfficeOriginalToLinkRows(
     acknowledgeModeledResources:decision.acknowledgeModeledResources,
   };
   try {
-    const base=await mapReviewedOfficeOriginalToNodes(original,nodeDecision);
+    const base=await mapReviewedOfficeOriginalToNodes(original,nodeDecision,
+      capacity?.maxNodes??OFFICE_REVIEWED_NODES_MAX);
     if(base.status!=="READY_FOR_COMPILATION"||!base.source)
       return blocked(sha,base.diagnostics[0]?.code??"IC040_P4_NODE_BLOCKED");
     const structure=decision.format==="docx"

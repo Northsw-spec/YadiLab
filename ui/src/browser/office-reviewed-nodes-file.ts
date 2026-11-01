@@ -8,6 +8,8 @@ import { mapReviewedOfficeOriginalToPorts, type OfficeReviewedPortsDecision,
   type OfficeReviewedPortsCandidate } from "../../../enterprise-import/src/office-reviewed-port-candidate.js";
 import { mapReviewedOfficeOriginalToLinkRows, type OfficeReviewedLinkRowsDecision,
   type OfficeReviewedLinkRowsCandidate } from "../../../enterprise-import/src/office-reviewed-link-row-candidate.js";
+import { mapReviewedOfficeOriginalToSixByFive, type OfficeReviewedSixByFiveDecision,
+  type OfficeReviewedSixByFiveCandidate } from "../../../enterprise-import/src/office-reviewed-six-by-five-candidate.js";
 import { EnterpriseImportError } from "../../../enterprise-import/src/types.js";
 
 export interface OfficeReviewedReadableFile {
@@ -57,9 +59,9 @@ export async function previewOfficeNodesFile(file: OfficeReviewedReadableFile): 
 export async function verifyOfficeCandidateFile(
   file: OfficeReviewedReadableFile,
   expected: OfficeReviewedPreview,
-  decision: OfficeReviewedNodesDecision | OfficeReviewedConnectionsDecision | OfficeReviewedPortsDecision | OfficeReviewedLinkRowsDecision,
+  decision: OfficeReviewedNodesDecision | OfficeReviewedConnectionsDecision | OfficeReviewedPortsDecision | OfficeReviewedLinkRowsDecision | OfficeReviewedSixByFiveDecision,
   isCurrent: () => boolean,
-): Promise<OfficeReviewedNodesCandidate | OfficeReviewedConnectionsCandidate | OfficeReviewedPortsCandidate | OfficeReviewedLinkRowsCandidate> {
+): Promise<OfficeReviewedNodesCandidate | OfficeReviewedConnectionsCandidate | OfficeReviewedPortsCandidate | OfficeReviewedLinkRowsCandidate | OfficeReviewedSixByFiveCandidate> {
   if (typeof isCurrent !== "function" || !isCurrent()) return deny("IC040_P1B_STALE");
   if (!expected || !expected.preview || (expected.format !== "docx" && expected.format !== "odt") ||
       expected.format !== decision?.format ||
@@ -77,8 +79,10 @@ export async function verifyOfficeCandidateFile(
   if (JSON.stringify(refreshed) !== JSON.stringify(expected.preview)) {
     return deny("IC040_P1B_SOURCE_CHANGED");
   }
-  const mapped = "linkRows" in decision
-    ? await mapReviewedOfficeOriginalToLinkRows(raw, decision)
+  const mapped = "capacityProfile" in decision
+    ? await mapReviewedOfficeOriginalToSixByFive(raw, decision)
+    : "linkRows" in decision
+      ? await mapReviewedOfficeOriginalToLinkRows(raw, decision)
     : "portSelections" in decision
       ? await mapReviewedOfficeOriginalToPorts(raw, decision)
     : "connections" in decision
