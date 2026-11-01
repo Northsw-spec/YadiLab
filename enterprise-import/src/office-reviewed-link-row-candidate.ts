@@ -74,12 +74,16 @@ function cellKey(row:OfficeReviewedLinkRowSelection,col:number):string {
 }
 export async function mapReviewedOfficeOriginalToLinkRows(
   original:Uint8Array,decision:OfficeReviewedLinkRowsDecision,
-  capacity?:{readonly maxNodes:6;readonly maxLinks:5},
+  capacity?:{readonly maxNodes:6;readonly maxLinks:5;readonly allowParallelPorts?:true},
 ):Promise<OfficeReviewedLinkRowsCandidate> {
   const sha=typeof decision?.sourceSha256==="string"&&SHA.test(decision.sourceSha256)
     ?decision.sourceSha256:"";
+  // Existing P5/P6 capability object remains EXACT; only the explicit P7
+  // dispatcher may opt into duplicate node pairs with unique original ports.
+  const parallel=capacity?.allowParallelPorts===true;
   if(capacity!==undefined &&
-    (!exact(capacity,["maxNodes","maxLinks"])||
+    (!(parallel?exact(capacity,["maxNodes","maxLinks","allowParallelPorts"]):
+      exact(capacity,["maxNodes","maxLinks"]))||
       capacity.maxNodes!==6||capacity.maxLinks!==5))
     return blocked(sha,"IC040_P5_CAPACITY_DECISION_INVALID");
   const linkLimit=capacity?.maxLinks??OFFICE_REVIEWED_NODES_MAX;
@@ -132,6 +136,7 @@ export async function mapReviewedOfficeOriginalToLinkRows(
     const known=new Set(base.source.resources.map(resource=>resource.id));
     const perResource=new Map<string,Set<string>>();
     const seenPairs=new Set<string>();
+    const seenOriginalPortPairs=new Set<string>();
     const origins:OfficeReviewedLinkRowOrigin[]=[];
     const ports:OfficeReviewedLinkRowsCandidate["portOrigins"][number][]=[];
     const connections:Scenariosourceconnection[]=[];
@@ -157,7 +162,13 @@ export async function mapReviewedOfficeOriginalToLinkRows(
         return blocked(sha,"IC040_P4_LINK_ENDPOINT_UNKNOWN");
       if(from===to)return blocked(sha,"IC040_P4_SELF_CONNECTION");
       const pair=[from,to].sort().join("\u0000");
-      if(seenPairs.has(pair))return blocked(sha,"IC040_P4_DUPLICATE_ENDPOINT_PAIR");
+      if(seenPairs.has(pair)&&!parallel)
+        return blocked(sha,"IC040_P4_DUPLICATE_ENDPOINT_PAIR");
+      // P7 may have multiple rows for one *device* pair only when all
+      // source+target port cells are separately consented and non-reused.
+      if(seenPairs.has(pair)&&parallel&&
+        (row.sourcePortCellOrdinal===null||row.targetPortCellOrdinal===null))
+        return blocked(sha,"IC040_P7_PARALLEL_PORTS_REQUIRED");
       seenPairs.add(pair);
       let sourcePort:string|undefined,targetPort:string|undefined;
       let sourcePortLocator:OfficeOriginalLocator|undefined;
@@ -169,6 +180,15 @@ export async function mapReviewedOfficeOriginalToLinkRows(
         sourcePortLocator=a.locator;targetPortLocator=b.locator;
         if(!ID.test(sourcePort)||!ID.test(targetPort))
           return blocked(sha,"IC040_P4_PORT_INVALID");
+        if(parallel){
+          // Order-independent physical-port identity: reversing FROM/TO does
+          // not make the same two original endpoint ports a new cable.
+          const distinctPortPair=[[from,sourcePort],[to,targetPort]]
+            .map(([resource,port])=>resource+"\u0000"+port).sort().join("\u0001");
+          if(seenOriginalPortPairs.has(distinctPortPair))
+            return blocked(sha,"IC040_P7_DUPLICATE_PORT_PAIR");
+          seenOriginalPortPairs.add(distinctPortPair);
+        }
         for(const [id,port] of [[from,sourcePort],[to,targetPort]] as const){
           const ids=perResource.get(id)??new Set<string>();
           if(ids.has(port))return blocked(sha,"IC040_P4_PORT_REUSED");
