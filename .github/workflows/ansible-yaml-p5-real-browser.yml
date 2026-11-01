@@ -28,6 +28,24 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      # Correct only temporary Ubuntu APT mirror metadata; keep pinned
+      # Playwright, full Chromium OS dependencies and the browser tests intact.
+      - name: Normalize Ubuntu archive mirror for pinned Chromium
+        run: |
+          set -Eeuo pipefail
+          for apt_source in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+            if [ -f "$apt_source" ]; then
+              sudo sed -i \
+                -e 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+                -e 's|https://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+                "$apt_source"
+            fi
+          done
+          if sudo grep -R -l 'azure.archive.ubuntu.com' /etc/apt/sources.list.d /etc/apt/sources.list 2>/dev/null; then
+            echo 'FAIL browser CI: unreachable Azure mirror still configured'
+            exit 1
+          fi
+          echo 'PASS ephemeral Ubuntu package mirror normalized'
       - name: Isolated pinned Playwright and Chromium
         run: |
           python3 -m venv /tmp/ansible-yaml-p5-venv

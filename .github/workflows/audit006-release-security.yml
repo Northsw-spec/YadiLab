@@ -52,6 +52,7 @@ jobs:
           set -Eeuo pipefail
           python3 -m venv /tmp/audit006-venv
           /tmp/audit006-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/audit006-venv/bin/python -m playwright install --with-deps chromium
       - name: Actual mounted UI identity and fake-token negative acceptance
         env:

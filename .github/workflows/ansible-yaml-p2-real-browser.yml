@@ -39,6 +39,7 @@ jobs:
         run: |
           python3 -m venv /tmp/yadilab-ansible-browser-venv
           /tmp/yadilab-ansible-browser-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/yadilab-ansible-browser-venv/bin/python -m playwright install --with-deps chromium
       - name: Validate source contracts and build the actual YadiLab application
         run: |

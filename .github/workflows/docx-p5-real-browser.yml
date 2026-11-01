@@ -33,6 +33,7 @@ jobs:
         run: |
           python3 -m venv /tmp/docx-p5-venv
           /tmp/docx-p5-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/docx-p5-venv/bin/python -m playwright install --with-deps chromium
       - name: Compile and run independently frozen P1-P5 security/source tests
         run: |

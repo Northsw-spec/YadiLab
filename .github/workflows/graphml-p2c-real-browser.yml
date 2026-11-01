@@ -41,6 +41,26 @@ jobs:
           grep -q 'BLOCKED GRAPHML-P2C Parrot: TARGET_IS_NOT_PARROT' /tmp/parrot-target-gate.log
       - name: Install exact application dependencies
         run: npm ci
+      # Ubuntu 24.04 GitHub runner sometimes points APT at an unreachable
+      # azure.archive.ubuntu.com mirror, hanging until the 35 min job timeout.
+      # Switch only runner-local APT metadata to the standard Ubuntu archive,
+      # preserving pinned Playwright and full --with-deps verification.
+      - name: Normalize Ubuntu package mirror for browser dependencies
+        run: |
+          set -Eeuo pipefail
+          for apt_source in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+            if [ -f "$apt_source" ]; then
+              sudo sed -i \
+                -e 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+                -e 's|https://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+                "$apt_source"
+            fi
+          done
+          if sudo grep -R -l 'azure.archive.ubuntu.com' /etc/apt/sources.list.d /etc/apt/sources.list 2>/dev/null; then
+            echo 'FAIL browser CI: unreachable Azure Ubuntu archive still configured'
+            exit 1
+          fi
+          echo 'PASS runner-local Ubuntu package mirror normalization'
       - name: Install isolated pinned acceptance-only Playwright and Chromium
         run: |
           python3 -m venv /tmp/yadilab-graphml-browser-venv

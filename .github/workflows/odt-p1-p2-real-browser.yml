@@ -34,6 +34,7 @@ jobs:
         run: |
           python3 -m venv /tmp/odt-p2-venv
           /tmp/odt-p2-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/odt-p2-venv/bin/python -m playwright install --with-deps chromium
       - name: Strict TS, independent ODF stored-ZIP P1, React SSR P2 and DOCX regression
         run: |
