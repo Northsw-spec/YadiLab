@@ -9,9 +9,10 @@ function parseIpv4(text: string): ParsedIpAddress | undefined {
   if (parts.length !== 4) return undefined;
   let value = 0n;
   for (const part of parts) {
-    if (!/^\d{1,3}$/.test(part)) return undefined;
+    // Accept canonical, unambiguous decimal octets (not octal-like text).
+    if (!/^(?:0|[1-9][0-9]{0,2})$/.test(part)) return undefined;
     const n = Number(part);
-    if (n < 0 || n > 255 || String(n) !== String(Number(part))) return undefined;
+    if (n > 255) return undefined;
     value = (value << 8n) | BigInt(n);
   }
   return { family: 4, bits: 32, value };
@@ -37,8 +38,10 @@ function parseIpv6(text: string): ParsedIpAddress | undefined {
   }
   if ((source.match(/::/g) ?? []).length > 1) return undefined;
   const [leftRaw, rightRaw] = source.split("::");
-  const left = leftRaw ? leftRaw.split(":").filter(Boolean) : [];
-  const right = rightRaw !== undefined && rightRaw.length > 0 ? rightRaw.split(":").filter(Boolean) : [];
+  // Preserve unexpected empty hextets, rather than normalizing a malformed
+  // ":" or ":::" sequence into an apparently valid IPv6 address.
+  const left = leftRaw ? leftRaw.split(":") : [];
+  const right = rightRaw !== undefined && rightRaw.length > 0 ? rightRaw.split(":") : [];
   const valid = (part: string) => /^[0-9a-f]{1,4}$/.test(part);
   if (!left.every(valid) || !right.every(valid)) return undefined;
   let parts: string[];
@@ -72,8 +75,11 @@ export function parseCidr(text: string): ParsedCidr | undefined {
   const addressText = slash >= 0 ? text.slice(0, slash) : text;
   const address = parseIpAddress(addressText);
   if (!address) return undefined;
-  const prefix = slash >= 0 ? Number(text.slice(slash + 1)) : address.bits;
-  if (!Number.isInteger(prefix) || prefix < 0 || prefix > address.bits) return undefined;
+  // Number("") === 0: a missing mask must NEVER silently become /0.
+  const prefixText = slash >= 0 ? text.slice(slash + 1) : undefined;
+  if (prefixText !== undefined && !/^(?:0|[1-9][0-9]{0,2})$/.test(prefixText)) return undefined;
+  const prefix = prefixText !== undefined ? Number(prefixText) : address.bits;
+  if (!Number.isInteger(prefix) || prefix > address.bits) return undefined;
   const shift = BigInt(address.bits - prefix);
   const network = shift === 0n ? address.value : (address.value >> shift) << shift;
   return { address, prefix, network };

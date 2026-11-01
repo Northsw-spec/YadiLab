@@ -3,7 +3,11 @@ export function deepCloneJson<T>(value: T): T {
   if (value !== null && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      if (item !== undefined) out[key] = deepCloneJson(item);
+      // An own JSON "__proto__" key is data, not a request to change
+      // this clone's prototype. Define an own property (no setter call).
+      if (item !== undefined) Object.defineProperty(out, key, {
+        value: deepCloneJson(item), enumerable: true, writable: true, configurable: true,
+      });
     }
     return out as T;
   }
