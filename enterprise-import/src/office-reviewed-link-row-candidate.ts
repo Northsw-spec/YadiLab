@@ -74,17 +74,19 @@ function cellKey(row:OfficeReviewedLinkRowSelection,col:number):string {
 }
 export async function mapReviewedOfficeOriginalToLinkRows(
   original:Uint8Array,decision:OfficeReviewedLinkRowsDecision,
-  capacity?:{readonly maxNodes:6;readonly maxLinks:5;readonly allowParallelPorts?:true},
+  capacity?:{readonly maxNodes:6|8;readonly maxLinks:5|7;readonly allowParallelPorts?:true},
 ):Promise<OfficeReviewedLinkRowsCandidate> {
   const sha=typeof decision?.sourceSha256==="string"&&SHA.test(decision.sourceSha256)
     ?decision.sourceSha256:"";
-  // Existing P5/P6 capability object remains EXACT; only the explicit P7
-  // dispatcher may opt into duplicate node pairs with unique original ports.
+  // Existing P5/P6 6/5 capacity remains exact. P7 6/5 allows parallel ports.
+  // Only explicitly opted-in P8 can request 8/7 with parallel port guards.
   const parallel=capacity?.allowParallelPorts===true;
-  if(capacity!==undefined &&
-    (!(parallel?exact(capacity,["maxNodes","maxLinks","allowParallelPorts"]):
-      exact(capacity,["maxNodes","maxLinks"]))||
-      capacity.maxNodes!==6||capacity.maxLinks!==5))
+  const oldCap=capacity?.maxNodes===6&&capacity.maxLinks===5&&
+    (parallel?exact(capacity,["maxNodes","maxLinks","allowParallelPorts"]):
+      exact(capacity,["maxNodes","maxLinks"]));
+  const expandedCap=capacity?.maxNodes===8&&capacity.maxLinks===7&&parallel&&
+    exact(capacity,["maxNodes","maxLinks","allowParallelPorts"]);
+  if(capacity!==undefined&&!oldCap&&!expandedCap)
     return blocked(sha,"IC040_P5_CAPACITY_DECISION_INVALID");
   const linkLimit=capacity?.maxLinks??OFFICE_REVIEWED_NODES_MAX;
   if(!(original instanceof Uint8Array)||!exact(decision,decisionKeys)||
