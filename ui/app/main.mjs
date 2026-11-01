@@ -527,7 +527,6 @@ function ReactFlowGeometryRepair({ panelRef, nodeIds, revision }) {
     let firstFrame;
     let secondFrame;
     let retryInterval;
-    let restoreEdgeOrderTimer;
     let refreshCount = 0;
     const refresh = () => {
       const panel = panelRef.current;
@@ -548,13 +547,14 @@ function ReactFlowGeometryRepair({ panelRef, nodeIds, revision }) {
         // React Flow mutates its internal lookup while measuring. Clone the
         // lookup to publish the geometry change to EdgeRenderer in controlled
         // mode, where no onNodesChange callback is supplied by the app.
-        const edgeOrder = next.edges.length > 1 ? [...next.edges].reverse() : [...next.edges];
-        store.setState({ nodeLookup: new Map(next.nodeLookup), nodesInitialized, edges: edgeOrder });
-        if (next.edges.length > 1) {
-          restoreEdgeOrderTimer = globalThis.setTimeout(() => {
-            store.setState({ edges: [...next.edges] });
-          }, 0);
-        }
+        // Publish the current edge set atomically with fresh measured geometry.
+        // Never reverse and asynchronously restore a captured edge array: a
+        // scheduled restore can overwrite a subsequent imported Builder graph.
+        store.setState({
+          nodeLookup: new Map(next.nodeLookup),
+          nodesInitialized,
+          edges: [...next.edges],
+        });
       } else if (refreshCount++ >= 30 && retryInterval !== undefined) {
         globalThis.clearInterval(retryInterval);
       }
@@ -568,7 +568,6 @@ function ReactFlowGeometryRepair({ panelRef, nodeIds, revision }) {
       if (firstFrame !== undefined) globalThis.cancelAnimationFrame?.(firstFrame);
       if (secondFrame !== undefined) globalThis.cancelAnimationFrame?.(secondFrame);
       if (retryInterval !== undefined) globalThis.clearInterval(retryInterval);
-      if (restoreEdgeOrderTimer !== undefined) globalThis.clearTimeout(restoreEdgeOrderTimer);
     };
   }, [panelRef, nodeIdentity, revision, store]);
   return null;
