@@ -184,7 +184,7 @@ export async function mapReviewedOfficeOriginalToLinkRows(
           // Order-independent physical-port identity: reversing FROM/TO does
           // not make the same two original endpoint ports a new cable.
           const distinctPortPair=[[from,sourcePort],[to,targetPort]]
-            .map(([resource,port])=>resource+"\\u0000"+port).sort().join("\\u0001");
+            .map(([resource,port])=>resource+"\u0000"+port).sort().join("\u0001");
           if(seenOriginalPortPairs.has(distinctPortPair))
             return blocked(sha,"IC040_P7_DUPLICATE_PORT_PAIR");
           seenOriginalPortPairs.add(distinctPortPair);
