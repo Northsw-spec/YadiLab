@@ -151,10 +151,10 @@ for(const [format,make] of [["docx",docx],["odt",odt]]){
  }),()=>true),"IC040_P6_CAPACITY_DECISION_INVALID");
  await deny(verifyOfficeCandidateFile(f,preview,decision(format,sha(original),{
   nodes:nodes.slice(0,5),
- }),()=>true),"IC040_P5_CAPACITY_DECISION_INVALID");
+ }),()=>true),"IC040_P6_CAPACITY_DECISION_INVALID");
  await deny(verifyOfficeCandidateFile(f,preview,decision(format,sha(original),{
   acknowledgeModeledLinkRows:false,
- }),()=>true),"IC040_P5_CAPACITY_DECISION_INVALID");
+ }),()=>true),"IC040_P6_CAPACITY_DECISION_INVALID");
  const unknown=await make([devices,links.map((row,i)=>i===5?[row[0],"ghost",row[2],row[3]]:row)]);
  const uf=file("network."+format,unknown),up=await previewOfficeNodesFile(uf);
  await deny(verifyOfficeCandidateFile(uf,up,decision(format,sha(unknown)),()=>true),
