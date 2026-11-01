@@ -27,6 +27,19 @@ A document parser or planned registry entry never equals full import, network vi
 
 Updates to this active priority or its acceptance criteria must be made by reviewed, documented GitHub changes and reflected in issue #3. Root AGENTS controls developer workflow; the plan controls import sequence and semantic scope. Neither overrides fresh current main code as source authority.
 
+## YADILAB-CI-CONCURRENCY-001 — superseded PR workflow cancellation (owner-approved; NOT YET IMPLEMENTED)
+
+**Permanent owner decision (2026-11-01). Status: APPROVED / IMPLEMENTATION_PENDING.** Every future YadiLab development session MUST read this decision and [issue #3](https://github.com/Northsw-spec/YadiLab/issues/3). Do not describe concurrency controls as deployed merely because this policy is documented.
+
+**Required delivery order:** Do not change PR #92 or create more workflow runs to implement this policy while IC-030 P2b is waiting for its exact-head CI. First verify all required P2b checks, protected squash merge, and the independent exact-new-`main` Linux release (including real mounted Chromium identity and artifacts). **Only after that verified delivery**, implement this CI infrastructure improvement in a **separate reviewed PR** from the then-current protected `main`, with frozen source and acceptance oracles before CI edits.
+
+**Mandatory implementation and acceptance contract:**
+1. Configure GitHub Actions `concurrency` and `cancel-in-progress` so that new commits to **the same pull request** cancel superseded, unfinished `pull_request` test runs **within the same workflow**. Cancellation groups must isolate both workflow identity and PR identity. Do not let different PRs or separate workflows cancel each other.
+2. **Do not cancel or suppress** protected `main` runs, independent postmerge Linux-release runs, tagged releases, manual/dispatch evidence runs, or the latest PR-head run. For non-PR events, use isolated groups with cancellation disabled or retain separate non-canceling behavior. Never weaken branch protection or bypass required `yadilab-required-ci`.
+3. Preserve the full existing test, dependency, Playwright `--with-deps`, real Chromium, Engine, import, negative/adversarial, AUDIT-006 and source/provenance verification gates. A cancelled obsolete job is **CANCELLED**, not a test PASS. The newest PR commit must complete its own mandatory checks before merge.
+4. Validate with **actual GitHub Actions** on a controlled test PR: after two successive commits, the older run is cancelled while the newest executes all mandatory tests; no cross-PR/cross-workflow cancellation; `main` and postmerge release evidence remain unaffected. Record exact SHAs, run/job URLs, cancellation reason, verified latest-head SUCCESS and independent release in issue #3.
+5. Update this instruction and the import masterplan after verified implementation; until then report `IMPLEMENTATION_PENDING` accurately. Do not re-trigger CI merely to poll status, and do not require manual Parrot tests for Ubuntu-automatable assertions.
+
 ## Mandatory checkpoint handoff
 
 Record the current `main` SHA at start; branch/PR URL; scope and source paths; tests with actual PASS/FAIL/NOT_RUN; CI run URL; risk or unverified items; final code commit SHA; whether `main` includes it. Do not announce delivery as finished if any code exists only in a temporary environment. Do not mix Google Drive document upload with GitHub code delivery.
