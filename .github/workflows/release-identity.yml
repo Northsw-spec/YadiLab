@@ -29,6 +29,8 @@ jobs:
         run: npm run test:release-identity
       - name: Source regression tests
         run: |
+          go test -count=1 -v ./launcher/... -run '^TestAudit007P5'
+          go test ./launcher/...
           npm run test:network-topology-import
           npm run test:imported-probes
           npm run test:ic000-capabilities

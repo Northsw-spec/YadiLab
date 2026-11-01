@@ -6,7 +6,6 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,11 +62,10 @@ func (s *staticServer) resolve(requestPath string) (string, error) {
 	if strings.ContainsRune(requestPath, '\x00') || strings.Contains(requestPath, "\\") {
 		return "", errors.New("invalid path")
 	}
-	decoded, err := url.PathUnescape(requestPath)
-	if err != nil {
-		return "", errors.New("invalid encoding")
-	}
-	clean := filepath.Clean(filepath.FromSlash("/" + decoded))
+	// r.URL.Path has already been percent-decoded exactly once by net/http.
+	// A second decode would reinterpret literal "%2f" or "%2e" as path
+	// separators/dot segments, aliasing a different resource.
+	clean := filepath.Clean(filepath.FromSlash("/" + requestPath))
 	rel := strings.TrimPrefix(clean, string(filepath.Separator))
 	candidate := filepath.Join(s.root, rel)
 	info, err := os.Stat(candidate)
