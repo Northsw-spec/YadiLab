@@ -1075,7 +1075,7 @@ def case_p8_parallel(browser,url,ext):
         require(page.locator(".app-frame").get_attribute("data-runtime-scenario-hash")=="builder",
                 "P8 imported real Engine Runtime instead of unverified modeled Builder")
         clean(errors,external)
-        return {"format":ext,"case":"p8_five_exact_svg_links_two_parallel_distinct_paths","status":"PASS"}
+        return {"format":ext,"case":"p8_seven_exact_svg_links_two_parallel_distinct_paths","status":"PASS"}
     finally:page.close()
 
 def case_p8_bad_parallel(browser,url,ext,kind):
