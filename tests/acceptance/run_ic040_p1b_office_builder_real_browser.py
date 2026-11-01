@@ -176,6 +176,138 @@ def case_invalid(browser,url,ext,original):
         return {"format":ext,"case":"invalid_new_zip_clears_old_consents","status":"PASS"}
     finally:page.close()
 
+
+# P2 uses the same actual compiled Chromium and original-source reread chain.
+# An explicitly selected original peer cell is NOT proof of physical cabling.
+def make_reviewed_peers(original,part,ext,missing=False,reciprocal=False):
+    require(not (missing and reciprocal),"Mutually exclusive source fixture variants")
+    second_peer=b"fw01" if reciprocal else b"rt01"
+    target=b"ghost" if missing else b"sw01"
+    if ext=="docx":
+        def xmlcell(value):
+            return b"<w:tc><w:tcPr/><w:p><w:r><w:t>"+value+b"</w:t></w:r></w:p></w:tc>"
+        additions=b"".join(b"<w:tr>"+xmlcell(a)+xmlcell(b)+b"</w:tr>" for a,b in
+                           [(b"sw01",second_peer),(b"rt01",b"")])
+        closing=b"</w:tbl>"
+        canary=DOCX_CANARY.encode()
+    else:
+        def xmlcell(value):
+            return b'<table:table-cell office:value-type="string"><text:p>'+value+b"</text:p></table:table-cell>"
+        additions=b"".join(b"<table:table-row>"+xmlcell(a)+xmlcell(b)+b"</table:table-row>" for a,b in
+                           [(b"sw01",second_peer),(b"rt01",b"")])
+        closing=b"</table:table>"
+        canary=ODT_CANARY.encode()
+    out=io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(original),"r") as src,zipfile.ZipFile(out,"w") as dest:
+        for item in src.infolist():
+            data=src.read(item.filename)
+            if item.filename==part:
+                require(b"node01" in data and canary in data and closing in data,
+                        "P2 original document must contain exact source rows")
+                data=data.replace(b"node01",b"fw01").replace(canary,target)
+                data=data.replace(closing,additions+closing,1)
+            item.extra=b""
+            dest.writestr(item,data)
+    return out.getvalue()
+
+def choose_reviewed_peers(page):
+    for offset,role in enumerate(["network.firewall","network.switch","network.router"]):
+        key="0:"+str(offset+1)+":0"
+        page.locator('[data-office-p1b-cell-ordinal="true"]').select_option(key)
+        page.locator('[data-office-p1b-add="true"]').click()
+        page.locator('[data-office-p1b-role="'+key+'"]').select_option(role)
+        page.locator('[data-office-p1b-cell-ack="'+key+'"]').check()
+    expect(page.locator('[data-office-p1b-selected-count="3"]')).to_be_visible(timeout=10000)
+    for key in ["0:1","1:1"]:
+        page.locator('[data-office-p2-peer-choice="true"]').select_option(key)
+        page.locator('[data-office-p2-add="true"]').click()
+        page.locator('[data-office-p2-peer-ack="'+key+'"]').check()
+    expect(page.locator('[data-office-p2-selected-count="2"]')).to_be_visible()
+    require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+            "P2 enabled commit before both independent modeled acknowledgments")
+    page.locator('[data-office-p2-modeled-ack="true"]').check()
+    page.locator('[data-office-p1b-modeled-ack="true"]').check()
+    expect(page.locator('[data-office-p1b-confirm="true"]')).to_be_enabled()
+
+def case_p2_real_links(browser,url,ext,original):
+    page,errors,external=setup(browser,url)
+    try:
+        opening(page);choose(page,ext,original);choose_reviewed_peers(page)
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-panel]')).to_have_count(0,timeout=45000)
+        source=exported_source(page)
+        require(source["scenarioId"]=="office_reviewed","Wrong Office Builder scenario")
+        types={x["id"]:x["type"] for x in source["resources"]}
+        require(types=={"fw01":"network.firewall","sw01":"network.switch","rt01":"network.router"},
+                "P2 wrong or missing original node IDs/roles")
+        pairs={(x["from"]["resource"],x["to"]["resource"]) for x in source["connections"]}
+        require(pairs=={("fw01","sw01"),("sw01","rt01")} and len(source["connections"])==2,
+                "P2 wrong/extra/silent missing original documented peer link")
+        require(all(not x["from"].get("port") and not x["to"].get("port")
+                    for x in source["connections"]),"P2 invented source-absent ports")
+        require(source["tests"]==[] and source["completion"]["path"]=="office_manual_verification",
+                "P2 self-certified Engine PASS from documented peer text")
+        panel=page.locator(".topology-panel")
+        expect(panel).to_have_attribute("data-topology-edge-count","2",timeout=30000)
+        nodes=panel.locator('.react-flow__node[data-id]')
+        expect(nodes).to_have_count(3,timeout=30000)
+        seen={}
+        for i in range(nodes.count()):
+            node=nodes.nth(i)
+            key=node.get_attribute("data-id")
+            shape=node.locator(".resource-node[data-device-family]")
+            require(shape.count()==1 and key not in seen,"P2 duplicate or missing drawn node")
+            seen[key]=shape.get_attribute("data-device-family")
+        require(seen=={"fw01":"firewall","sw01":"switch","rt01":"router"},
+                "P2 actual drawn device identities/families wrong")
+        edges=panel.locator('.react-flow__edge[data-id]')
+        expect(edges).to_have_count(2,timeout=30000)
+        actual=set()
+        for i in range(edges.count()):
+            path=edges.nth(i).locator("path.react-flow__edge-path.semantic-edge")
+            require(path.count()==1,"P2 missing drawn SVG edge path")
+            require(path.get_attribute("data-connection-kind")=="network","P2 wrong drawn edge kind")
+            actual.add((path.get_attribute("data-connection-source"),
+                        path.get_attribute("data-connection-target")))
+        require(actual==pairs,"P2 visible ReactFlow link endpoints differ from document")
+        require(page.locator(".app-frame").get_attribute("data-runtime-scenario-hash")=="builder",
+                "P2 unexpectedly entered Engine Runtime")
+        clean(errors,external)
+        return {"format":ext,"case":"actual_drawn_three_nodes_two_source_peer_edges","status":"PASS"}
+    finally:page.close()
+
+def case_p2_unknown_peer(browser,url,ext,original):
+    page,errors,external=setup(browser,url)
+    try:
+        before=exported_source(page)
+        opening(page);choose(page,ext,original);choose_reviewed_peers(page)
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-error="BLOCKED"]')).to_contain_text(
+            "IC040_P2_LINK_ENDPOINT_UNKNOWN",timeout=45000)
+        page.locator('[data-office-p1b-cancel]').click()
+        require(exported_source(page)==before,"P2 unknown document peer replaced existing Builder")
+        clean(errors,external)
+        return {"format":ext,"case":"unknown_peer_blocked_workspace_unchanged","status":"PASS"}
+    finally:page.close()
+
+def case_p2_reciprocal_peer(browser,url,ext,original):
+    page,errors,external=setup(browser,url)
+    try:
+        before=exported_source(page)
+        opening(page);choose(page,ext,original);choose_reviewed_peers(page)
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-error="BLOCKED"]')).to_contain_text(
+            "IC040_P2_DUPLICATE_CONNECTION",timeout=45000)
+        # A rejected modal deliberately remains open and intercepts pointer
+        # events; dismiss it before opening the underlying export menu.
+        page.locator('[data-office-p1b-cancel]').click()
+        expect(page.locator('[data-office-p1b-panel]')).to_have_count(0,timeout=12000)
+        require(exported_source(page)==before,
+                "Reciprocal document declaration silently created two parallel cables")
+        clean(errors,external)
+        return {"format":ext,"case":"reciprocal_peer_pair_blocked_without_phantom_cable","status":"PASS"}
+    finally:page.close()
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--url",required=True)
@@ -198,6 +330,13 @@ def main():
                 ("odt",odt_bytes(),"content.xml"),
             ]:
                 changed=make_changed(raw,part)
+                # P2 must use independently valid original ZIPs and real SVG endpoint proof.
+                peers=make_reviewed_peers(raw,part,ext)
+                unknown=make_reviewed_peers(raw,part,ext,missing=True)
+                reciprocal=make_reviewed_peers(raw,part,ext,reciprocal=True)
+                cases.append(case_p2_real_links(browser,args.url,ext,peers))
+                cases.append(case_p2_unknown_peer(browser,args.url,ext,unknown))
+                cases.append(case_p2_reciprocal_peer(browser,args.url,ext,reciprocal))
                 for run in [
                     lambda:case_cancel(browser,args.url,ext,raw),
                     lambda:case_success(browser,args.url,ext,raw),
@@ -212,6 +351,7 @@ def main():
       "cases":cases,"runtimeActivated":False,"physicalTopologyVerified":False}
     (args.evidence_dir/"ic040-p1b-office-builder-real-chromium.json").write_text(json.dumps(report,indent=2)+"\n")
     print("PASS IC-040 P1b actual compiled Chromium DOCX/ODT original-cell consent, final reread and live Builder race denial")
+    print("PASS IC-040 P2 actual compiled Chromium DOCX/ODT exact SVG peer links, unknown and reciprocal peer duplicates blocked")
     print(json.dumps(report,indent=2))
 
 if __name__=="__main__":

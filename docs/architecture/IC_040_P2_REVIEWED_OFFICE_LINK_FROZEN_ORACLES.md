@@ -1,0 +1,10 @@
+# IC-040 P2 — frozen original Office peer-link topology oracles
+
+Status: FROZEN_FIRST / PRODUCTION_UNCHANGED; protected main 698ad70de8dfb1be3ea6989e97d7e00624fbc4d1.
+Owner priority: actual imported topology fidelity, missing/false links and release blockers (not speculative security).
+
+Current IC-040 P1a/P1b imports at most four individually reviewed nodes and always zero connections. P2 is a bounded new explicit peer-cell review, NOT full automatic DOCX/ODT topology extraction. It allows a reviewer to select an original peer-endpoint cell in the SAME table row as an individually consented source node. The original cell must textually name another individually selected ID; never infer links from IP, gateway, subnet, proximity or document order. At most 4 nodes and 4 reviewed connections in first slice. No interfaces/ports yet, no inferred physical cables, no auto Engine PASS.
+
+Frozen actual test: tests/browser/run_ic040_p2_office_connections_tests.mjs executes real ZIP DOCX/ODT, original SHA, 3 selected roles (firewall, switch, router), two peer cells declaring fw01->sw01 and sw01->rt01, exact source/compiled Builder graph endpoint pairs, valid schema and no unselected private cells. Existing node-only choice still emits zero links. Unknown endpoint, absent explicit consent, duplicate peer cell, selected private cell and changed original reject. A failure in original P1a exact-key acceptance is a MISSING CAPABILITY, not evidence of a physical network leak.
+
+Freeze in existing test:ic040-p1b-office-builder script used in both required PR CI and independent Linux release, before implementation. After negative CI, implement distinct P2 mapper and explicit UI peer-cell consent with original reread, workspace race gates and real compiled Chromium ReactFlow edge checks. No silent acceptance of incomplete network topology. Preserve every old P1a/P1b test, Dev11/P8/P9 and release identity tests; all exact-head checks SUCCESS, protected merge and independent exact-main release with Linux/DOM artifacts.
