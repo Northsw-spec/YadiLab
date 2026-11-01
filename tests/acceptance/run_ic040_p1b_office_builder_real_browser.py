@@ -931,6 +931,177 @@ def case_p7_bad_parallel(browser,url,ext,kind):
         return {"format":ext,"case":"p7_reject_"+kind,"status":"PASS"}
     finally:page.close()
 
+# IC-040 P8 bounded to eight individually selected original device IDs and
+# seven original two-port Links rows. Older P7/6/5 roles remain unchanged.
+P8_DEVICES=P5_DEVICES+[
+    ["ap01","PRIVATE_P8_NODE_5807"],["db01","PRIVATE_P8_NODE_5808"]]
+P8_ROLES=P5_ROLES+["network.switch","server.generic"]
+
+# P8: two original rows independently consented for the same unordered
+# switch/firewall pair, using entirely separate original port ID cells.
+P8_LINKS=[
+    ["From","To","Local Port","Peer Port"],
+    ["sw01","fw01","eth1","eth0"],
+    ["sw01","fw01","eth2","eth1"],
+    ["sw01","rt01","eth3","eth0"],
+    ["sw01","srv01","eth4","eth0"],
+    ["pc01","pc02","eth0","eth0"],
+    ["sw01","ap01","eth5","eth0"],
+    ["srv01","db01","eth1","eth0"],
+]
+P8_EXPECTED={
+    ("sw01","eth1","fw01","eth0"),("sw01","eth2","fw01","eth1"),
+    ("sw01","eth3","rt01","eth0"),("sw01","eth4","srv01","eth0"),
+    ("pc01","eth0","pc02","eth0"),
+    ("sw01","eth5","ap01","eth0"),
+    ("srv01","eth1","db01","eth0"),
+}
+
+def choose_p8_capacity(page):
+    page.locator('[data-office-p8-capacity-toggle="true"]').check()
+    require(page.locator('[data-office-p1b-selected-count="0"]').count()==1,
+            "P8 profile toggle retained old P4/P5/P6 consents")
+    require(not page.locator('[data-office-p5-capacity-toggle="true"]').is_checked() and
+            not page.locator('[data-office-p6-capacity-toggle="true"]').is_checked() and
+            not page.locator('[data-office-p7-capacity-toggle="true"]').is_checked(),
+            "P8 incorrectly left earlier capacity profile selected")
+    for i,role in enumerate(P8_ROLES):
+        k="0:"+str(i+1)+":0"
+        page.locator('[data-office-p1b-cell-ordinal="true"]').select_option(k)
+        page.locator('[data-office-p1b-add="true"]').click()
+        page.locator('[data-office-p1b-role="'+k+'"]').select_option(role)
+        page.locator('[data-office-p1b-cell-ack="'+k+'"]').check()
+    expect(page.locator('[data-office-p1b-selected-count="8"]')).to_be_visible(timeout=12000)
+    for row in range(1,8):
+        k="1:"+str(row)
+        page.locator('[data-office-p4-row-choice="true"]').select_option(k)
+        page.locator('[data-office-p4-from-choice="true"]').select_option("0")
+        page.locator('[data-office-p4-to-choice="true"]').select_option("1")
+        page.locator('[data-office-p4-source-port-choice="true"]').select_option("2")
+        page.locator('[data-office-p4-target-port-choice="true"]').select_option("3")
+        page.locator('[data-office-p4-add="true"]').click()
+        require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+                "P8 permitted unapproved endpoint or port cells")
+        for attr in ["from","to","source-port","target-port"]:
+            page.locator('[data-office-p4-'+attr+'-ack="'+k+'"]').check()
+    expect(page.locator('[data-office-p4-count="7"]')).to_be_visible(timeout=12000)
+    require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+            "P8 lacked global modeled link approval")
+    page.locator('[data-office-p4-modeled-ack="true"]').check()
+    page.locator('[data-office-p1b-modeled-ack="true"]').check()
+    expect(page.locator('[data-office-p1b-confirm="true"]')).to_be_enabled()
+
+def case_p8_parallel(browser,url,ext):
+    page,errors,external=setup(browser,url)
+    try:
+        opening(page)
+        choose(page,ext,make_p4_office(ext,P8_LINKS,P8_DEVICES))
+        choose_p8_capacity(page)
+        require(all(row[1] not in page.locator('[data-office-p1b-panel]').inner_html()
+                    for row in P8_DEVICES[1:]),
+                "P8 exposed original private source cells in approval UI")
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-panel]')).to_have_count(0,timeout=45000)
+        source=exported_source(page)
+        roles={x["id"]:x["type"] for x in source["resources"]}
+        require(roles==dict(zip(
+            ["sw01","fw01","rt01","srv01","pc01","pc02","ap01","db01"],P8_ROLES)),
+            "P8 lost one of six original IDs or assigned wrong manually approved role")
+        actual={(c["from"]["resource"],c["from"].get("port"),
+                 c["to"]["resource"],c["to"].get("port"))
+                for c in source["connections"]}
+        require(len(source["connections"])==7 and actual==P8_EXPECTED,
+                "P8 modeled source deduplicated, swapped or fabricated original port links")
+        require(len({c["id"] for c in source["connections"]})==7,
+                "P8 source links lacked distinct stable connection IDs")
+        interfaces={x["id"]:{p["id"] for p in x.get("interfaces",[])}
+                    for x in source["resources"]}
+        require(interfaces=={
+            "sw01":{"eth1","eth2","eth3","eth4","eth5"},
+            "fw01":{"eth0","eth1"},"rt01":{"eth0"},
+            "srv01":{"eth0","eth1"},"pc01":{"eth0"},"pc02":{"eth0"},
+            "ap01":{"eth0"},"db01":{"eth0"}},
+            "P8 source created unreviewed interfaces or removed reviewed parallel ports")
+        require(source["tests"]==[] and
+                source["completion"]["path"]=="office_manual_verification",
+                "P8 falsely self-certified Engine tests or imported Engine PASS")
+        require(all(row[1] not in json.dumps(source) for row in P8_DEVICES[1:]),
+                "P8 exported a confidential original source cell")
+        panel=page.locator(".topology-panel")
+        nodes=panel.locator('.react-flow__node[data-id]')
+        edges=panel.locator('.react-flow__edge[data-id]')
+        expect(nodes).to_have_count(8,timeout=30000)
+        expect(edges).to_have_count(7,timeout=30000)
+        rendered_roles={}
+        handles=set()
+        for node in nodes.all():
+            n=node.get_attribute("data-id")
+            shape=node.locator('.resource-node[data-device-family]')
+            require(shape.count()==1,"P8 missing real ReactFlow node shape "+str(n))
+            rendered_roles[n]=shape.get_attribute("data-device-family")
+            handles.update((n,h.get_attribute("data-interface-id"))
+                           for h in node.locator('[data-interface-id]').all())
+        require(rendered_roles=={
+            "sw01":"switch","fw01":"firewall","rt01":"router",
+            "srv01":"server","pc01":"client","pc02":"client",
+            "ap01":"switch","db01":"server"},
+            "P8 drawn ReactFlow device roles differ from source")
+        expected_handles={(n,p) for n,ports in interfaces.items() for p in ports}
+        require(expected_handles.issubset(handles),
+                "P8 visual ReactFlow missing one of the two parallel source ports")
+        seen_ids=set(); rendered=set(); parallel_paths=[]
+        for edge in edges.all():
+            edge_id=edge.get_attribute("data-id")
+            require(edge_id and edge_id not in seen_ids,
+                    "P8 two original parallel rows collapsed to same ReactFlow edge id")
+            seen_ids.add(edge_id)
+            p=edge.locator('path.react-flow__edge-path.semantic-edge')
+            path=p.get_attribute("d") if p.count()==1 else None
+            require(path,"P8 actual SVG network path absent or malformed")
+            require(p.get_attribute("data-connection-kind")=="network",
+                    "P8 SVG connection kind is not a network link")
+            exact=(p.get_attribute("data-connection-source"),
+                   p.get_attribute("data-connection-source-port"),
+                   p.get_attribute("data-connection-target"),
+                   p.get_attribute("data-connection-target-port"))
+            rendered.add(exact)
+            if exact[0]=="sw01" and exact[2]=="fw01":
+                parallel_paths.append(path)
+        require(len(rendered)==7 and rendered==P8_EXPECTED,
+                "P8 actual visible SVG lost or invented a distinct port-parallel link: "+
+                repr(rendered))
+        require(len(parallel_paths)==2 and len(set(parallel_paths))==2,
+                "P8 two actual SVG paths between switch and firewall overlap indistinguishably")
+        require(page.locator(".app-frame").get_attribute("data-runtime-scenario-hash")=="builder",
+                "P8 imported real Engine Runtime instead of unverified modeled Builder")
+        clean(errors,external)
+        return {"format":ext,"case":"p8_five_exact_svg_links_two_parallel_distinct_paths","status":"PASS"}
+    finally:page.close()
+
+def case_p8_bad_parallel(browser,url,ext,kind):
+    links=[list(row) for row in P8_LINKS]
+    if kind=="reversed":
+        links[2]=["fw01","sw01","eth0","eth1"]
+        code="IC040_P7_DUPLICATE_PORT_PAIR"
+    elif kind=="reused":
+        links[2][2]="eth1";code="IC040_P4_PORT_REUSED"
+    elif kind=="unknown":
+        links[7][1]="ghost";code="IC040_P4_LINK_ENDPOINT_UNKNOWN"
+    else:raise AssertionError("Unknown P8 negative "+kind)
+    page,errors,external=setup(browser,url)
+    try:
+        before=exported_source(page)
+        opening(page);choose(page,ext,make_p4_office(ext,links,P8_DEVICES))
+        choose_p8_capacity(page)
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-error="BLOCKED"]')).to_contain_text(code,timeout=45000)
+        page.locator('[data-office-p1b-cancel]').click()
+        require(exported_source(page)==before,
+                "P8 invalid original link mutated existing Builder before denial")
+        clean(errors,external)
+        return {"format":ext,"case":"p8_reject_"+kind,"status":"PASS"}
+    finally:page.close()
+
 # P6: same six documented devices and five original Links rows, but rows
 # two and four have no approved port-cell evidence. Never invent these ports.
 def choose_p6_optional_ports(page):
@@ -1112,6 +1283,9 @@ def main():
                 cases.append(case_p7_parallel(browser,args.url,ext))
                 for p7kind in ["reversed","reused","unknown"]:
                     cases.append(case_p7_bad_parallel(browser,args.url,ext,p7kind))
+                cases.append(case_p8_parallel(browser,args.url,ext))
+                for p8kind in ["reversed","reused","unknown"]:
+                    cases.append(case_p8_bad_parallel(browser,args.url,ext,p8kind))
                 for p5mode in ["unknown","reused","secret"]:
                     cases.append(case_p5_bad_six_by_five(browser,args.url,ext,p5mode))
                 cases.append(case_p4_separate_rows(browser,args.url,ext,False))
@@ -1140,6 +1314,7 @@ def main():
     print("PASS IC-040 P5 actual compiled DOCX/ODT six source-selected devices/five source-declared links, exact rendered role/port/endpoint SVG parity and block cases")
     print("PASS IC-040 P6 actual compiled DOCX/ODT six exact source devices/five links, selected versus portless real SVG endpoint parity")
     print("PASS IC-040 P7 actual compiled DOCX/ODT six typed nodes and five exact SVG links, two port-distinct visible parallel paths and negative denials")
+    print("PASS IC-040 P8 actual compiled DOCX/ODT eight typed nodes/seven original SVG links with two distinct parallel paths and conflict denials")
     print(json.dumps(report,indent=2))
 
 if __name__=="__main__":
