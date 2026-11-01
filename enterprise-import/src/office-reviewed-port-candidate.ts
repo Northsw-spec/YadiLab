@@ -72,10 +72,11 @@ export async function mapReviewedOfficeOriginalToPorts(
       !Array.isArray(decision.nodes) ||
       !Array.isArray(decision.portSelections) ||
       decision.portSelections.length < 1 ||
-      decision.portSelections.length !== decision.connections.length ||
       decision.portSelections.length > 4) {
     return blocked(sha, "IC040_P3_DECISION_INVALID");
   }
+  if (decision.portSelections.length !== decision.connections.length)
+    return blocked(sha, "IC040_P3_PORT_DECISION_INVALID");
   const seen = new Set<number>();
   for (const selection of decision.portSelections) {
     if (!exact(selection, [
