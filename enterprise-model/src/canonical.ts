@@ -10,7 +10,10 @@ function normalizedJson(value: unknown): unknown {
     const output: Record<string, unknown> = {};
     for (const key of Object.keys(source).sort()) {
       const item = source[key];
-      if (item !== undefined) output[key] = normalizedJson(item);
+      // Hash input must retain all own JSON keys, including "__proto__".
+      if (item !== undefined) Object.defineProperty(output, key, {
+        value: normalizedJson(item), enumerable: true, writable: true, configurable: true,
+      });
     }
     return output;
   }
