@@ -87,6 +87,13 @@ for (const [format,make] of [["docx",docx],["odt",odt]]) {
   {...reviewed,acknowledgeModeledConnections:false},()=>true),"IC040_P2_DECISION_INVALID");
  await fails(verifyOfficeCandidateFile(f,preview,
   {...reviewed,connections:[links[0],links[0]]},()=>true),"IC040_P2_DUPLICATE_LINK_CELL");
+ // A reciprocal declaration is one undirected network peer relationship,
+ // not two independent parallel cables when no port evidence exists.
+ const reciprocal=await make(original.map((row,i)=>i===2?[row[0],"fw01",row[2]]:row));
+ const reciprocalFile=file("reciprocal."+format,reciprocal);
+ const reciprocalPreview=await previewOfficeNodesFile(reciprocalFile);
+ await fails(verifyOfficeCandidateFile(reciprocalFile,reciprocalPreview,
+  {...reviewed,sourceSha256:sha(reciprocal)},()=>true),"IC040_P2_DUPLICATE_CONNECTION");
  await fails(verifyOfficeCandidateFile(f,preview,
   {...reviewed,connections:[{...links[0],peerCellOrdinal:2}]},()=>true),
   format==="docx"?"DOCX_CELL_SENSITIVE_BLOCKED":"ODT_CELL_SENSITIVE_BLOCKED");
