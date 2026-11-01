@@ -477,6 +477,10 @@ function SemanticJourneyEdge({ id, source, target, sourceX, sourceY, targetX, ta
       markerStart: visual.direction === "reverse" || visual.direction === "bidirectional" ? `url(#${semanticMarkerId})` : undefined,
       className: `react-flow__edge-path semantic-edge tone-${visual.tone}${visual.enabled ? "" : " disabled"}${selected ? " selected" : ""}`,
       "data-connection-kind": data?.connectionKind ?? "network",
+      // Auditable ACTUAL rendered ReactFlow endpoints. Never infer these from
+      // a document label, edge ID, IP, layout order or imported source cache.
+      "data-connection-source": source,
+      "data-connection-target": target,
       "data-link-enabled": visual.enabled ? "true" : "false",
     }),
     e("text", { x: labelX, y: labelY - 7, className: `semantic-edge-label tone-${visual.tone}`, textAnchor: "middle", "aria-hidden": "true" }, visual.accessibleLabel),
