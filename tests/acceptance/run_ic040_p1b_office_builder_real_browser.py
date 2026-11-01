@@ -773,6 +773,124 @@ def case_p5_six_by_five(browser,url,ext):
                 "status":"PASS"}
     finally:page.close()
 
+
+# P6: same six documented devices and five original Links rows, but rows
+# two and four have no approved port-cell evidence. Never invent these ports.
+def choose_p6_optional_ports(page):
+    page.locator('[data-office-p6-capacity-toggle="true"]').check()
+    require(page.locator('[data-office-p1b-selected-count="0"]').count()==1,
+            "P6 profile change retained stale previous source-cell approvals")
+    for i,role in enumerate(P5_ROLES):
+        k="0:"+str(i+1)+":0"
+        page.locator('[data-office-p1b-cell-ordinal="true"]').select_option(k)
+        page.locator('[data-office-p1b-add="true"]').click()
+        page.locator('[data-office-p1b-role="'+k+'"]').select_option(role)
+        page.locator('[data-office-p1b-cell-ack="'+k+'"]').check()
+    expect(page.locator('[data-office-p1b-selected-count="6"]')).to_be_visible(timeout=12000)
+    for row in range(1,6):
+        k="1:"+str(row)
+        page.locator('[data-office-p4-row-choice="true"]').select_option(k)
+        page.locator('[data-office-p4-from-choice="true"]').select_option("0")
+        page.locator('[data-office-p4-to-choice="true"]').select_option("1")
+        if row not in (2,4):
+            page.locator('[data-office-p4-source-port-choice="true"]').select_option("2")
+            page.locator('[data-office-p4-target-port-choice="true"]').select_option("3")
+        page.locator('[data-office-p4-add="true"]').click()
+        require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+                "P6 skipped one of the mandatory original endpoint consents")
+        attrs=["from","to"]+(["source-port","target-port"] if row not in (2,4) else [])
+        for attr in attrs:
+            page.locator('[data-office-p4-'+attr+'-ack="'+k+'"]').check()
+    expect(page.locator('[data-office-p4-count="5"]')).to_be_visible(timeout=12000)
+    require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+            "P6 missing global modeled-link consent was incorrectly accepted")
+    page.locator('[data-office-p4-modeled-ack="true"]').check()
+    page.locator('[data-office-p1b-modeled-ack="true"]').check()
+    expect(page.locator('[data-office-p1b-confirm="true"]')).to_be_enabled()
+
+def case_p6_optional_ports(browser,url,ext):
+    page,errors,external=setup(browser,url)
+    try:
+        opening(page)
+        # Actual file contains the port text in every row. P6 selectively
+        # authorizes ports for rows 1/3/5, not 2/4.
+        choose(page,ext,make_p4_office(ext,P5_LINKS,P5_DEVICES))
+        choose_p6_optional_ports(page)
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-panel]')).to_have_count(0,timeout=45000)
+        source=exported_source(page)
+        expected={
+            ("sw01","eth1","fw01","eth0"),
+            ("sw01",None,"rt01",None),
+            ("sw01","eth3","srv01","eth0"),
+            ("sw01",None,"pc01",None),
+            ("sw01","eth5","pc02","eth0"),
+        }
+        identities={x["id"]:x["type"] for x in source["resources"]}
+        require(identities==dict(zip(
+            ["sw01","fw01","rt01","srv01","pc01","pc02"],P5_ROLES)),
+            "P6 exact six reviewed original IDs or manually assigned roles changed")
+        actual={(x["from"]["resource"],x["from"].get("port"),
+                 x["to"]["resource"],x["to"].get("port"))
+                for x in source["connections"]}
+        require(actual==expected and len(source["connections"])==5,
+                "P6 Builder source lost, swapped or invented a portless/source link")
+        interfaces={x["id"]:{i["id"] for i in x.get("interfaces",[])}
+                    for x in source["resources"]}
+        require(interfaces=={
+            "sw01":{"eth1","eth3","eth5"},"fw01":{"eth0"},"rt01":set(),
+            "srv01":{"eth0"},"pc01":set(),"pc02":{"eth0"}},
+            "P6 original source had unapproved ports or missing approved ports")
+        require(source["tests"]==[] and
+                source["completion"]["path"]=="office_manual_verification",
+                "P6 imported false Engine PASS or automatic modeled probes")
+        require(all(x[1] not in json.dumps(source) for x in P5_DEVICES[1:]),
+                "P6 disclosed private unselected original device column")
+        panel=page.locator(".topology-panel")
+        nodes=panel.locator('.react-flow__node[data-id]')
+        edges=panel.locator('.react-flow__edge[data-id]')
+        expect(nodes).to_have_count(6,timeout=30000)
+        expect(edges).to_have_count(5,timeout=30000)
+        families={}
+        handles=set()
+        for node in nodes.all():
+            n=node.get_attribute("data-id")
+            shape=node.locator('.resource-node[data-device-family]')
+            require(shape.count()==1,"P6 missing actual node-role DOM family "+str(n))
+            families[n]=shape.get_attribute("data-device-family")
+            handles.update((n,h.get_attribute("data-interface-id"))
+                           for h in node.locator('[data-interface-id]').all())
+        require(families=={"sw01":"switch","fw01":"firewall","rt01":"router",
+                          "srv01":"server","pc01":"client","pc02":"client"},
+                "P6 real mounted node roles do not match approved source")
+        expected_handles={
+            ("sw01","eth1"),("sw01","eth3"),("sw01","eth5"),
+            ("fw01","eth0"),("srv01","eth0"),("pc02","eth0")}
+        require(expected_handles.issubset(handles),
+                "P6 visible ReactFlow missing individually approved source port handles")
+        require(not {("sw01","eth2"),("sw01","eth4"),
+                     ("rt01","eth0"),("pc01","eth0")}.intersection(handles),
+                "P6 fabricated unselected original port handles")
+        rendered=set()
+        for edge in edges.all():
+            p=edge.locator('path.react-flow__edge-path.semantic-edge')
+            require(p.count()==1 and bool(p.get_attribute("d")),
+                    "P6 real SVG network edge is missing")
+            require(p.get_attribute("data-connection-kind")=="network",
+                    "P6 real SVG connection had incorrect kind")
+            rendered.add((p.get_attribute("data-connection-source"),
+                          p.get_attribute("data-connection-source-port"),
+                          p.get_attribute("data-connection-target"),
+                          p.get_attribute("data-connection-target-port")))
+        require(rendered==expected,
+                "P6 actual SVG node/port endpoints diverged from selected original rows: "+
+                repr(rendered))
+        require(page.locator(".app-frame").get_attribute("data-runtime-scenario-hash")=="builder",
+                "P6 import unexpectedly activated Engine Runtime")
+        clean(errors,external)
+        return {"format":ext,"case":"p6_six_by_five_mixed_approved_and_portless_svg","status":"PASS"}
+    finally:page.close()
+
 def case_p5_bad_six_by_five(browser,url,ext,mode):
     links=[list(row) for row in P5_LINKS]
     if mode=="unknown":
@@ -833,6 +951,7 @@ def main():
                 cases.append(case_p3_real_ports(browser,args.url,ext))
                 cases.append(case_p4_separate_rows(browser,args.url,ext,True))
                 cases.append(case_p5_six_by_five(browser,args.url,ext))
+                cases.append(case_p6_optional_ports(browser,args.url,ext))
                 for p5mode in ["unknown","reused","secret"]:
                     cases.append(case_p5_bad_six_by_five(browser,args.url,ext,p5mode))
                 cases.append(case_p4_separate_rows(browser,args.url,ext,False))
@@ -859,6 +978,7 @@ def main():
     print("PASS IC-040 P3 actual DOCX/ODT Chromium source, port handles, exact drawn endpoint port identities and negative denial")
     print("PASS IC-040 P4 actual compiled DOCX/ODT separate Links rows, three switch links, source/rendered endpoints/ports and no-guess negatives")
     print("PASS IC-040 P5 actual compiled DOCX/ODT six source-selected devices/five source-declared links, exact rendered role/port/endpoint SVG parity and block cases")
+    print("PASS IC-040 P6 actual compiled DOCX/ODT six exact source devices/five links, selected versus portless real SVG endpoint parity")
     print(json.dumps(report,indent=2))
 
 if __name__=="__main__":
