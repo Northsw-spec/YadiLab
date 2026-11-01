@@ -102,6 +102,7 @@ export function OfficeReviewedNodeChoices({
         [linkRowAck,setLinkRowAck]=useState(false),
         [capacityMode,setCapacityMode]=useState(false),
         [optionalPortsMode,setOptionalPortsMode]=useState(false),
+        [parallelPortsMode,setParallelPortsMode]=useState(false),
         [modeledAck,setModeledAck]=useState(false),[sending,setSending]=useState(false),
         [localError,setLocalError]=useState("");
   const nodeLimit=capacityMode?6:MAX;
@@ -253,10 +254,11 @@ export function OfficeReviewedNodeChoices({
     setLinkRows(prev=>prev.map(x=>linkRowKey(x)===key?{...x,...patch}:x));clear();
   };
   const removeLinkRow=key=>{setLinkRows(prev=>prev.filter(x=>linkRowKey(x)!==key));clear();};
-  const changeCapacityMode=(checked,permitPortless=false)=>{
+  const changeCapacityMode=(checked,permitPortless=false,permitParallel=false)=>{
     if(busy||sending)return;
     setCapacityMode(checked);
     setOptionalPortsMode(checked&&permitPortless);
+    setParallelPortsMode(checked&&permitParallel);
     // Changing profile must discard ALL prior cell/role/peer/port consents:
     // ordinal limits and the decision shape have changed.
     setNodes([]);setConnections([]);setLinkRows([]);setPortSelections([]);
@@ -276,7 +278,9 @@ export function OfficeReviewedNodeChoices({
       decision.linkRows=linkRows.map(x=>({...x}));
       decision.acknowledgeModeledLinkRows=linkRowAck;
       if(capacityMode){
-        decision.capacityProfile=optionalPortsMode
+        decision.capacityProfile=parallelPortsMode
+          ?"office.reviewed-network-tables.six-by-five-parallel-port-links.v1"
+          :optionalPortsMode
           ?"office.reviewed-network-tables.six-by-five-optional-ports.v1"
           :"office.reviewed-network-tables.six-by-five.v1";
       }
@@ -303,7 +307,7 @@ export function OfficeReviewedNodeChoices({
       "Only first four tables, first 20 non-header rows and first four cells per row can be selected. Only individually acknowledged peer cells and optional separately reviewed port cells may become modeled links/interface references; no unselected source text, OS, IP, physical cabling, Runtime or Engine PASS is inferred."),
     e("section",{"data-office-p5-capacity":"REVIEW_REQUIRED"},
       e("label",null,e("input",{type:"checkbox",
-        "data-office-p5-capacity-toggle":"true",checked:capacityMode&&!optionalPortsMode,
+        "data-office-p5-capacity-toggle":"true",checked:capacityMode&&!optionalPortsMode&&!parallelPortsMode,
         disabled:busy||sending,onChange:event=>changeCapacityMode(event.currentTarget.checked,false)}),
         " Enable separately reviewed P5: exactly 6 original device IDs and "+
         "5 port-annotated Links-table rows (not P1b/P2/P3/P4)."),
@@ -315,7 +319,7 @@ export function OfficeReviewedNodeChoices({
         "No physical cables, inferred connectivity or Engine PASS.")),
     e("section",{"data-office-p6-capacity":"REVIEW_REQUIRED"},
       e("label",null,e("input",{type:"checkbox",
-        "data-office-p6-capacity-toggle":"true",checked:capacityMode&&optionalPortsMode,
+        "data-office-p6-capacity-toggle":"true",checked:capacityMode&&optionalPortsMode&&!parallelPortsMode,
         disabled:busy||sending,onChange:event=>changeCapacityMode(event.currentTarget.checked,true)}),
         " Enable separately reviewed P6: exactly 6 devices and 5 Links rows "+
         "with independently approved port pairs OR no port evidence per row."),
@@ -323,7 +327,18 @@ export function OfficeReviewedNodeChoices({
         "P6 permits portless original Links rows only when both port cells are unselected. "+
         "Approved port pairs remain exact and individually consented. "+
         "A portless link never invents either port or physical cable. "+
-        "Changing P4/P5/P6 profile clears ALL previous choices and approvals.")),
+        "Changing P4/P5/P6/P7 profile clears ALL previous choices and approvals.")),
+    e("section",{"data-office-p7-capacity":"REVIEW_REQUIRED"},
+      e("label",null,e("input",{type:"checkbox",
+        "data-office-p7-capacity-toggle":"true",checked:capacityMode&&parallelPortsMode,
+        disabled:busy||sending,onChange:event=>changeCapacityMode(event.currentTarget.checked,false,true)}),
+        " Enable reviewed P7: six devices, five original Links rows and "+
+        "distinct port-annotated parallel links between the same two devices."),
+      e("p",{"data-office-p7-capacity-boundary":"UNVERIFIED"},
+        "Every P7 link requires its own two individually approved source port cells. "+
+        "Same two devices may appear on multiple rows ONLY with non-reused ports "+
+        "on BOTH ends. Duplicate or reversed-identical ports BLOCK. "+
+        "No physical cabling or Engine PASS; changing profile clears all consents.")),
     e("label",null,"Original cell position (never the header)",
       e("select",{value:choice,disabled:busy||sending,
         "data-office-p1b-cell-ordinal":"true",onChange:event=>{
@@ -464,8 +479,8 @@ export function OfficeReviewedNodeChoices({
         "device-ID table. Independently authorize the FROM and TO cells; "+
         "both must contain already selected device IDs. Optional local and "+
         "remote port cells must be selected together and approved separately. "+
-        "Multiple rows may share one switch with DISTINCT ports. The P4 limit is four; "+
-        "the explicitly selected P5/P6 limit is five links. "+
+        "Multiple rows may share a switch with DISTINCT reviewed ports. P4 is max four; "+
+        "explicit P5/P6/P7 are limited to five links. "+
         "No inferred cables, no Runtime or Engine PASS. "+
         "Use either this separate-row profile or the earlier P2/P3 same-row profile."),
       e("label",null,"Original separate link row",
