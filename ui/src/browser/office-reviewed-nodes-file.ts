@@ -6,6 +6,8 @@ import { mapReviewedOfficeOriginalToConnections, type OfficeReviewedConnectionsD
   type OfficeReviewedConnectionsCandidate } from "../../../enterprise-import/src/office-reviewed-connection-candidate.js";
 import { mapReviewedOfficeOriginalToPorts, type OfficeReviewedPortsDecision,
   type OfficeReviewedPortsCandidate } from "../../../enterprise-import/src/office-reviewed-port-candidate.js";
+import { mapReviewedOfficeOriginalToLinkRows, type OfficeReviewedLinkRowsDecision,
+  type OfficeReviewedLinkRowsCandidate } from "../../../enterprise-import/src/office-reviewed-link-row-candidate.js";
 import { EnterpriseImportError } from "../../../enterprise-import/src/types.js";
 
 export interface OfficeReviewedReadableFile {
@@ -55,9 +57,9 @@ export async function previewOfficeNodesFile(file: OfficeReviewedReadableFile): 
 export async function verifyOfficeCandidateFile(
   file: OfficeReviewedReadableFile,
   expected: OfficeReviewedPreview,
-  decision: OfficeReviewedNodesDecision | OfficeReviewedConnectionsDecision | OfficeReviewedPortsDecision,
+  decision: OfficeReviewedNodesDecision | OfficeReviewedConnectionsDecision | OfficeReviewedPortsDecision | OfficeReviewedLinkRowsDecision,
   isCurrent: () => boolean,
-): Promise<OfficeReviewedNodesCandidate | OfficeReviewedConnectionsCandidate | OfficeReviewedPortsCandidate> {
+): Promise<OfficeReviewedNodesCandidate | OfficeReviewedConnectionsCandidate | OfficeReviewedPortsCandidate | OfficeReviewedLinkRowsCandidate> {
   if (typeof isCurrent !== "function" || !isCurrent()) return deny("IC040_P1B_STALE");
   if (!expected || !expected.preview || (expected.format !== "docx" && expected.format !== "odt") ||
       expected.format !== decision?.format ||
@@ -75,8 +77,10 @@ export async function verifyOfficeCandidateFile(
   if (JSON.stringify(refreshed) !== JSON.stringify(expected.preview)) {
     return deny("IC040_P1B_SOURCE_CHANGED");
   }
-  const mapped = "portSelections" in decision
-    ? await mapReviewedOfficeOriginalToPorts(raw, decision)
+  const mapped = "linkRows" in decision
+    ? await mapReviewedOfficeOriginalToLinkRows(raw, decision)
+    : "portSelections" in decision
+      ? await mapReviewedOfficeOriginalToPorts(raw, decision)
     : "connections" in decision
       ? await mapReviewedOfficeOriginalToConnections(raw, decision)
       : await mapReviewedOfficeOriginalToNodes(raw, decision);
