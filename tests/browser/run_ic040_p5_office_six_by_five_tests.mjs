@@ -118,11 +118,14 @@ for(const [format,make] of [["docx",docx],["odt",odt]]){
  for(const item of devices.slice(1))yes(!JSON.stringify(candidate).includes(item[1]),
   format+" unselected private cell not copied");
  const legacyP4={format,sourceSha256:sha(original),nodes:nodes.slice(0,4),
-  acknowledgeModeledResources:true,linkRows:linkRows.slice(0,4),
+  acknowledgeModeledResources:true,linkRows:linkRows.slice(0,3),
   acknowledgeModeledLinkRows:true};
  const old=await verifyOfficeCandidateFile(f,preview,legacyP4,()=>true);
- eq(old.selectedResources,4,format+" P4 legacy remains exactly 4/4");
- eq(old.selectedConnections,4,format+" P4 legacy links unchanged");
+ eq(old.selectedResources,4,format+" P4 legacy remains four source-reviewed nodes");
+ eq(old.selectedConnections,3,format+" P4 legacy imports only rows whose endpoints are selected");
+ await deny(verifyOfficeCandidateFile(f,preview,{
+  ...legacyP4,linkRows:linkRows.slice(0,4),
+ },()=>true),"IC040_P4_LINK_ENDPOINT_UNKNOWN");
  await deny(verifyOfficeCandidateFile(f,preview,decision(format,sha(original),{
   capacityProfile:"office.reviewed-network-tables.UNKNOWN",
  }),()=>true),"IC040_P5_CAPACITY_PROFILE_INVALID");
