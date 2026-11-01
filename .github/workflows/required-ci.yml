@@ -67,6 +67,7 @@ jobs:
           node tests/ci/run_pr_concurrency_contract_tests.mjs
           node tests/ci/run_ic030_p3_capability_truth_tests.mjs
           npm run test:ic040-p1a-office-nodes
+          npm run test:ic040-p1b-office-builder
           npm run test:audit007-p1-engine-inputs
           npm run test:audit007-p2a-canonical-json
           npm run test:audit007-p2b-import-fields
@@ -157,6 +158,8 @@ jobs:
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic030_p1_graphml_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic030_p2b_drawio_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
+          /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic040_p1b_office_builder_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
       - name: Preserve bounded verification evidence
         if: always()
