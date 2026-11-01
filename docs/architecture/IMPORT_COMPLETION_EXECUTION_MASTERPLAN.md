@@ -6,6 +6,14 @@
 **Authority:** [AGENTS.md](../../AGENTS.md) and **current protected `main`**. This roadmap specifies the *next work*, never a historical checkout, complete-feature certificate, or alternate source code.
 **Audit-only baseline, 2026-10-31:** `main=94711af3ce9243c78e6ce8e73f96d8850e8cf2df`, tree `7145d7880bd2a464779cc96d47c42380b77d2c11`, protected with required `yadilab-required-ci`; no open PR. **These hashes MUST NOT be used as the base for later tasks.**
 
+## Owner-approved CI queue protection — YADILAB-CI-CONCURRENCY-001 (deferred until after IC-030 P2b)
+
+**Decision locked 2026-11-01; implementation status: PENDING, not yet in GitHub Actions.** After IC-030 P2b completes exact-head PR tests, protected merge, and independent exact-`main` Linux release with mounted DOM/provenance/artifact evidence, start **a separate CI-only reviewed PR** from then-current protected `main`. Do not modify the currently pending P2b PR or trigger additional runs solely to install this policy.
+
+Implement workflow + pull-request-scoped `concurrency` and `cancel-in-progress`: only older unfinished test runs superseded by a later commit in **the same PR and same workflow** may be cancelled. Never cancel the newest PR test run, tests in other PRs/workflows, protected `main`, independent Linux or tagged releases, or independent `workflow_dispatch` evidence. Keep `yadilab-required-ci`, pinned Playwright `--with-deps`, real Chromium, import/Engine/security adversarial gates, package-policy checks and AUDIT-006 release identity fully mandatory; no skipped tests or fabricated PASS.
+
+Freeze test oracles before changes. Prove with real GitHub Actions that an older PR-commit run cancels, that the replacement exact-head run passes **all** applicable checks, that another PR is isolated, and that independent main/release evidence remains unaffected. Document PR/head/run IDs, actual results and delivery in issue #3. See root [AGENTS.md](../../AGENTS.md) for the permanent controlling rule; every future session must check whether this follow-up remains PENDING.
+
 ## 1. User-visible product goal and scope
 
 An IT technician/consultant can choose a **local, supported document or tool export**, see its correctly identified profile and limitations, inspect safely extracted network-relevant content, resolve ambiguous identities/roles/ports/connections manually, review exact source provenance, and explicitly choose to create or update a YadiLab Builder/Runtime scenario **where that operation is semantically justified**. They can visualize only supported, source-grounded facts and execute **modeled probes against the activated Engine scenario** when the scenario has known endpoint types and sufficient configuration. An imported file alone **never** causes a real network scan, changes host configuration, verifies a physical cable, manufactures an active service, asserts a green PASS, or starts a live Real Mode probe.
