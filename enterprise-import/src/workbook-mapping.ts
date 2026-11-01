@@ -86,10 +86,16 @@ export function mapNetworkWorkbookToScenario(document: ImportDocument): Workbook
   for (const record of rows(tables, "Nodes")) { const id = text(record, "nodeId")!; const zone = text(record, "zoneId"); resourceMap.set(id, { id, type: text(record, "type")!, label: text(record, "displayName")!, ...(zone ? { zone } : {}), properties: {} }); }
   for (const record of rows(tables, "Interfaces")) { const nodeId = text(record, "nodeId")!; const resource = resourceMap.get(nodeId)!; const id = text(record, "interfaceId") ?? text(record, "name")!; const label = text(record, "name"); const ipv4 = text(record, "IPv4"); const prefix = text(record, "prefix"); const ipv6 = text(record, "IPv6"); const addresses = [ipv4 && prefix ? `${ipv4}/${prefix}` : ipv4, ipv6].filter((x): x is string => Boolean(x)); const mac = text(record, "MAC"); const mtu = integer(record, "MTU"); const iface = { id, ...(label ? { label } : {}), ...(addresses.length ? { addresses } : {}), ...(mac ? { mac } : {}), ...(mtu !== undefined ? { mtu } : {}) }; resourceMap.set(nodeId, { ...resource, interfaces: [...(resource.interfaces ?? []), iface] }); }
   const connections: Scenariosourceconnection[] = rows(tables, "Links").map((record) => { const interfaceA = text(record, "interfaceA"); const interfaceB = text(record, "interfaceB"); return { id: text(record, "linkId")!, kind: (text(record, "kind") as Scenariosourceconnection["kind"] | undefined) ?? "network", from: { resource: text(record, "nodeA")!, ...(interfaceA ? { port: interfaceA } : {}) }, to: { resource: text(record, "nodeB")!, ...(interfaceB ? { port: interfaceB } : {}) }, properties: {} }; });
+  // Imported source declarations establish modeled nodes/links, not that
+  // cabling, network operation or the operator's expected topology was verified.
+  // Never auto-complete merely by comparing a resource's imported type to itself.
+  // This review signal is deliberately UNSET on every imported resource.
   const objective = {
-    id: "imported_topology_present", title: "Imported topology contains the first listed resource",
+    id: "imported_topology_manual_verification",
+    title: "Review imported nodes and explicit network connections",
     category: "enterprise-import", required: true,
-    condition: { op: "equals" as const, target: [...resourceMap.values()][0]!.id, path: "type", value: [...resourceMap.values()][0]!.type },
+    condition: { op: "equals" as const, target: [...resourceMap.values()][0]!.id,
+      path: "imported_topology_manual_verification", value: "VERIFIED" },
   };
   const source: ScenarioSource = { formatId: "infrastructure-cyber-lab.scenario-source", schemaVersion: "0.1.0", scenarioId, metadata: { title, ...(description ? { description } : {}), language: "en" }, requires: { capabilities: [{ id: "core.network", version: "^1.0.0" }], profiles: [] }, zones, resources: [...resourceMap.values()], connections, tests: [], findings: [], objectives: [objective], completion: objective.condition,
     notes: rows(tables, "Nodes").flatMap((record) => {
