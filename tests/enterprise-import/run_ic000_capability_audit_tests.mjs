@@ -58,21 +58,39 @@ function consistent(m) {
       || !p.stage || stages.some(s => typeof p.stage[s] !== "string" || !p.stage[s])
       || !Array.isArray(p.sources) || !p.sources.length
       || !Array.isArray(p.tests) || !p.tests.length
-      || !p.nextCheckpoint || !/^IC-\d{3}$/.test(p.nextCheckpoint)
+      || !p.nextCheckpoint || !(
+        /^IC-\d{3}$/.test(p.nextCheckpoint) ||
+        (["graphml.structural.v1","diagrams.drawio.v1"].includes(p.id) &&
+          p.nextCheckpoint === "IC-040_AFTER_VERIFIED_P3_RELEASE")
+      )
       || typeof p.risk !== "string" || p.risk.length < 20
       || typeof p.ciCoverage !== "string") return false;
     ids.add(p.id);
     if (p.registry === "ACTIVE_ADAPTER" && !expectedActive.includes(p.id)) return false;
     if (p.registry === "NATIVE_SCENARIO" && p.id !== "native.scenario.json") return false;
     if (p.registry === "PLANNED_HINT") {
-      if (!planned.has(p.id) || p.stage.detect !==
-        (expectedDedicated.has(p.id) ? "SPECIALIZED_FILE_ENTRY" : "HINT_ONLY_BLOCKED"))
-        return false;
-      // Specialized read-only parsers are not registered enterprise adapters.
-      if (p.stage.parse !== (expectedDedicated.has(p.id) ? "BOUNDED_READ_ONLY" : "NONE")
-        || p.stage.modeledProbe !== (p.id === "graphml.structural.v1" ? "NOT_ATTESTED" : "NONE")
-        || (p.id !== "graphml.structural.v1" && (p.stage.projection !== "NONE" || p.stage.builder !== "NONE"))
-        || p.stage.builder === "DIRECT_ACTIVATION") return false;
+      const graphml = p.id === "graphml.structural.v1";
+      const drawio = p.id === "diagrams.drawio.v1";
+      const expectedDetect = graphml ? "SPECIALIZED_GRAPHML_FILE_ENTRY"
+        : drawio ? "SPECIALIZED_DRAWIO_P1P6_XML_READ_ONLY_AND_P2B_DRAWIO_ONLY"
+        : expectedDedicated.has(p.id) ? "SPECIALIZED_FILE_ENTRY" : "HINT_ONLY_BLOCKED";
+      const expectedParse = graphml ? "BOUNDED_GRAPHML_ORIGINAL_XML_SHA"
+        : drawio ? "BOUNDED_2MIB_16P_1000V_2000E_RAW_DEFLATE_SHA"
+        : expectedDedicated.has(p.id) ? "BOUNDED_READ_ONLY" : "NONE";
+      const expectedProbe = graphml || drawio ? "NOT_ATTESTED_NO_AUTOMATIC_RUNTIME" : "NONE";
+      const expectedProjection = graphml ? "EXPLICIT_REVIEWED_GRAPHML_WORKBOOK_CANDIDATE"
+        : drawio ? "P2B_EXPLICIT_REVIEWED_DRAWIO_GRAPH_CANDIDATE_ONLY" : "NONE";
+      const expectedBuilder = graphml ? "REAL_COMPILER_ELK_ORIGINAL_REREAD_WORKSPACE_GATE"
+        : drawio ? "P2B_REAL_COMPILER_ELK_LAST_ORIGINAL_REREAD_WORKSPACE_GATE" : "NONE";
+      if (!planned.has(p.id) ||
+          p.stage.detect !== expectedDetect ||
+          p.stage.parse !== expectedParse ||
+          p.stage.modeledProbe !== expectedProbe ||
+          p.stage.projection !== expectedProjection ||
+          p.stage.builder !== expectedBuilder ||
+          p.stage.builder === "DIRECT_ACTIVATION") return false;
+      // These are explicitly scoped SPECIALIZED UI paths, never generic
+      // enterprise adapters nor automatic Engine/Runtime or physical truth.
       if (!expectedDedicated.has(p.id) && stages.some(s =>
         s !== "detect" && p.stage[s] !== "NONE")) return false;
       const canonical = plannedExternalSourceProfiles.find(x => x.profileId === p.id);
@@ -94,8 +112,10 @@ yes(consistent(matrix), "27 source-bound records match current code and planned 
 eq(matrix.profiles.filter(p => p.registry === "ACTIVE_ADAPTER").length,5,"five baseline adapters");
 eq(matrix.profiles.filter(p => p.registry === "NATIVE_SCENARIO").length,1,"native scenario separate");
 eq(matrix.profiles.filter(p => p.registry === "PLANNED_HINT").length,21,"all planned profiles covered");
-eq(matrix.profiles.filter(p => p.stage.parse === "BOUNDED_READ_ONLY").length,8,
-  "eight specialized read-only parsing profiles are not absent");
+eq(matrix.profiles.filter(p => p.stage.parse === "BOUNDED_READ_ONLY").length,6,
+  "six existing specialized read-only parser stages remain unchanged");
+eq(matrix.profiles.filter(p => expectedDedicated.has(p.id) && p.stage.parse !== "NONE").length,8,
+  "all eight specialized parsers remain source-supported, including scoped GraphML and drawio");
 eq(matrix.profiles.filter(p => p.stage.parse === "NONE").length,13,
   "thirteen registry-only profiles have no parser");
 for (const source of plannedExternalSourceProfiles) {
@@ -186,6 +206,17 @@ rejects(changed(x=>x.profiles.find(p=>p.id==="office.docx-tables.v1").stage.mode
   "DOCX source reference is not an Engine probe");
 rejects(changed(x=>x.profiles.find(p=>p.id==="graphml.structural.v1").registry="ACTIVE_ADAPTER"),
   "GraphML dedicated review does not join active enterprise adapters");
+rejects(changed(x=>x.profiles.find(p=>p.id==="graphml.structural.v1").stage.modeledProbe="IMPORTED_MODELED_RUNTIME_VERIFIED"),
+  "GraphML review must not become automatic Engine/probe proof by matrix edit");
+rejects(changed(x=>x.profiles.find(p=>p.id==="graphml.structural.v1").stage.builder="DIRECT_ACTIVATION"),
+  "GraphML cannot bypass reviewed Builder via capability metadata");
+rejects(changed(x=>x.profiles.find(p=>p.id==="diagrams.drawio.v1").stage.builder="NONE"),
+  "P2b reviewed Builder cannot silently vanish from source-truth audit");
+rejects(changed(x=>x.profiles.find(p=>p.id==="diagrams.drawio.v1").stage.projection="UNVERIFIED_AUTOMATIC_NETWORK"),
+  "Drawio drawn links cannot become inferred active network by metadata");
+rejects(changed(x=>x.profiles.find(p=>p.id==="diagrams.drawio.v1").stage.modeledProbe="TRUE"),
+  "Drawio source-only review is not independently attested probe result");
+
 rejects(changed(x=>x.profiles.find(p=>p.id==="builtin.csv").sources=["nonexistent.csv"]),
   "missing source evidence cannot be counted");
 rejects(changed(x=>x.profiles.find(p=>p.id==="inventory.yaml.v1").extensions=[".xml"]),
