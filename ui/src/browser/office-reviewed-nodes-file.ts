@@ -4,6 +4,8 @@ import { mapReviewedOfficeOriginalToNodes, type OfficeReviewedNodesDecision,
   type OfficeReviewedNodesCandidate } from "../../../enterprise-import/src/office-reviewed-node-candidate.js";
 import { mapReviewedOfficeOriginalToConnections, type OfficeReviewedConnectionsDecision,
   type OfficeReviewedConnectionsCandidate } from "../../../enterprise-import/src/office-reviewed-connection-candidate.js";
+import { mapReviewedOfficeOriginalToPorts, type OfficeReviewedPortsDecision,
+  type OfficeReviewedPortsCandidate } from "../../../enterprise-import/src/office-reviewed-port-candidate.js";
 import { EnterpriseImportError } from "../../../enterprise-import/src/types.js";
 
 export interface OfficeReviewedReadableFile {
@@ -53,9 +55,9 @@ export async function previewOfficeNodesFile(file: OfficeReviewedReadableFile): 
 export async function verifyOfficeCandidateFile(
   file: OfficeReviewedReadableFile,
   expected: OfficeReviewedPreview,
-  decision: OfficeReviewedNodesDecision | OfficeReviewedConnectionsDecision,
+  decision: OfficeReviewedNodesDecision | OfficeReviewedConnectionsDecision | OfficeReviewedPortsDecision,
   isCurrent: () => boolean,
-): Promise<OfficeReviewedNodesCandidate | OfficeReviewedConnectionsCandidate> {
+): Promise<OfficeReviewedNodesCandidate | OfficeReviewedConnectionsCandidate | OfficeReviewedPortsCandidate> {
   if (typeof isCurrent !== "function" || !isCurrent()) return deny("IC040_P1B_STALE");
   if (!expected || !expected.preview || (expected.format !== "docx" && expected.format !== "odt") ||
       expected.format !== decision?.format ||
@@ -73,9 +75,11 @@ export async function verifyOfficeCandidateFile(
   if (JSON.stringify(refreshed) !== JSON.stringify(expected.preview)) {
     return deny("IC040_P1B_SOURCE_CHANGED");
   }
-  const mapped = "connections" in decision
-    ? await mapReviewedOfficeOriginalToConnections(raw, decision)
-    : await mapReviewedOfficeOriginalToNodes(raw, decision);
+  const mapped = "portSelections" in decision
+    ? await mapReviewedOfficeOriginalToPorts(raw, decision)
+    : "connections" in decision
+      ? await mapReviewedOfficeOriginalToConnections(raw, decision)
+      : await mapReviewedOfficeOriginalToNodes(raw, decision);
   if (!isCurrent()) return deny("IC040_P1B_STALE");
   if (mapped.status !== "READY_FOR_COMPILATION" || !mapped.source ||
       mapped.canActivate !== false || mapped.engineVerified !== false ||

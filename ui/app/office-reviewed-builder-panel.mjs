@@ -88,6 +88,11 @@ export function OfficeReviewedNodeChoices({
   const [choice,setChoice]=useState(""),[nodes,setNodes]=useState([]),
         [peerChoice,setPeerChoice]=useState(""),[connections,setConnections]=useState([]),
         [connectionAck,setConnectionAck]=useState(false),
+        [portLinkChoice,setPortLinkChoice]=useState(""),
+        [sourcePortChoice,setSourcePortChoice]=useState(""),
+        [peerPortChoice,setPeerPortChoice]=useState(""),
+        [portSelections,setPortSelections]=useState([]),
+        [portAck,setPortAck]=useState(false),
         [modeledAck,setModeledAck]=useState(false),[sending,setSending]=useState(false),
         [localError,setLocalError]=useState("");
   const choices=[];
@@ -108,13 +113,25 @@ export function OfficeReviewedNodeChoices({
       .map(cell=>({fromNodeIndex,peerCellOrdinal:cell.cellOrdinal})));
   const peerAvailable=new Map(peerOptions.map(x=>[peerKey(x),x]));
   const peerPresent=new Set(connections.map(peerKey));
+  const portPresent=new Set(portSelections.map(v=>v.connectionIndex));
+  const portCellsFor=index=>{
+    const link=connections[index], node=link?nodes[link.fromNodeIndex]:null;
+    return node ? (result.preview.tables[node.tableOrdinal]?.rows[node.rowOrdinal]?.cells??[])
+      .slice(0,4).filter(cell=>cell.cellOrdinal!==node.nodeIdCellOrdinal &&
+        cell.cellOrdinal!==link.peerCellOrdinal).map(cell=>cell.cellOrdinal) : [];
+  };
+  const availablePortCells=portLinkChoice===""?[]:portCellsFor(Number(portLinkChoice));
   const canSubmit=nodes.length>=1 && nodes.length<=MAX &&
     nodes.every(n=>n.acknowledgeCell===true)&&modeledAck&&
     connections.every(c=>c.acknowledgePeerCell===true)&&
     (connections.length===0||connectionAck)&&
+    (portSelections.length===0 || (portSelections.length===connections.length &&
+      portSelections.every(v=>v.acknowledgeSourcePortCell===true &&
+        v.acknowledgePeerPortCell===true) && portAck)) &&
     !busy&&!sending&&typeof onConfirm==="function";
   const clear=()=>{
-    setModeledAck(false);setConnectionAck(false);setLocalError("");setError("");
+    setModeledAck(false);setConnectionAck(false);setPortAck(false);
+    setLocalError("");setError("");
   };
   const add=()=>{
     const available=selectable.get(choice);
@@ -132,7 +149,8 @@ export function OfficeReviewedNodeChoices({
     setNodes(prev=>prev.filter(n=>keyOf(n)!==key));
     // Link source is a selected node INDEX. Never preserve stale indices after
     // node removal/reordering; require a fresh explicit peer review.
-    setConnections([]);setPeerChoice("");clear();
+    setConnections([]);setPeerChoice("");setPortSelections([]);setPortLinkChoice("");
+    setSourcePortChoice("");setPeerPortChoice("");clear();
   };
   const addConnection=()=>{
     const selected=peerAvailable.get(peerChoice);
@@ -140,7 +158,8 @@ export function OfficeReviewedNodeChoices({
       setLocalError("IC040_P2_LINK_DECISION_INVALID");return;
     }
     setConnections(prev=>[...prev,{...selected,acknowledgePeerCell:false}]);
-    setPeerChoice("");clear();
+    setPortSelections([]);setPortLinkChoice("");
+    setSourcePortChoice("");setPeerPortChoice("");setPeerChoice("");clear();
   };
   const editConnection=(key,checked)=>{
     setConnections(prev=>prev.map(x=>peerKey(x)===key
@@ -149,7 +168,29 @@ export function OfficeReviewedNodeChoices({
   };
   const removeConnection=key=>{
     setConnections(prev=>prev.filter(x=>peerKey(x)!==key));
+    setPortSelections([]);setPortLinkChoice("");
+    setSourcePortChoice("");setPeerPortChoice("");clear();
+  };
+  const addPortPair=()=>{
+    const index=Number(portLinkChoice),from=Number(sourcePortChoice),to=Number(peerPortChoice);
+    if(portLinkChoice===""||sourcePortChoice===""||peerPortChoice===""||
+      !Number.isSafeInteger(index)||index<0||index>=connections.length||
+      portPresent.has(index)||from===to||!portCellsFor(index).includes(from)||
+      !portCellsFor(index).includes(to)||portSelections.length>=MAX){
+      setLocalError("IC040_P3_PORT_DECISION_INVALID");return;
+    }
+    setPortSelections(prev=>[...prev,{
+      connectionIndex:index,sourcePortCellOrdinal:from,peerPortCellOrdinal:to,
+      acknowledgeSourcePortCell:false,acknowledgePeerPortCell:false,
+    }]);
+    setPortLinkChoice("");setSourcePortChoice("");setPeerPortChoice("");clear();
+  };
+  const setPortCellConsent=(index,patch)=>{
+    setPortSelections(prev=>prev.map(v=>v.connectionIndex===index?{...v,...patch}:v));
     clear();
+  };
+  const removePortPair=index=>{
+    setPortSelections(prev=>prev.filter(v=>v.connectionIndex!==index));clear();
   };
   const submit=async()=>{
     if(!canSubmit)return;
@@ -160,6 +201,10 @@ export function OfficeReviewedNodeChoices({
     if(connections.length){
       decision.connections=connections.map(x=>({...x}));
       decision.acknowledgeModeledConnections=connectionAck;
+      if(portSelections.length){
+        decision.portSelections=portSelections.map(x=>({...x}));
+        decision.acknowledgeModeledPorts=portAck;
+      }
     }
     try{await onConfirm(decision);}
     catch(cause){setLocalError(errCode(cause));}
@@ -171,7 +216,7 @@ export function OfficeReviewedNodeChoices({
     e("p",{"data-office-p1b-counts":"true"},
       "Tables: "+result.preview.tables.length+" · structural cells: "+result.preview.totalCells),
     e("p",{"data-office-p1b-truth-boundary":"true"},
-      "Only first four tables, first 20 non-header rows and first four cells per row can be selected. Only individually acknowledged peer cells may become modeled links; no source text, OS, IP, ports, physical cabling, Runtime or Engine PASS is inferred."),
+      "Only first four tables, first 20 non-header rows and first four cells per row can be selected. Only individually acknowledged peer cells and optional separately reviewed port cells may become modeled links/interface references; no unselected source text, OS, IP, physical cabling, Runtime or Engine PASS is inferred."),
     e("label",null,"Original cell position (never the header)",
       e("select",{value:choice,disabled:busy||sending,
         "data-office-p1b-cell-ordinal":"true",onChange:event=>{
@@ -237,6 +282,73 @@ export function OfficeReviewedNodeChoices({
       "data-office-p2-modeled-ack":"true",
       onChange:event=>{setConnectionAck(event.currentTarget.checked);setLocalError("");}}),
       " I explicitly approve ONLY these source-declared peer references as UNVERIFIED modeled Builder connections."),
+    e("section",{"data-office-p3-ports":"REVIEW_REQUIRED"},
+      e("h4",{"data-office-p3-title":"REVIEW_REQUIRED"},
+        "Optional exact original interface and port pairs"),
+      e("p",{"data-office-p3-boundary":"UNVERIFIED"},
+        "Choose both local and remote port cells from the SAME original row "+
+        "as a separately reviewed peer link. Each port is individually consented. "+
+        "In this bounded profile, all selected links require both ports when "+
+        "the port option is used. A reused interface or uncertain evidence BLOCKS. "+
+        "These are modeled interfaces, not physically verified cables."),
+      e("label",null,"Reviewed link to annotate",
+        e("select",{value:portLinkChoice,disabled:busy||sending||connections.length===0,
+          "data-office-p3-link-choice":"true",
+          onChange:event=>{setPortLinkChoice(event.currentTarget.value);
+            setSourcePortChoice("");setPeerPortChoice("");clear();}},
+          e("option",{value:""},"Choose reviewed link…"),
+          ...connections.map((link,index)=>e("option",{key:index,value:String(index)},
+            "Reviewed link "+(index+1)+" · source node "+(link.fromNodeIndex+1))))),
+      e("label",null,"Local/source interface cell",
+        e("select",{value:sourcePortChoice,disabled:busy||sending||portLinkChoice==="",
+          "data-office-p3-source-choice":"true",
+          onChange:event=>{setSourcePortChoice(event.currentTarget.value);clear();}},
+          e("option",{value:""},"Choose local port cell…"),
+          ...availablePortCells.map(x=>e("option",{key:x,value:String(x)},
+            "Original cell "+(x+1))))),
+      e("label",null,"Remote/peer interface cell",
+        e("select",{value:peerPortChoice,disabled:busy||sending||portLinkChoice==="",
+          "data-office-p3-peer-choice":"true",
+          onChange:event=>{setPeerPortChoice(event.currentTarget.value);clear();}},
+          e("option",{value:""},"Choose peer port cell…"),
+          ...availablePortCells.map(x=>e("option",{key:x,value:String(x)},
+            "Original cell "+(x+1))))),
+      e("button",{type:"button",disabled:busy||sending||portLinkChoice===""||
+        sourcePortChoice===""||peerPortChoice===""||
+        sourcePortChoice===peerPortChoice||
+        portPresent.has(Number(portLinkChoice))||portSelections.length>=MAX,
+        "data-office-p3-add":"true",onClick:addPortPair},
+        "Review exact local and remote port pair"),
+      e("p",{"data-office-p3-selected-count":String(portSelections.length)},
+        "Port pairs selected: "+portSelections.length+" / "+connections.length),
+      e("ol",{className:"validation-list"},...portSelections.map(selection=>
+        e("li",{key:selection.connectionIndex,
+          "data-office-p3-selection":String(selection.connectionIndex)},
+          e("span",null,"Link "+(selection.connectionIndex+1)+
+            " · local cell "+(selection.sourcePortCellOrdinal+1)+
+            " · remote cell "+(selection.peerPortCellOrdinal+1)),
+          e("label",null,e("input",{type:"checkbox",
+            checked:selection.acknowledgeSourcePortCell,disabled:busy||sending,
+            "data-office-p3-source-ack":String(selection.connectionIndex),
+            onChange:event=>setPortCellConsent(selection.connectionIndex,
+              {acknowledgeSourcePortCell:event.currentTarget.checked})}),
+            " I authorize this selected local interface cell."),
+          e("label",null,e("input",{type:"checkbox",
+            checked:selection.acknowledgePeerPortCell,disabled:busy||sending,
+            "data-office-p3-peer-ack":String(selection.connectionIndex),
+            onChange:event=>setPortCellConsent(selection.connectionIndex,
+              {acknowledgePeerPortCell:event.currentTarget.checked})}),
+            " I authorize this selected remote interface cell."),
+          e("button",{type:"button",disabled:busy||sending,
+            "data-office-p3-remove":String(selection.connectionIndex),
+            onClick:()=>removePortPair(selection.connectionIndex)},
+            "Remove port pair")))),
+      e("label",null,e("input",{type:"checkbox",checked:portAck,
+        disabled:busy||sending||portSelections.length===0,
+        "data-office-p3-modeled-ack":"true",
+        onChange:event=>{setPortAck(event.currentTarget.checked);setLocalError("");}}),
+        " I independently approve these original source interface IDs "+
+        "as UNVERIFIED modeled Builder ports; they do not verify physical cables.")),
     e("label",null,e("input",{type:"checkbox",checked:modeledAck,
       disabled:busy||sending||nodes.length===0,"data-office-p1b-modeled-ack":"true",
       onChange:event=>{setModeledAck(event.currentTarget.checked);setLocalError("");}}),
