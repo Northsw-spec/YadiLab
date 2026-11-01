@@ -4359,7 +4359,9 @@ function App() {
         checkCurrent();
         // Only separately reviewed original peer cells may become modeled links.
         // P1a node-only decisions must continue to create zero connections.
-        const expectedConnections = Array.isArray(decision.connections) ? decision.connections.length : 0;
+        const expectedConnections = Array.isArray(decision.linkRows)
+          ? decision.linkRows.length
+          : Array.isArray(decision.connections) ? decision.connections.length : 0;
         if (mapped.status !== "READY_FOR_COMPILATION" || !mapped.source ||
             mapped.source.connections.length !== expectedConnections || mapped.source.tests.length ||
             mapped.canActivate !== false || mapped.engineVerified !== false)
@@ -4380,6 +4382,7 @@ function App() {
             JSON.stringify(refreshed.origins) !== JSON.stringify(mapped.origins) ||
             JSON.stringify(refreshed.connectionOrigins ?? []) !== JSON.stringify(mapped.connectionOrigins ?? []) ||
              JSON.stringify(refreshed.portOrigins ?? []) !== JSON.stringify(mapped.portOrigins ?? []) ||
+             JSON.stringify(refreshed.linkRowOrigins ?? []) !== JSON.stringify(mapped.linkRowOrigins ?? []) ||
             refreshed.sourceSha256 !== mapped.sourceSha256)
           blocked("IC040_P1B_SOURCE_CHANGED");
         checkCurrent(); // no await between final live check and commit
@@ -4387,7 +4390,7 @@ function App() {
         setImportedProbeAutoOpen(false);
         setDiagnostics([...layout.diagnostics, {
           severity: "warning", code: "IC040_P1B_MODELED_NODES_NOT_VERIFIED",
-          message: "Only independently consented DOCX/ODT node-ID cells, operator roles and selected original peer-ID cells entered Builder. Peer connections and any individually reviewed original port cells are MODELED, NOT independently verified physical cables. No unselected or invented ports, IPs, routes, real devices, reachability, Engine or Runtime PASS."
+          message: "Only independently consented DOCX/ODT node-ID cells, operator roles and reviewed original same-row peer or separate Links-table FROM/TO endpoint cells entered Builder. Any port references and links are MODELED, not independently verified physical cables. No unselected or invented ports, IPs, routes, real devices, reachability, Engine or Runtime PASS."
         }]);
         setWorkspace(layout.workspace);
         setOfficeReviewedBuilderOpen(false);

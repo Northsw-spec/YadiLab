@@ -93,6 +93,13 @@ export function OfficeReviewedNodeChoices({
         [peerPortChoice,setPeerPortChoice]=useState(""),
         [portSelections,setPortSelections]=useState([]),
         [portAck,setPortAck]=useState(false),
+        [linkRowChoice,setLinkRowChoice]=useState(""),
+        [linkFromChoice,setLinkFromChoice]=useState(""),
+        [linkToChoice,setLinkToChoice]=useState(""),
+        [linkSourcePortChoice,setLinkSourcePortChoice]=useState(""),
+        [linkTargetPortChoice,setLinkTargetPortChoice]=useState(""),
+        [linkRows,setLinkRows]=useState([]),
+        [linkRowAck,setLinkRowAck]=useState(false),
         [modeledAck,setModeledAck]=useState(false),[sending,setSending]=useState(false),
         [localError,setLocalError]=useState("");
   const choices=[];
@@ -121,6 +128,18 @@ export function OfficeReviewedNodeChoices({
         cell.cellOrdinal!==link.peerCellOrdinal).map(cell=>cell.cellOrdinal) : [];
   };
   const availablePortCells=portLinkChoice===""?[]:portCellsFor(Number(portLinkChoice));
+  const nodeTables=new Set(nodes.map(n=>n.tableOrdinal));
+  const linkRowCandidates=result.preview.tables.slice(0,4)
+    .filter(table=>!nodeTables.has(table.tableOrdinal))
+    .flatMap(table=>table.rows.slice(1,21).filter(row=>row.cells.length>=2)
+      .map(row=>({tableOrdinal:table.tableOrdinal,rowOrdinal:row.rowOrdinal})));
+  const linkRowKey=row=>row.tableOrdinal+":"+row.rowOrdinal;
+  const linkRowPresent=new Set(linkRows.map(linkRowKey));
+  const selectedLinkRow=linkRowCandidates.find(x=>linkRowKey(x)===linkRowChoice);
+  const selectedLinkCells=selectedLinkRow
+    ?result.preview.tables[selectedLinkRow.tableOrdinal]
+      ?.rows[selectedLinkRow.rowOrdinal]?.cells.slice(0,4).map(x=>x.cellOrdinal)??[]
+    :[];
   const canSubmit=nodes.length>=1 && nodes.length<=MAX &&
     nodes.every(n=>n.acknowledgeCell===true)&&modeledAck&&
     connections.every(c=>c.acknowledgePeerCell===true)&&
@@ -128,9 +147,14 @@ export function OfficeReviewedNodeChoices({
     (portSelections.length===0 || (portSelections.length===connections.length &&
       portSelections.every(v=>v.acknowledgeSourcePortCell===true &&
         v.acknowledgePeerPortCell===true) && portAck)) &&
+    (linkRows.length===0 || (connections.length===0 && linkRowAck &&
+      linkRows.every(v=>v.acknowledgeFromCell===true &&
+        v.acknowledgeToCell===true &&
+        (v.sourcePortCellOrdinal===null ||
+          (v.acknowledgeSourcePortCell===true && v.acknowledgeTargetPortCell===true))))) &&
     !busy&&!sending&&typeof onConfirm==="function";
   const clear=()=>{
-    setModeledAck(false);setConnectionAck(false);setPortAck(false);
+    setModeledAck(false);setConnectionAck(false);setPortAck(false);setLinkRowAck(false);
     setLocalError("");setError("");
   };
   const add=()=>{
@@ -139,22 +163,24 @@ export function OfficeReviewedNodeChoices({
       setLocalError("IC040_P1B_NODE_DECISION_INVALID");return;
     }
     setNodes(prev=>[...prev,{...available,role:"resource.generic",acknowledgeCell:false}]);
+    setLinkRows([]);setLinkRowChoice("");
     setChoice("");clear();
   };
   const edit=(key,patch)=>{
     setNodes(prev=>prev.map(n=>keyOf(n)===key?{...n,...patch}:n));
-    clear();
+    setLinkRows([]);setLinkRowChoice("");clear();
   };
   const remove=key=>{
     setNodes(prev=>prev.filter(n=>keyOf(n)!==key));
     // Link source is a selected node INDEX. Never preserve stale indices after
     // node removal/reordering; require a fresh explicit peer review.
     setConnections([]);setPeerChoice("");setPortSelections([]);setPortLinkChoice("");
+    setLinkRows([]);setLinkRowChoice("");
     setSourcePortChoice("");setPeerPortChoice("");clear();
   };
   const addConnection=()=>{
     const selected=peerAvailable.get(peerChoice);
-    if(!selected||peerPresent.has(peerChoice)||connections.length>=MAX){
+    if(!selected||peerPresent.has(peerChoice)||connections.length>=MAX||linkRows.length){
       setLocalError("IC040_P2_LINK_DECISION_INVALID");return;
     }
     setConnections(prev=>[...prev,{...selected,acknowledgePeerCell:false}]);
@@ -192,12 +218,42 @@ export function OfficeReviewedNodeChoices({
   const removePortPair=index=>{
     setPortSelections(prev=>prev.filter(v=>v.connectionIndex!==index));clear();
   };
+  const addLinkRow=()=>{
+    const row=selectedLinkRow;
+    const from=Number(linkFromChoice),to=Number(linkToChoice);
+    const portA=linkSourcePortChoice===""?null:Number(linkSourcePortChoice);
+    const portB=linkTargetPortChoice===""?null:Number(linkTargetPortChoice);
+    const columns=[from,to,...(portA===null?[]:[portA]),...(portB===null?[]:[portB])];
+    if(!row||linkRows.length>=MAX||connections.length>0||
+      linkFromChoice===""||linkToChoice===""||
+      !selectedLinkCells.includes(from)||!selectedLinkCells.includes(to)||
+      (portA===null)!==(portB===null)||
+      (portA!==null&&(!selectedLinkCells.includes(portA)||!selectedLinkCells.includes(portB)))||
+      new Set(columns).size!==columns.length||linkRowPresent.has(linkRowChoice)){
+      setLocalError("IC040_P4_LINK_DECISION_INVALID");return;
+    }
+    setLinkRows(prev=>[...prev,{...row,fromCellOrdinal:from,toCellOrdinal:to,
+      sourcePortCellOrdinal:portA,targetPortCellOrdinal:portB,
+      acknowledgeFromCell:false,acknowledgeToCell:false,
+      acknowledgeSourcePortCell:false,acknowledgeTargetPortCell:false}]);
+    setLinkRowChoice("");setLinkFromChoice("");setLinkToChoice("");
+    setLinkSourcePortChoice("");setLinkTargetPortChoice("");clear();
+  };
+  const editLinkRow=(key,patch)=>{
+    setLinkRows(prev=>prev.map(x=>linkRowKey(x)===key?{...x,...patch}:x));clear();
+  };
+  const removeLinkRow=key=>{setLinkRows(prev=>prev.filter(x=>linkRowKey(x)!==key));clear();};
   const submit=async()=>{
     if(!canSubmit)return;
     setSending(true);setBusy(true);setError("");setLocalError("");
     const decision={format:result.format,sourceSha256:result.preview.sourceSha256,
       nodes:nodes.map(n=>({...n})),acknowledgeModeledResources:modeledAck};
-    // Keep the P1a/P1b exact legacy decision shape when no link was selected.
+    // P4 separate-table decisions intentionally exclude the P2/P3 link keys.
+    if(linkRows.length){
+      decision.linkRows=linkRows.map(x=>({...x}));
+      decision.acknowledgeModeledLinkRows=linkRowAck;
+    }
+    // Keep P1a/P1b/P2/P3 exact legacy shapes when P4 is not selected.
     if(connections.length){
       decision.connections=connections.map(x=>({...x}));
       decision.acknowledgeModeledConnections=connectionAck;
@@ -253,7 +309,7 @@ export function OfficeReviewedNodeChoices({
       "It must contain another selected node ID, or import BLOCKS. At most four connections; "+
       "no port, cable, interface, physical verification or network PASS inferred."),
     e("label",null,"Original row's peer cell position",
-      e("select",{value:peerChoice,disabled:busy||sending||nodes.length<2,
+      e("select",{value:peerChoice,disabled:busy||sending||nodes.length<2||linkRows.length>0,
         "data-office-p2-peer-choice":"true",
         onChange:event=>{setPeerChoice(event.currentTarget.value);clear();}},
         e("option",{value:""},"Choose explicitly documented peer cell…"),
@@ -349,6 +405,73 @@ export function OfficeReviewedNodeChoices({
         onChange:event=>{setPortAck(event.currentTarget.checked);setLocalError("");}}),
         " I independently approve these original source interface IDs "+
         "as UNVERIFIED modeled Builder ports; they do not verify physical cables.")),
+    e("section",{"data-office-p4-link-rows":"REVIEW_REQUIRED"},
+      e("h4",{"data-office-p4-title":"REVIEW_REQUIRED"},
+        "Optional separately reviewed Links-table rows"),
+      e("p",{"data-office-p4-boundary":"UNVERIFIED"},
+        "Choose an original row from a table DIFFERENT from the selected "+
+        "device-ID table. Independently authorize the FROM and TO cells; "+
+        "both must contain already selected device IDs. Optional local and "+
+        "remote port cells must be selected together and approved separately. "+
+        "Multiple rows may share one switch with DISTINCT ports. Up to four "+
+        "links. No inferred cables, no Runtime or Engine PASS. "+
+        "Use either this separate-row profile or the earlier P2/P3 same-row profile."),
+      e("label",null,"Original separate link row",
+        e("select",{value:linkRowChoice,disabled:busy||sending||connections.length>0||
+          nodes.length<2,"data-office-p4-row-choice":"true",
+          onChange:event=>{setLinkRowChoice(event.currentTarget.value);
+            setLinkFromChoice("");setLinkToChoice("");setLinkSourcePortChoice("");
+            setLinkTargetPortChoice("");clear();}},
+          e("option",{value:""},"Choose a separate original link row…"),
+          ...linkRowCandidates.map(row=>e("option",{key:linkRowKey(row),value:linkRowKey(row)},
+            "Table "+(row.tableOrdinal+1)+" · row "+(row.rowOrdinal+1))))),
+      ...[
+        ["Source device ID cell",linkFromChoice,setLinkFromChoice,"data-office-p4-from-choice"],
+        ["Target device ID cell",linkToChoice,setLinkToChoice,"data-office-p4-to-choice"],
+        ["Optional source port cell",linkSourcePortChoice,setLinkSourcePortChoice,"data-office-p4-source-port-choice"],
+        ["Optional target port cell",linkTargetPortChoice,setLinkTargetPortChoice,"data-office-p4-target-port-choice"],
+      ].map(([label,value,setValue,attribute])=>e("label",{key:attribute},label,
+        e("select",{value,disabled:busy||sending||!selectedLinkRow,
+          [attribute]:"true",onChange:event=>{setValue(event.currentTarget.value);clear();}},
+          e("option",{value:""},"No cell selected"),
+          ...selectedLinkCells.map(index=>e("option",{key:index,value:String(index)},
+            "Original cell "+(index+1)))))),
+      e("button",{type:"button",disabled:busy||sending||!selectedLinkRow||
+        connections.length>0||linkRows.length>=MAX||linkRowPresent.has(linkRowChoice)||
+        linkFromChoice===""||linkToChoice===""||linkFromChoice===linkToChoice||
+        (linkSourcePortChoice==="")!==(linkTargetPortChoice===""),
+        "data-office-p4-add":"true",onClick:addLinkRow},
+        "Review both endpoints of this original Links row"),
+      e("p",{"data-office-p4-count":String(linkRows.length)},
+        "Individually selected Links rows: "+linkRows.length+" / "+MAX),
+      e("ol",{className:"validation-list"},...linkRows.map(link=>{
+        const k=linkRowKey(link),portPair=link.sourcePortCellOrdinal!==null;
+        return e("li",{key:k,"data-office-p4-selection":k},
+          e("span",null,"Table "+(link.tableOrdinal+1)+" · row "+(link.rowOrdinal+1)+
+            " · endpoints cells "+(link.fromCellOrdinal+1)+"/"+(link.toCellOrdinal+1)+
+            (portPair?" · ports "+(link.sourcePortCellOrdinal+1)+"/"+
+              (link.targetPortCellOrdinal+1):" · no source ports claimed")),
+          ...[
+            ["acknowledgeFromCell","I independently approve this source device ID.","data-office-p4-from-ack"],
+            ["acknowledgeToCell","I independently approve this target device ID.","data-office-p4-to-ack"],
+            ...(portPair?[
+              ["acknowledgeSourcePortCell","I independently approve this local port.","data-office-p4-source-port-ack"],
+              ["acknowledgeTargetPortCell","I independently approve this remote port.","data-office-p4-target-port-ack"],
+            ]:[]),
+          ].map(([flag,label,attribute])=>e("label",{key:flag},
+            e("input",{type:"checkbox",checked:link[flag],disabled:busy||sending,
+              [attribute]:k,onChange:event=>editLinkRow(k,{[flag]:event.currentTarget.checked})}),
+            label)),
+          e("button",{type:"button",disabled:busy||sending,
+            "data-office-p4-remove":k,onClick:()=>removeLinkRow(k)},
+            "Remove separate link row"));
+      })),
+      e("label",null,e("input",{type:"checkbox",checked:linkRowAck,
+        disabled:busy||sending||linkRows.length===0,
+        "data-office-p4-modeled-ack":"true",
+        onChange:event=>{setLinkRowAck(event.currentTarget.checked);setLocalError("");}}),
+        " I separately approve ONLY these original two-endpoint Links rows "+
+        "as UNVERIFIED modeled Builder connections, not physical cables.")),
     e("label",null,e("input",{type:"checkbox",checked:modeledAck,
       disabled:busy||sending||nodes.length===0,"data-office-p1b-modeled-ack":"true",
       onChange:event=>{setModeledAck(event.currentTarget.checked);setLocalError("");}}),

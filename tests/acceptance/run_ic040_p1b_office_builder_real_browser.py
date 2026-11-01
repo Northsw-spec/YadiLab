@@ -465,6 +465,201 @@ def case_p3_bad_port(browser,url,ext,mode):
         return {"format":ext,"case":mode+"_original_port_denied","status":"PASS"}
     finally:page.close()
 
+
+# P4: source-grounded separate Nodes / Links table rows in real DOCX/ODT.
+P4_PRIVATE="PRIVATE_NOT_SELECTED_P4_501"
+P4_DEVICES=[
+    ["Device","Private"],
+    ["sw01",P4_PRIVATE],
+    ["fw01","PRIVATE_NOT_SELECTED_P4_502"],
+    ["rt01","PRIVATE_NOT_SELECTED_P4_503"],
+    ["srv01","PRIVATE_NOT_SELECTED_P4_504"],
+]
+P4_LINKS=[
+    ["From","To","Local Port","Peer Port"],
+    ["sw01","fw01","eth1","eth0"],
+    ["sw01","rt01","eth2","eth0"],
+    ["sw01","srv01","eth3","eth0"],
+]
+
+def make_p4_office(ext,links=None):
+    source_links=links if links is not None else P4_LINKS
+    tables=[P4_DEVICES,source_links]
+    if ext=="docx":
+        cell=lambda value:'<w:tc><w:tcPr/><w:p><w:r><w:t>'+value+'</w:t></w:r></w:p></w:tc>'
+        body=('<w:document xmlns:w="'+WORD+'"><w:body>'+
+              ''.join('<w:tbl><w:tblPr/><w:tblGrid/>'+
+                ''.join('<w:tr>'+''.join(cell(v) for v in row)+'</w:tr>' for row in rows)+
+                '</w:tbl>' for rows in tables)+'</w:body></w:document>')
+        types=('<Types xmlns="'+OPC_TYPES+'"><Override PartName="/word/document.xml" ContentType="'+
+               MAIN_TYPE+'"/></Types>')
+        rels=('<Relationships xmlns="'+OPC_REL+'"><Relationship Id="rId1" Type="'+
+              OFFICE_REL+'" Target="word/document.xml"/></Relationships>')
+        out=io.BytesIO()
+        with zipfile.ZipFile(out,"w",zipfile.ZIP_DEFLATED) as package:
+            for name,data in [("[Content_Types].xml",types),
+                              ("_rels/.rels",rels),("word/document.xml",body)]:
+                package.writestr(name,data)
+        return out.getvalue()
+    cell=lambda v:'<table:table-cell office:value-type="string"><text:p>'+v+'</text:p></table:table-cell>'
+    table_xml=''.join('<table:table table:name="'+("DeviceRows" if i==0 else "LinkRows")+'">'+
+      '<table:table-column/>'+
+      ''.join('<table:table-row>'+''.join(cell(v) for v in row)+'</table:table-row>' for row in rows)+
+      '</table:table>' for i,rows in enumerate(tables))
+    body=('<office:document-content xmlns:office="'+OFFICE+
+          '" xmlns:table="'+TABLE+'" xmlns:text="'+TEXT+
+          '" office:version="1.3"><office:body><office:text>'+
+          table_xml+'</office:text></office:body></office:document-content>')
+    manifest=('<manifest:manifest xmlns:manifest="'+MANIFEST+'" manifest:version="1.3">'+
+              '<manifest:file-entry manifest:full-path="/" manifest:media-type="'+MIME+'"/>'+
+              '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'+
+              '</manifest:manifest>')
+    out=io.BytesIO()
+    with zipfile.ZipFile(out,"w") as package:
+        info=zipfile.ZipInfo("mimetype",(1980,1,1,0,0,0))
+        info.compress_type=zipfile.ZIP_STORED
+        info.extra=b""
+        package.writestr(info,MIME.encode("ascii"))
+        package.writestr("content.xml",body.encode(),compress_type=zipfile.ZIP_DEFLATED)
+        package.writestr("META-INF/manifest.xml",manifest.encode(),compress_type=zipfile.ZIP_DEFLATED)
+    return out.getvalue()
+
+def choose_p4_link_rows(page,with_ports=True):
+    for offset,role in enumerate(["network.switch","network.firewall","network.router","server.generic"]):
+        key="0:"+str(offset+1)+":0"
+        page.locator('[data-office-p1b-cell-ordinal="true"]').select_option(key)
+        page.locator('[data-office-p1b-add="true"]').click()
+        page.locator('[data-office-p1b-role="'+key+'"]').select_option(role)
+        page.locator('[data-office-p1b-cell-ack="'+key+'"]').check()
+    expect(page.locator('[data-office-p1b-selected-count="4"]')).to_be_visible(timeout=10000)
+    for row in range(1,4):
+        key="1:"+str(row)
+        page.locator('[data-office-p4-row-choice="true"]').select_option(key)
+        page.locator('[data-office-p4-from-choice="true"]').select_option("0")
+        page.locator('[data-office-p4-to-choice="true"]').select_option("1")
+        if with_ports:
+            page.locator('[data-office-p4-source-port-choice="true"]').select_option("2")
+            page.locator('[data-office-p4-target-port-choice="true"]').select_option("3")
+        page.locator('[data-office-p4-add="true"]').click()
+        require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+                "P4 prematurely enabled source-unreviewed endpoint")
+        page.locator('[data-office-p4-from-ack="'+key+'"]').check()
+        page.locator('[data-office-p4-to-ack="'+key+'"]').check()
+        if with_ports:
+            page.locator('[data-office-p4-source-port-ack="'+key+'"]').check()
+            page.locator('[data-office-p4-target-port-ack="'+key+'"]').check()
+    expect(page.locator('[data-office-p4-count="3"]')).to_be_visible(timeout=10000)
+    require(page.locator('[data-office-p1b-confirm]').is_disabled(),
+            "P4 lacked separate modeled link row consent")
+    page.locator('[data-office-p4-modeled-ack="true"]').check()
+    page.locator('[data-office-p1b-modeled-ack="true"]').check()
+    expect(page.locator('[data-office-p1b-confirm="true"]')).to_be_enabled()
+
+def case_p4_separate_rows(browser,url,ext,with_ports=True):
+    page,errors,external=setup(browser,url)
+    try:
+        opening(page);choose(page,ext,make_p4_office(ext))
+        choose_p4_link_rows(page,with_ports)
+        require(P4_PRIVATE not in page.locator('[data-office-p1b-panel]').inner_html(),
+                "Unselected private Office text leaked through link-row review UI")
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-panel]')).to_have_count(0,timeout=45000)
+        source=exported_source(page)
+        require({r["id"]:r["type"] for r in source["resources"]}=={
+                "sw01":"network.switch","fw01":"network.firewall",
+                "rt01":"network.router","srv01":"server.generic"},
+                "P4 missing/retyped actual separate-table nodes")
+        expected={("sw01","fw01"),("sw01","rt01"),("sw01","srv01")}
+        endpoints={(c["from"]["resource"],c["to"]["resource"]) for c in source["connections"]}
+        require(len(source["connections"])==3 and endpoints==expected,
+                "P4 source lost or invented independent switch Links rows")
+        expected_ports={
+            ("sw01","eth1","fw01","eth0"),
+            ("sw01","eth2","rt01","eth0"),
+            ("sw01","eth3","srv01","eth0"),
+        } if with_ports else {
+            ("sw01",None,"fw01",None),
+            ("sw01",None,"rt01",None),
+            ("sw01",None,"srv01",None),
+        }
+        actual_ports={(c["from"]["resource"],c["from"].get("port"),
+                       c["to"]["resource"],c["to"].get("port"))
+                      for c in source["connections"]}
+        require(actual_ports==expected_ports,"P4 source port IDs mismatched actual original cells")
+        require(source["completion"]["path"]=="office_manual_verification" and source["tests"]==[],
+                "P4 falsely completed imported topology without modeled Engine verification")
+        require(all(row[1] not in json.dumps(source) for row in P4_DEVICES[1:]),
+                "P4 copied nonselected private original node cells into Builder")
+        panel=page.locator(".topology-panel")
+        expect(panel.locator('.react-flow__node[data-id]')).to_have_count(4,timeout=30000)
+        visible_families={}
+        for drawn in panel.locator('.react-flow__node[data-id]').all():
+            element=drawn.locator(".resource-node[data-device-family]")
+            require(element.count()==1,"P4 actual rendered node missing visible device family")
+            node_id=drawn.get_attribute("data-id")
+            require(node_id not in visible_families,"P4 duplicate drawn node ID")
+            visible_families[node_id]=element.get_attribute("data-device-family")
+        require(visible_families=={
+            "sw01":"switch","fw01":"firewall","rt01":"router","srv01":"server"},
+            "P4 rendered device types differ from individually reviewed original IDs and roles")
+        expect(panel.locator('.react-flow__edge[data-id]')).to_have_count(3,timeout=30000)
+        rendered=set()
+        for edge in panel.locator('.react-flow__edge[data-id]').all():
+            path=edge.locator("path.react-flow__edge-path.semantic-edge")
+            require(path.count()==1 and bool(path.get_attribute("d")),
+                    "P4 actual rendered link absent or malformed SVG")
+            require(path.get_attribute("data-connection-kind")=="network",
+                    "P4 rendered connection kind differs from source")
+            rendered.add((path.get_attribute("data-connection-source"),
+                          path.get_attribute("data-connection-source-port"),
+                          path.get_attribute("data-connection-target"),
+                          path.get_attribute("data-connection-target-port")))
+        require(rendered==expected_ports,
+                "P4 actual rendered SVG endpoint/port identities differ from original Links rows; "+
+                "observed="+repr(sorted(rendered))+" expected="+repr(sorted(expected_ports)))
+        if with_ports:
+            handles={(n.get_attribute("data-id"),h.get_attribute("data-interface-id"))
+                for n in panel.locator('.react-flow__node[data-id]').all()
+                for h in n.locator('[data-interface-id]').all()}
+            required={("sw01","eth1"),("sw01","eth2"),("sw01","eth3"),
+                ("fw01","eth0"),("rt01","eth0"),("srv01","eth0")}
+            require(required.issubset(handles),"P4 actual rendered node port handles absent")
+        else:
+            require(all(not r.get("interfaces") for r in source["resources"]),
+                    "P4 portless selection invented original-unselected interfaces")
+        require(page.locator(".app-frame").get_attribute("data-runtime-scenario-hash")=="builder",
+                "P4 modified Engine Runtime instead of only Builder")
+        clean(errors,external)
+        return {"format":ext,"case":"separate_link_rows_"+("ports" if with_ports else "portless"),
+                "status":"PASS"}
+    finally:page.close()
+
+def case_p4_blocked_link(browser,url,ext,kind):
+    rows=[list(row) for row in P4_LINKS]
+    if kind=="unknown":
+        rows[2][1]="ghost"
+        expected="IC040_P4_LINK_ENDPOINT_UNKNOWN"
+    elif kind=="reuse":
+        rows[2][2]="eth1"
+        expected="IC040_P4_PORT_REUSED"
+    elif kind=="secret":
+        rows[2][2]="PASSWORD=canary"
+        expected=("DOCX_CELL_SENSITIVE_BLOCKED" if ext=="docx"
+                  else "ODT_CELL_SENSITIVE_BLOCKED")
+    else:raise AssertionError("Unknown P4 negative case")
+    page,errors,external=setup(browser,url)
+    try:
+        before=exported_source(page)
+        opening(page);choose(page,ext,make_p4_office(ext,rows));choose_p4_link_rows(page)
+        page.locator('[data-office-p1b-confirm="true"]').click()
+        expect(page.locator('[data-office-p1b-error="BLOCKED"]')).to_contain_text(expected,timeout=45000)
+        page.locator('[data-office-p1b-cancel]').click()
+        require(exported_source(page)==before,
+                "P4 failed review must not mutate current Builder")
+        clean(errors,external)
+        return {"format":ext,"case":"blocked_separate_link_"+kind,"status":"PASS"}
+    finally:page.close()
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--url",required=True)
@@ -499,6 +694,10 @@ def main():
                     cases.append({**result,"stability_run":stability_run+1})
                 cases.append(case_p2_unknown_peer(browser,args.url,ext,unknown))
                 cases.append(case_p3_real_ports(browser,args.url,ext))
+                cases.append(case_p4_separate_rows(browser,args.url,ext,True))
+                cases.append(case_p4_separate_rows(browser,args.url,ext,False))
+                for p4kind in ["unknown","reuse","secret"]:
+                    cases.append(case_p4_blocked_link(browser,args.url,ext,p4kind))
                 for mode in ["reused","invalid","sensitive"]:
                     cases.append(case_p3_bad_port(browser,args.url,ext,mode))
                 cases.append(case_p2_reciprocal_peer(browser,args.url,ext,reciprocal))
@@ -518,6 +717,7 @@ def main():
     print("PASS IC-040 P1b actual compiled Chromium DOCX/ODT original-cell consent, final reread and live Builder race denial")
     print("PASS IC-040 P2 actual compiled Chromium DOCX/ODT exact SVG peer links, unknown and reciprocal peer duplicates blocked")
     print("PASS IC-040 P3 actual DOCX/ODT Chromium source, port handles, exact drawn endpoint port identities and negative denial")
+    print("PASS IC-040 P4 actual compiled DOCX/ODT separate Links rows, three switch links, source/rendered endpoints/ports and no-guess negatives")
     print(json.dumps(report,indent=2))
 
 if __name__=="__main__":
