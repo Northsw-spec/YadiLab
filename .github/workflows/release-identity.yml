@@ -49,6 +49,7 @@ jobs:
           npm run test:ic020-p2c6-exit
           npm run test:ic030-p1-graphml-freshness
           npm run test:ic030-p2a-drawio-candidate
+          node tests/ci/run_ubuntu_browser_mirror_contract_tests.mjs
           npm run test:ic030-p2b-drawio-ui
           npm run test:dev11-ui
           npm run test:ospf-p2p-dd
