@@ -157,7 +157,7 @@
     "test:ic030-p2a-drawio-candidate": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic030_p2a_drawio_candidate_tests.mjs",
     "test:ic030-p2b-drawio-ui": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic030_p2a_drawio_candidate_tests.mjs && node tests/browser/run_ic030_p2b_drawio_ui_tests.mjs",
     "test:ic040-p1a-office-nodes": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_ic040_p1a_office_node_candidate_tests.mjs",
-    "test:ic040-p1b-office-builder": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic040_p1b_office_builder_tests.mjs",
+    "test:ic040-p1b-office-builder": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic040_p1b_office_builder_tests.mjs && node tests/browser/run_ic040_p2_office_connections_tests.mjs",
     "test:audit007-p1-engine-inputs": "tsc -p tests/tsconfig.engine.json && node tests/engine/run_audit007_p1_network_input_safety_tests.mjs",
     "test:audit007-p2a-canonical-json": "tsc -p tests/tsconfig.compiler.json && tsc -p tests/tsconfig.enterprise.json && node tests/security/run_audit007_p2a_canonical_json_tests.mjs",
     "test:audit007-p2b-import-fields": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_audit007_p2b_import_field_integrity_tests.mjs",
