@@ -440,7 +440,7 @@ def case_p3_bad_port(browser,url,ext,mode):
             rows[2][2]="eth1"
             expected="IC040_P3_PORT_REUSED"
         elif mode=="invalid":
-            rows[1][2]="Gi1/0/1"
+            rows[1][2]="Eth0"
             expected="IC040_P3_PORT_INVALID"
         elif mode=="sensitive":
             rows[1][2]="PASSWORD=canary"

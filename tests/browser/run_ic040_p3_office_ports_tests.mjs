@@ -121,11 +121,16 @@ for(const [format,make] of [["docx",docx],["odt",odt]]){
  await denies(verifyOfficeCandidateFile(duplicateFile,duplicatePreview,{
   ...p3,sourceSha256:sha(duplicate),
  },()=>true),"IC040_P3_PORT_REUSED");
- const invalid=await make(sourceRows.map((row,i)=>i===1?[row[0],row[1],"Gi1/0/1",row[3],row[4]]:row));
+ const invalid=await make(sourceRows.map((row,i)=>i===1?[row[0],row[1],"Eth0",row[3],row[4]]:row));
  const invalidFile=file("network."+format,invalid),invalidPreview=await previewOfficeNodesFile(invalidFile);
  await denies(verifyOfficeCandidateFile(invalidFile,invalidPreview,{
   ...p3,sourceSha256:sha(invalid),
  },()=>true),"IC040_P3_PORT_INVALID");
+ const slash=await make(sourceRows.map((row,i)=>i===1?[row[0],row[1],"Gi1/0/1",row[3],row[4]]:row));
+ const slashFile=file("network."+format,slash),slashPreview=await previewOfficeNodesFile(slashFile);
+ await denies(verifyOfficeCandidateFile(slashFile,slashPreview,{
+  ...p3,sourceSha256:sha(slash),
+ },()=>true),format==="docx"?"DOCX_CELL_SENSITIVE_BLOCKED":"ODT_CELL_SENSITIVE_BLOCKED");
  const sensitive=await make(sourceRows.map((row,i)=>i===1?[row[0],row[1],"PASSWORD=canary",row[3],row[4]]:row));
  const sensitiveFile=file("network."+format,sensitive),sensitivePreview=await previewOfficeNodesFile(sensitiveFile);
  await denies(verifyOfficeCandidateFile(sensitiveFile,sensitivePreview,{
