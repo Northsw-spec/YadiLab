@@ -1,8 +1,8 @@
 # AUDIT-007 — FULL CODEBASE BUG-FIRST MASTERPLAN (owner mandatory)
 
-**Status:** ACTIVE / TOP PROJECT PRIORITY / AUDIT INCOMPLETE. This is a binding change of work order, NOT certification that the repository is bug-free.
-**Owner decision:** 2026-11-01. All further DOCX/ODT, other import formats and discretionary feature development are PAUSED until full-source defect review and repair satisfy the exit contract, followed by explicit owner authorization to resume. This supersedes the previous "fix important bugs, return to IC-040" recommendation, even if a previous import release (P1a/P1b) was correctly verified.
-**Authority:** Current protected `main` at **each** checkpoint, root [AGENTS.md](../../AGENTS.md), [AUDIT-007 issue #96](https://github.com/Northsw-spec/YadiLab/issues/96), then this plan. [Import issue #3](https://github.com/Northsw-spec/YadiLab/issues/3) is ON_HOLD.
+**Status:** OPEN SOURCE DEFECT BACKLOG; operational topology/release correctness now outranks hypothetical security risk (owner 2026-11-01). Follow [functional-first masterplan](TOPOLOGY_FIDELITY_FUNCTIONAL_FIRST.md).
+**Superseding priority:** Wrong documented nodes/links, missing/extra connections, false PASS, graph rendering mismatches and broken releases first. Maintain old safety regressions, but no speculative hacker-centric side quest. Necessary reviewed DOCX/ODT topology features are allowed now; old blanket import freeze below is historical wherever contradictory. This file does not certify all source files reviewed.
+**Authority:** Current protected main, root [AGENTS.md](../../AGENTS.md), [functional-first plan](TOPOLOGY_FIDELITY_FUNCTIONAL_FIRST.md), issues #96/#3 and this remaining full-code audit backlog.
 **Baseline of this decision only:** `main=b835d66193a4bd9d27fbbf5e79e485674c244769`, tree `915416e3c04ec1af2d800315f16766178ea303f6`, independent exact-main [Linux release #41313177977](https://github.com/Northsw-spec/YadiLab/actions/runs/41313177977) SUCCESS, Linux artifact `13086253792`, DOM artifact `13086482668`. These are historical start references, **not** pinned future code bases.
 
 ## 1. Meaning of ALL bugs
@@ -44,15 +44,6 @@ Waves are a priority order, not a completeness waiver: repeat/expand when findin
 
 GitHub-hosted Ubuntu Actions is the accepted automation environment. No routine manual Parrot tests, external network probes or invented runtime/network attestation.
 
-## 5. Stop conditions and resumption criteria
+## 5. Current functional acceptance — superseding earlier import hold
 
-**IMPORT REMAINS ON HOLD** until ALL apply:
-- Complete audited coverage recorded for every in-scope tracked source/config/test/CI path of then-current main, including new changes and cross-module entrypoints.
-- Every credible issue has either specific evidence-backed disproof or a confirmed repair with source regression, all latest-head CI checks PASS, protected merge and independent exact-main Linux release; **no known unresolved confirmed bug or untriaged credible suspicion**, regardless of severity.
-- All mandatory Engine, security, privacy, import, Dev11, real Chromium, AUDIT-006, Ubuntu mirror, release identity and provenance checks pass on final main, with valid artifact IDs. No removed/adulterated negative regression checks to greenlight the gate.
-- A transparent closeout report lists audit methods, covered files, external dependencies, verified fixes, residual limitations, explicit NOT_RUN/UNKNOWN and the impossibility of a perfect "zero unknown bugs" guarantee.
-- **User explicitly approves resuming** DOCX/ODT and other import work and the decision is recorded in issues #96 and #3.
-
-If any condition is unmet or blocked, remain in audit mode and report evidence. An urgent security/CI defect always belongs inside this priority; new discretionary import, OSPF/SPF or UI features do not.
-
-**Current starting handoff:** historical independent release-verified AUDIT-007 P1/P2a/P2b/P3 and IC-040 P1a/P1b remain preserved. None of them equals completion of the whole codebase review. Next generic "fortsätt" = continue AUDIT-007 risk-scoped source bug-hunt and fixes, **not** IC-040 P2.
+Directly fix real operational bugs and reviewed document-topology gaps without waiting for all tracked code paths to pass security audit. Full-source audit remains OPEN, never declared finished by a few passing tests. For source-declared links require exact edge set equality from source → Builder → compiled model → rendered graph; no invented physical cables or automatic green objective. Retain Engine/Dev11/old negative tests, exact PR-head CI and independent Linux+DOM release evidence. Highest next task: concrete false topology/false PASS/release blocker, not hypothetical exploit research.
