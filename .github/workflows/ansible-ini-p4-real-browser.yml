@@ -32,6 +32,7 @@ jobs:
         run: |
           python3 -m venv /tmp/ansible-ini-p4-venv
           /tmp/ansible-ini-p4-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/ansible-ini-p4-venv/bin/python -m playwright install --with-deps chromium
       - name: Exact source test, P1-P4 unit, privacy and broad import regressions
         run: |

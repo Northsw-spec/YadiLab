@@ -35,6 +35,7 @@ jobs:
         run: |
           python3 -m venv /tmp/yadilab-ini-p2-venv
           /tmp/yadilab-ini-p2-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/yadilab-ini-p2-venv/bin/python -m playwright install --with-deps chromium
       - name: Test source/SSR contracts and build actual bundled YadiLab
         run: |
