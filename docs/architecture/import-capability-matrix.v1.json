@@ -495,31 +495,34 @@
       ],
       "registry": "PLANNED_HINT",
       "stage": {
-        "detect": "SPECIALIZED_FILE_ENTRY",
-        "parse": "BOUNDED_READ_ONLY",
-        "preview": "SPECIALIZED_MODAL",
-        "review": "EXPLICIT_ROLES_AND_EDGES",
-        "projection": "REVIEWED_GRAPHML_CANDIDATE",
-        "builder": "MANUAL_COMPILE_LAYOUT",
-        "modeledProbe": "NOT_ATTESTED",
-        "replay": "NONE",
-        "ui": "SPECIALIZED_MODAL"
+        "detect": "SPECIALIZED_GRAPHML_FILE_ENTRY",
+        "parse": "BOUNDED_GRAPHML_ORIGINAL_XML_SHA",
+        "preview": "ORIGINAL_SHA_READ_ONLY_SPECIALIZED_MODAL",
+        "review": "MANUAL_NODE_ROLES_FIRST_80_AND_UNDIRECTED_EDGES_ACK",
+        "projection": "EXPLICIT_REVIEWED_GRAPHML_WORKBOOK_CANDIDATE",
+        "builder": "REAL_COMPILER_ELK_ORIGINAL_REREAD_WORKSPACE_GATE",
+        "modeledProbe": "NOT_ATTESTED_NO_AUTOMATIC_RUNTIME",
+        "replay": "NO_SAVED_REPORT_ORIGINAL_REREAD_AT_COMMIT",
+        "ui": "SPECIALIZED_REVIEW_MODAL_BUILDER_CONFIRM_ONLY"
       },
       "sources": [
         "enterprise-import/src/graphml-preview.ts",
         "enterprise-import/src/graphml-review-mapping.ts",
         "ui/app/graphml-preview-panel.mjs",
-        "ui/app/main.mjs"
+        "ui/app/main.mjs",
+        "ui/src/browser/graphml-import-preview.ts"
       ],
       "tests": [
         "tests/enterprise-import/run_graphml_review_mapping_tests.mjs",
         "tests/browser/run_graphml_builder_compilation_tests.mjs",
         "tests/browser/run_graphml_preview_ui_tests.mjs",
-        "tests/acceptance/run_graphml_p2c_real_browser.py"
+        "tests/acceptance/run_graphml_p2c_real_browser.py",
+        "tests/browser/run_ic030_p1_graphml_freshness_tests.mjs",
+        "tests/acceptance/run_ic030_p1_graphml_real_browser.py"
       ],
-      "ciCoverage": "DEDICATED_TESTS_AND_WORKFLOWS_NOT_CORE_REQUIRED",
-      "nextCheckpoint": "IC-030",
-      "risk": "A selected graph edge is only an operator-approved modeled edge, never proof of a cable; compile/layout exists but GraphML-to-Runtime probe E2E is not attested."
+      "ciCoverage": "REQUIRED_AND_POSTMERGE_SOURCE_PLUS_REAL_CHROMIUM_GATES_CHECK_EXACT_SHA",
+      "nextCheckpoint": "IC-030_P3_SCOPED_EXIT_GATE",
+      "risk": "GraphML is a manually reviewed Builder candidate, not a verified topology. UI individually exposes only first 80 node roles and edge choices, leaves remaining nodes generic and remaining edges unselected; directed edges cannot be mapped to undirected connections. No automatic Runtime, modeled probe end-to-end, physical cable, reachability or native Parrot attested."
     },
     {
       "id": "nmap.xml.v1",
@@ -598,30 +601,36 @@
       ],
       "registry": "PLANNED_HINT",
       "stage": {
-        "detect": "SPECIALIZED_FILE_ENTRY",
-        "parse": "BOUNDED_READ_ONLY",
-        "preview": "SPECIALIZED_MODAL",
-        "review": "SOURCE_BOUND_REFERENCE",
-        "projection": "NONE",
-        "builder": "NONE",
-        "modeledProbe": "NONE",
-        "replay": "SOURCE_BOUND_REPORT",
-        "ui": "SPECIALIZED_MODAL"
+        "detect": "SPECIALIZED_DRAWIO_P1P6_XML_READ_ONLY_AND_P2B_DRAWIO_ONLY",
+        "parse": "BOUNDED_2MIB_16P_1000V_2000E_RAW_DEFLATE_SHA",
+        "preview": "SEPARATE_READ_ONLY_AND_ORDINAL_ONLY_P2B_MODALS",
+        "review": "P1P6_REFERENCE_ONLY_OR_P2B_1_TO_20_EXPLICIT_NODES_EDGES_ACK",
+        "projection": "P2B_EXPLICIT_REVIEWED_DRAWIO_GRAPH_CANDIDATE_ONLY",
+        "builder": "P2B_REAL_COMPILER_ELK_LAST_ORIGINAL_REREAD_WORKSPACE_GATE",
+        "modeledProbe": "NOT_ATTESTED_NO_AUTOMATIC_RUNTIME",
+        "replay": "P1P6_REFERENCE_REPORT_ONLY_P2B_CANDIDATE_NOT_REPLAYED",
+        "ui": "SEPARATE_READ_ONLY_AND_P2B_REVIEWED_BUILDER_MODALS"
       },
       "sources": [
         "enterprise-import/src/drawio-structural-preview.ts",
         "enterprise-import/src/drawio-compressed-page.ts",
         "enterprise-import/src/drawio-association-review.ts",
         "enterprise-import/src/drawio-report-replay.ts",
-        "ui/app/drawio-structure-panel.mjs"
+        "ui/app/drawio-structure-panel.mjs",
+        "enterprise-import/src/drawio-reviewed-candidate.ts",
+        "ui/src/browser/drawio-reviewed-candidate-file.ts",
+        "ui/app/drawio-reviewed-builder-panel.mjs",
+        "ui/app/main.mjs"
       ],
       "tests": [
         "tests/browser/run_drawio_p6_position_navigation_tests.mjs",
-        "tests/acceptance/run_drawio_p6_real_browser.py"
+        "tests/acceptance/run_drawio_p6_real_browser.py",
+        "tests/browser/run_ic030_p2b_drawio_ui_tests.mjs",
+        "tests/acceptance/run_ic030_p2b_drawio_real_browser.py"
       ],
-      "ciCoverage": "DEDICATED_TESTS_AND_WORKFLOWS_NOT_CORE_REQUIRED",
-      "nextCheckpoint": "IC-030",
-      "risk": "Drawn lines and vertex associations do not create verified physical network links or a runnable scenario."
+      "ciCoverage": "REQUIRED_AND_POSTMERGE_P1P6_AND_P2B_SOURCE_PLUS_REAL_CHROMIUM_CHECK_EXACT_SHA",
+      "nextCheckpoint": "IC-030_P3_SCOPED_EXIT_GATE",
+      "risk": "Existing .xml/.drawio read-only metadata association and P4-P6 replay are separate from P2b's .drawio-only reviewed Builder candidate; P2b supports at most 20 deliberately selected vertex ordinals and 20 acknowledged drawn connections, not diagram source values/physical links. Candidate has no saved replay or automatic Runtime/Engine/probe truth; modeled probe E2E, real network and native Parrot NOT_ATTESTED."
     },
     {
       "id": "visio.vsdx.v1",
