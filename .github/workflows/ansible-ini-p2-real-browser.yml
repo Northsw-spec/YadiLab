@@ -1,4 +1,8 @@
 name: Ansible INI P2 actual Chromium read-only acceptance
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
   pull_request:
     branches: [main]

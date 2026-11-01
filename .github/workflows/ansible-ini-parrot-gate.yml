@@ -1,5 +1,9 @@
 name: Ansible INI Parrot target gate and independent Ubuntu controls
 
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
   pull_request:
     branches: [main]
