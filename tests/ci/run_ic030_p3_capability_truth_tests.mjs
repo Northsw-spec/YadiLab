@@ -71,7 +71,7 @@ assert.ok(drawSource.includes("DRAWIO_GRAPH_MAX_SELECTED = 20"),
   "P2b user-selected positions must remain bounded");
 assert.ok(drawSource.includes("drawio_manual_verification"),
   "A reviewed drawn link must not invent Engine PASS");
-assert.ok(drawSource.includes("DRAWIO_CONNECTION_ACK_REQUIRED"),
+assert.ok(drawSource.includes("DRAWIO_CANDIDATE_CONNECTION_ACK_REQUIRED"),
   "Drawio modeled connections must need an explicit acknowledgement");
 assert.ok(drawFile.includes("verifyDrawioOriginalForReviewedActivation"),
   "Drawio original must be checked immediately before UI commit");
