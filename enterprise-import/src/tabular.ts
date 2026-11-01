@@ -37,7 +37,11 @@ export function tableFromPhysicalRows(sheet: string, rows: readonly PhysicalRow[
     for (const [col, headerName] of headers) {
       const cell = row.cells.get(col);
       if (!cell) continue;
-      fields[headerName] = cell;
+      // Workbook header is untrusted. Preserve even "__proto__" as an
+      // ordinary own field without invoking inherited magic setters.
+      Object.defineProperty(fields, headerName, {
+        value: cell, enumerable: true, writable: true, configurable: true,
+      });
       if (present(cell.value)) nonEmpty = true;
     }
     const extra = [...row.cells.keys()].filter((col) => !headers.has(col) && present(row.cells.get(col)!.value));

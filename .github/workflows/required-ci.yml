@@ -69,6 +69,7 @@ jobs:
           npm run test:ic040-p1a-office-nodes
           npm run test:audit007-p1-engine-inputs
           npm run test:audit007-p2a-canonical-json
+          npm run test:audit007-p2b-import-fields
           npm run test:ic030-p2b-drawio-ui
           npm run test:simulation-clock
           npm run test:simulation-transitions

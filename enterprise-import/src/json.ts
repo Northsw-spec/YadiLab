@@ -15,7 +15,12 @@ function recordsFromArray(items: readonly unknown[], tableId: string, basePointe
   return items.map((item, index) => {
     if (!isRecord(item)) throw new EnterpriseImportError("IMPORT_JSON_RECORD_NOT_OBJECT", `JSON table ${tableId} contains a non-object record at index ${index}.`);
     const fields: Record<string, ImportCell> = {};
-    for (const [field, value] of Object.entries(item)) fields[field] = { value, locator: { kind: "json-pointer", pointer: `${basePointer}/${index}/${escapePointerPart(field)}` } };
+    for (const [field, value] of Object.entries(item)) {
+      Object.defineProperty(fields, field, {
+        value: { value, locator: { kind: "json-pointer", pointer: `${basePointer}/${index}/${escapePointerPart(field)}` } },
+        enumerable: true, writable: true, configurable: true,
+      });
+    }
     return { recordIndex: index + 1, fields };
   });
 }
@@ -34,7 +39,12 @@ function parseJson(source: EnterpriseImportSourceInput, context: EnterpriseImpor
       for (const [name] of Object.entries(value).filter(([, v]) => !Array.isArray(v))) diagnostics.push({ code: "IMPORT_JSON_UNSUPPORTED_TOP_LEVEL_MEMBER", severity: "warning", message: `Top-level JSON member ${name} is not a record array and was not imported.`, field: name });
     } else {
       const fields: Record<string, ImportCell> = {};
-      for (const [field, v] of Object.entries(value)) fields[field] = { value: v, locator: { kind: "json-pointer", pointer: `/${escapePointerPart(field)}` } };
+      for (const [field, v] of Object.entries(value)) {
+        Object.defineProperty(fields, field, {
+          value: { value: v, locator: { kind: "json-pointer", pointer: `/${escapePointerPart(field)}` } },
+          enumerable: true, writable: true, configurable: true,
+        });
+      }
       tables.push({ tableId: rootTableName, records: [{ recordIndex: 1, fields }] });
     }
   } else throw new EnterpriseImportError("IMPORT_JSON_ROOT_UNSUPPORTED", "JSON root must be an object or array of objects.");
