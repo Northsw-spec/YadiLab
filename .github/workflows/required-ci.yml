@@ -104,6 +104,7 @@ jobs:
           set -Eeuo pipefail
           npm run build:launcher
           (cd distribution/linux-x86_64 && sha256sum -c SHA256SUMS.txt)
+          python3 tests/security/run_audit007_p4_launcher_process_owner_tests.py
           bash start-yadilab.sh
           git diff --exit-code -- THIRD_PARTY_NOTICES.md dependencies/third-party-inventory.json package.json package-lock.json
       - name: Prepare independent real Chromium

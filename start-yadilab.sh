@@ -73,31 +73,66 @@ if [[ -r "$PIDFILE" ]]; then
   rm -f -- "$PIDFILE"
 fi
 
+# The Linux 'comm' name is freely mutable. It is never process identity.
+# Compare both canonical executable path and device/inode with the checked
+# distribution. These shell checks narrow but cannot eliminate PID reuse races.
+verified_stale_launcher_pid() {
+  local pid="$1" expected_path="$2" expected_inode="$3"
+  local live_uid live_name live_path live_inode
+  [[ "$pid" =~ ^[0-9]+$ && -r "/proc/$pid/status" ]] || return 1
+  live_uid=$(awk '/^Uid:/ {print $2; exit}' "/proc/$pid/status" 2>/dev/null) || return 1
+  live_name=$(cat "/proc/$pid/comm" 2>/dev/null) || return 1
+  live_path=$(readlink -f -- "/proc/$pid/exe" 2>/dev/null) || return 1
+  live_inode=$(stat -Lc '%d:%i' -- "/proc/$pid/exe" 2>/dev/null) || return 1
+  [[ "$live_uid" == "$(id -u)" && "$live_name" == "app-launcher" &&
+     -n "$live_path" && "$live_path" == "$expected_path" &&
+     -n "$live_inode" && "$live_inode" == "$expected_inode" ]]
+}
+
+stale_port_owned_by_pid() {
+  local pid="$1" listeners
+  listeners=$(ss -H -ltnp "sport = :$PORT" 2>/dev/null) || return 1
+  [[ "$listeners" == *"pid=$pid,"* ]]
+}
+
 stop_stale_port_owner() {
-  local lines pids pid uid comm
+  local lines pids pid uid comm trusted_path trusted_inode
   lines=$(ss -H -ltnp "sport = :$PORT" 2>/dev/null || true)
   [[ -n "$lines" ]] || return 0
 
   mapfile -t pids < <(grep -oE 'pid=[0-9]+' <<<"$lines" | cut -d= -f2 | sort -u)
   ((${#pids[@]} > 0)) || fail "port $PORT används redan men ägar-PID kunde inte fastställas ($lines)"
+  trusted_path=$(readlink -f -- "$LAUNCHER" 2>/dev/null) || fail "launcherns processidentitet kunde inte verifieras"
+  trusted_inode=$(stat -Lc '%d:%i' -- "$LAUNCHER" 2>/dev/null) || fail "launcherns inode kunde inte verifieras"
+  [[ -n "$trusted_path" && -n "$trusted_inode" ]] || fail "launcherns processidentitet kunde inte verifieras"
 
   for pid in "${pids[@]}"; do
     [[ -r "/proc/$pid/status" ]] || continue
     uid=$(awk '/^Uid:/ {print $2; exit}' "/proc/$pid/status" 2>/dev/null || true)
     comm=$(cat "/proc/$pid/comm" 2>/dev/null || true)
-    if [[ "$uid" == "$(id -u)" && "$comm" == "app-launcher" ]]; then
+    if [[ "$uid" == "$(id -u)" && "$comm" == "app-launcher" ]] &&
+       verified_stale_launcher_pid "$pid" "$trusted_path" "$trusted_inode" &&
+       stale_port_owned_by_pid "$pid"; then
+      # Reconfirm immediately before SIGTERM: not just the mutable process name.
+      verified_stale_launcher_pid "$pid" "$trusted_path" "$trusted_inode" &&
+        stale_port_owned_by_pid "$pid" ||
+        fail "processidentitet ändrades före SIGTERM (pid=$pid); stopp nekas"
       printf 'Stoppar gammal YadiLab app-launcher PID %s på port %s.\n' "$pid" "$PORT"
-      kill -TERM "$pid" 2>/dev/null || true
+      kill -TERM "$pid" 2>/dev/null || fail "kunde inte stoppa verifierad YadiLab-process $pid"
       for _ in $(seq 1 40); do
         kill -0 "$pid" 2>/dev/null || break
         sleep .1
       done
-      if kill -0 "$pid" 2>/dev/null; then
-        printf 'Process %s svarade inte på SIGTERM; skickar SIGKILL.\n' "$pid"
-        kill -KILL "$pid" 2>/dev/null || true
+      if kill -0 "$pid" 2>/dev/null && stale_port_owned_by_pid "$pid"; then
+        # A recycled PID, changed executable or disconnected port must not be killed.
+        verified_stale_launcher_pid "$pid" "$trusted_path" "$trusted_inode" &&
+          stale_port_owned_by_pid "$pid" ||
+          fail "processidentitet ändrades före SIGKILL (pid=$pid); stopp nekas"
+        printf 'Verifierad YadiLab-process %s svarade inte på SIGTERM; skickar SIGKILL.\n' "$pid"
+        kill -KILL "$pid" 2>/dev/null || fail "kunde inte stoppa verifierad YadiLab-process $pid"
       fi
     else
-      fail "port $PORT ägs av annan process och stoppas inte automatiskt (pid=$pid, uid=${uid:-?}, process=${comm:-?})"
+      fail "port $PORT ägs av annan process och stoppas inte automatiskt (pid=$pid, processidentitet ej verifierad)"
     fi
   done
 
