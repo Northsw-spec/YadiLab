@@ -25,7 +25,7 @@ function parseRows(text: string, delimiter: string): string[][] {
     }
     // After a closing quote only a delimiter, record ending or EOF is legal.
     // Never concatenate unquoted suffix text to an already closed field.
-    if (closedQuote && ch !== delimiter && ch !== "\\n" && ch !== "\\r") {
+    if (closedQuote && ch !== delimiter && ch !== "\n" && ch !== "\r") {
       throw new EnterpriseImportError("IMPORT_MALFORMED_QUOTE", "Unexpected text after a closed quoted field.");
     }
     if (ch === '"') {
