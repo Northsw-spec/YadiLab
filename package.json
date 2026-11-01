@@ -155,7 +155,8 @@
     "test:ic020-p2c6-exit": "node tests/enterprise-import/run_ic020_p2c6_scoped_exit_tests.mjs",
     "test:ic030-p1-graphml-freshness": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_graphml_preview_ui_tests.mjs && node tests/browser/run_graphml_builder_compilation_tests.mjs && node tests/browser/run_ic030_p1_graphml_freshness_tests.mjs",
     "test:ic030-p2a-drawio-candidate": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic030_p2a_drawio_candidate_tests.mjs",
-    "test:ic030-p2b-drawio-ui": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic030_p2a_drawio_candidate_tests.mjs && node tests/browser/run_ic030_p2b_drawio_ui_tests.mjs"
+    "test:ic030-p2b-drawio-ui": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_ic030_p2a_drawio_candidate_tests.mjs && node tests/browser/run_ic030_p2b_drawio_ui_tests.mjs",
+    "test:ic040-p1a-office-nodes": "tsc -p tests/tsconfig.enterprise-import.json && node tests/enterprise-import/run_ic040_p1a_office_node_candidate_tests.mjs"
   },
   "dependencies": {
     "@xyflow/react": "12.11.6",
