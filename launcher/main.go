@@ -30,6 +30,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer handler.Close() // close pinned static-root descriptor after HTTP shutdown
 
 	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(*port))
 	listener, err := net.Listen("tcp4", address)

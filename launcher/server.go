@@ -9,10 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 type staticServer struct {
 	root string
+	rootDir *os.File // pinned original directory identity for all requests
 }
 
 func newStaticServer(root string) (*staticServer, error) {
@@ -31,7 +33,33 @@ func newStaticServer(root string) (*staticServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &staticServer{root: real}, nil
+	// Pin the exact directory file identity, not a mutable pathname. The
+	// checked root might be renamed after server startup; never follow a
+	// replacement root symlink during future HTTP requests.
+	fd, err := syscall.Open(real, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	rootDir := os.NewFile(uintptr(fd), real)
+	openedInfo, err := rootDir.Stat()
+	if err != nil {
+		rootDir.Close()
+		return nil, err
+	}
+	if !openedInfo.IsDir() || !os.SameFile(info, openedInfo) {
+		rootDir.Close()
+		return nil, errors.New("static root identity changed during initialization")
+	}
+	return &staticServer{root: real, rootDir: rootDir}, nil
+}
+
+// Close releases the directory descriptor captured during startup.
+// The HTTP server's owner closes it only after all requests have stopped.
+func (s *staticServer) Close() error {
+	if s == nil || s.rootDir == nil {
+		return nil
+	}
+	return s.rootDir.Close()
 }
 
 func securityHeaders(w http.ResponseWriter) {
@@ -58,39 +86,86 @@ func suspiciousEscapedPath(r *http.Request) bool {
 	return false
 }
 
-func (s *staticServer) resolve(requestPath string) (string, error) {
-	if strings.ContainsRune(requestPath, '\x00') || strings.Contains(requestPath, "\\") {
-		return "", errors.New("invalid path")
+// openStaticFile opens *each* path component relative to an already-opened
+// directory FD with O_NOFOLLOW. Unlike a check-then-os.Open(path) sequence,
+// the returned regular file descriptor is the exact file later served.
+// This is a deliberate fail-closed policy: all symlink components are denied,
+// including symlinks which currently lead back inside the original root.
+func (s *staticServer) openStaticFile(requestPath string) (*os.File, error) {
+	if s == nil || s.rootDir == nil || strings.ContainsRune(requestPath, '\x00') ||
+		strings.Contains(requestPath, "\\") {
+		return nil, errors.New("invalid static request path")
 	}
-	// r.URL.Path has already been percent-decoded exactly once by net/http.
-	// A second decode would reinterpret literal "%2f" or "%2e" as path
-	// separators/dot segments, aliasing a different resource.
+	// r.URL.Path has already been decoded exactly once by net/http (P5).
 	clean := filepath.Clean(filepath.FromSlash("/" + requestPath))
 	rel := strings.TrimPrefix(clean, string(filepath.Separator))
-	candidate := filepath.Join(s.root, rel)
-	info, err := os.Stat(candidate)
-	if err == nil && info.IsDir() {
-		candidate = filepath.Join(candidate, "index.html")
+	var components []string
+	if rel != "" && rel != "." {
+		components = strings.Split(rel, string(filepath.Separator))
 	}
-	real, err := filepath.EvalSymlinks(candidate)
+
+	currentFD := int(s.rootDir.Fd())
+	ownedFD := -1
+	// No user-supplied pathname is ever passed to os.Open after a separate
+	// symlink check. Relative opens remain confined to the pinned root FD.
+	defer func() {
+		if ownedFD >= 0 {
+			_ = syscall.Close(ownedFD)
+		}
+	}()
+	name := "index.html"
+	for i, part := range components {
+		if part == "" || part == "." || part == ".." {
+			return nil, errors.New("invalid static path component")
+		}
+		flags := syscall.O_RDONLY | syscall.O_CLOEXEC | syscall.O_NOFOLLOW
+		if i != len(components)-1 {
+			flags |= syscall.O_DIRECTORY
+		}
+		nextFD, err := syscall.Openat(currentFD, part, flags, 0)
+		if err != nil {
+			return nil, err
+		}
+		if ownedFD >= 0 {
+			_ = syscall.Close(ownedFD)
+		}
+		ownedFD = nextFD
+		currentFD = nextFD
+		name = part
+	}
+	var st syscall.Stat_t
+	if err := syscall.Fstat(currentFD, &st); err != nil {
+		return nil, err
+	}
+	if st.Mode&syscall.S_IFMT == syscall.S_IFDIR {
+		// Directory index is opened relative to that actual directory FD;
+		// even a concurrent directory rename/symlink swap cannot redirect it.
+		nextFD, err := syscall.Openat(currentFD, "index.html",
+			syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+		if err != nil {
+			return nil, err
+		}
+		if ownedFD >= 0 {
+			_ = syscall.Close(ownedFD)
+		}
+		ownedFD = nextFD
+		name = "index.html"
+	}
+	if ownedFD < 0 {
+		return nil, errors.New("static index unavailable")
+	}
+	f := os.NewFile(uintptr(ownedFD), name)
+	ownedFD = -1 // transfer ownership to the caller; no reopen by pathname
+	info, err := f.Stat()
 	if err != nil {
-		return "", err
-	}
-	relative, err := filepath.Rel(s.root, real)
-	if err != nil {
-		return "", err
-	}
-	if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", errors.New("path escapes static root")
-	}
-	info, err = os.Stat(real)
-	if err != nil {
-		return "", err
+		f.Close()
+		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return "", errors.New("not a regular file")
+		f.Close()
+		return nil, errors.New("not a regular static file")
 	}
-	return real, nil
+	return f, nil
 }
 
 func (s *staticServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -104,12 +179,7 @@ func (s *staticServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
-	path, err := s.resolve(r.URL.Path)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	f, err := os.Open(path)
+	f, err := s.openStaticFile(r.URL.Path)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -120,8 +190,8 @@ func (s *staticServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	ct := mime.TypeByExtension(filepath.Ext(path))
-	if filepath.Ext(path) == ".webmanifest" {
+	ct := mime.TypeByExtension(filepath.Ext(f.Name()))
+	if filepath.Ext(f.Name()) == ".webmanifest" {
 		ct = "application/manifest+json"
 	}
 	if ct != "" {
