@@ -47,18 +47,19 @@ for(const [name,adapter,delimiter,media] of [
     ["alpha"+delimiter+"beta","first\nsecond",'a"b'],name+" proper quoted delimiters multiline and doubled quotes");
   const crlf=await adapter.parse({bytes:enc("id"+delimiter+"note\r\nnode01"+delimiter+'"alpha"\r\n'),mediaType:media},{options:{}});
   eq(crlf.document.tables[0].records[0].fields.note.value,"alpha",name+" quoted CRLF field end");
-  for(const malformed of [
-    'node01'+delimiter+'"alpha"junk',
-    'node01'+delimiter+'""tail',
-    'node01'+delimiter+'"alpha" ',
-    'node01'+delimiter+'"alpha""tail',
+  for(const [malformed,code] of [
+    ['node01'+delimiter+'"alpha"junk',"IMPORT_MALFORMED_QUOTE"],
+    ['node01'+delimiter+'""tail',"IMPORT_MALFORMED_QUOTE"],
+    ['node01'+delimiter+'"alpha" ',"IMPORT_MALFORMED_QUOTE"],
+    ['node01'+delimiter+'"alpha""tail',"IMPORT_UNCLOSED_QUOTE"],
+    ['node01'+delimiter+'"alpha""tail"junk',"IMPORT_MALFORMED_QUOTE"],
   ]){
     await assert.rejects(
       async ()=>adapter.parse({
         bytes:enc("id"+delimiter+"comment\n"+malformed+"\n"),mediaType:media,
       },{options:{}}),
-      e=>e instanceof EnterpriseImportError&&e.code==="IMPORT_MALFORMED_QUOTE",
-      name+" rejects unquoted suffix after closing quote");assertions++;
+      e=>e instanceof EnterpriseImportError&&e.code===code,
+      name+" rejects quoted source with the exact appropriate stable error");assertions++;
   }
 }
 for(const [label,payload,tableId,locator] of [
