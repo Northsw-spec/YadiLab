@@ -7,7 +7,11 @@ function normalizeJson(value: unknown): unknown {
     const output: Record<string, unknown> = {};
     for (const key of Object.keys(input).sort()) {
       const item = input[key];
-      if (item !== undefined) output[key] = normalizeJson(item);
+      // A JSON own "__proto__" is source data. Assignment into {} would
+      // trigger Object.prototype's setter and omit it from canonical hashes.
+      if (item !== undefined) Object.defineProperty(output, key, {
+        value: normalizeJson(item), enumerable: true, writable: true, configurable: true,
+      });
     }
     return output;
   }
