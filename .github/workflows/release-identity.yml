@@ -88,6 +88,7 @@ jobs:
           set -Eeuo pipefail
           python3 -m venv /tmp/yadilab-release-dom-venv
           /tmp/yadilab-release-dom-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/yadilab-release-dom-venv/bin/python -m playwright install --with-deps chromium
       - name: Verify exact mounted UI and reject token-only JavaScript
         env:

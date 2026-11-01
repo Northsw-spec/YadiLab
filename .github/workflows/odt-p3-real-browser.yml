@@ -33,6 +33,7 @@ jobs:
         run: |
           python3 -m venv /tmp/odt-p3-venv
           /tmp/odt-p3-venv/bin/python -m pip install --disable-pip-version-check 'playwright==1.55.0'
+          bash scripts/ci-normalize-ubuntu-mirror.sh
           /tmp/odt-p3-venv/bin/python -m playwright install --with-deps chromium
       - name: Independent ODT-P1/P2/P3 ZIP, consent/secret and React SSR; DOCX regression
         run: |
