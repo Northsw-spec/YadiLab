@@ -51,6 +51,7 @@ jobs:
           npm run test:ic030-p2a-drawio-candidate
           node tests/ci/run_ubuntu_browser_mirror_contract_tests.mjs
           node tests/ci/run_pr_concurrency_contract_tests.mjs
+          node tests/ci/run_ic030_p3_capability_truth_tests.mjs
           npm run test:ic030-p2b-drawio-ui
           npm run test:dev11-ui
           npm run test:ospf-p2p-dd
