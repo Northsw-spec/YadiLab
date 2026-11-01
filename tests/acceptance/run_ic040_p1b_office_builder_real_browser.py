@@ -592,6 +592,16 @@ def case_p4_separate_rows(browser,url,ext,with_ports=True):
                 "P4 copied nonselected private original node cells into Builder")
         panel=page.locator(".topology-panel")
         expect(panel.locator('.react-flow__node[data-id]')).to_have_count(4,timeout=30000)
+        visible_families={}
+        for drawn in panel.locator('.react-flow__node[data-id]').all():
+            element=drawn.locator(".resource-node[data-device-family]")
+            require(element.count()==1,"P4 actual rendered node missing visible device family")
+            node_id=drawn.get_attribute("data-id")
+            require(node_id not in visible_families,"P4 duplicate drawn node ID")
+            visible_families[node_id]=element.get_attribute("data-device-family")
+        require(visible_families=={
+            "sw01":"switch","fw01":"firewall","rt01":"router","srv01":"server"},
+            "P4 rendered device types differ from individually reviewed original IDs and roles")
         expect(panel.locator('.react-flow__edge[data-id]')).to_have_count(3,timeout=30000)
         rendered=set()
         for edge in panel.locator('.react-flow__edge[data-id]').all():
