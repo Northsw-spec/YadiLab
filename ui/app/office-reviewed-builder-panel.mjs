@@ -86,6 +86,8 @@ export function OfficeReviewedNodeChoices({
   setBusy=()=>{},setError=()=>{},onConfirm,
 }){
   const [choice,setChoice]=useState(""),[nodes,setNodes]=useState([]),
+        [peerChoice,setPeerChoice]=useState(""),[connections,setConnections]=useState([]),
+        [connectionAck,setConnectionAck]=useState(false),
         [modeledAck,setModeledAck]=useState(false),[sending,setSending]=useState(false),
         [localError,setLocalError]=useState("");
   const choices=[];
@@ -99,10 +101,21 @@ export function OfficeReviewedNodeChoices({
   }
   const selectable=new Map(choices.map(n=>[keyOf(n),n]));
   const present=new Set(nodes.map(keyOf));
+  const peerKey=v=>[v.fromNodeIndex,v.peerCellOrdinal].join(":");
+  const peerOptions=nodes.flatMap((n,fromNodeIndex)=>
+    (result.preview.tables[n.tableOrdinal]?.rows[n.rowOrdinal]?.cells??[])
+      .slice(0,4).filter(cell=>cell.cellOrdinal!==n.nodeIdCellOrdinal)
+      .map(cell=>({fromNodeIndex,peerCellOrdinal:cell.cellOrdinal})));
+  const peerAvailable=new Map(peerOptions.map(x=>[peerKey(x),x]));
+  const peerPresent=new Set(connections.map(peerKey));
   const canSubmit=nodes.length>=1 && nodes.length<=MAX &&
     nodes.every(n=>n.acknowledgeCell===true)&&modeledAck&&
+    connections.every(c=>c.acknowledgePeerCell===true)&&
+    (connections.length===0||connectionAck)&&
     !busy&&!sending&&typeof onConfirm==="function";
-  const clear=()=>{setModeledAck(false);setLocalError("");setError("");};
+  const clear=()=>{
+    setModeledAck(false);setConnectionAck(false);setLocalError("");setError("");
+  };
   const add=()=>{
     const available=selectable.get(choice);
     if(!available || present.has(choice) || nodes.length>=MAX){
@@ -115,12 +128,39 @@ export function OfficeReviewedNodeChoices({
     setNodes(prev=>prev.map(n=>keyOf(n)===key?{...n,...patch}:n));
     clear();
   };
-  const remove=key=>{setNodes(prev=>prev.filter(n=>keyOf(n)!==key));clear();};
+  const remove=key=>{
+    setNodes(prev=>prev.filter(n=>keyOf(n)!==key));
+    // Link source is a selected node INDEX. Never preserve stale indices after
+    // node removal/reordering; require a fresh explicit peer review.
+    setConnections([]);setPeerChoice("");clear();
+  };
+  const addConnection=()=>{
+    const selected=peerAvailable.get(peerChoice);
+    if(!selected||peerPresent.has(peerChoice)||connections.length>=MAX){
+      setLocalError("IC040_P2_LINK_DECISION_INVALID");return;
+    }
+    setConnections(prev=>[...prev,{...selected,acknowledgePeerCell:false}]);
+    setPeerChoice("");clear();
+  };
+  const editConnection=(key,checked)=>{
+    setConnections(prev=>prev.map(x=>peerKey(x)===key
+      ?{...x,acknowledgePeerCell:checked}:x));
+    clear();
+  };
+  const removeConnection=key=>{
+    setConnections(prev=>prev.filter(x=>peerKey(x)!==key));
+    clear();
+  };
   const submit=async()=>{
     if(!canSubmit)return;
     setSending(true);setBusy(true);setError("");setLocalError("");
     const decision={format:result.format,sourceSha256:result.preview.sourceSha256,
       nodes:nodes.map(n=>({...n})),acknowledgeModeledResources:modeledAck};
+    // Keep the P1a/P1b exact legacy decision shape when no link was selected.
+    if(connections.length){
+      decision.connections=connections.map(x=>({...x}));
+      decision.acknowledgeModeledConnections=connectionAck;
+    }
     try{await onConfirm(decision);}
     catch(cause){setLocalError(errCode(cause));}
     finally{setBusy(false);setSending(false);}
@@ -131,7 +171,7 @@ export function OfficeReviewedNodeChoices({
     e("p",{"data-office-p1b-counts":"true"},
       "Tables: "+result.preview.tables.length+" · structural cells: "+result.preview.totalCells),
     e("p",{"data-office-p1b-truth-boundary":"true"},
-      "Only first four tables, first 20 non-header rows and first four cells per row can be selected here. No raw cell contents, OS, IP, cables, routes, verified devices, Runtime or Engine PASS are inferred."),
+      "Only first four tables, first 20 non-header rows and first four cells per row can be selected. Only individually acknowledged peer cells may become modeled links; no source text, OS, IP, ports, physical cabling, Runtime or Engine PASS is inferred."),
     e("label",null,"Original cell position (never the header)",
       e("select",{value:choice,disabled:busy||sending,
         "data-office-p1b-cell-ordinal":"true",onChange:event=>{
@@ -161,6 +201,42 @@ export function OfficeReviewedNodeChoices({
         e("button",{type:"button",disabled:busy||sending,
           "data-office-p1b-remove":key,onClick:()=>remove(key)},"Remove"));
     })),
+    e("h4",{"data-office-p2-title":"REVIEW_REQUIRED"},
+      "Optional individually reviewed original peer cells"),
+    e("p",{"data-office-p2-boundary":"UNVERIFIED"},
+      "Choose a peer cell from an individually selected node's SAME original row. "+
+      "It must contain another selected node ID, or import BLOCKS. At most four connections; "+
+      "no port, cable, interface, physical verification or network PASS inferred."),
+    e("label",null,"Original row's peer cell position",
+      e("select",{value:peerChoice,disabled:busy||sending||nodes.length<2,
+        "data-office-p2-peer-choice":"true",
+        onChange:event=>{setPeerChoice(event.currentTarget.value);clear();}},
+        e("option",{value:""},"Choose explicitly documented peer cell…"),
+        ...peerOptions.map(x=>e("option",{key:peerKey(x),value:peerKey(x)},
+          "Selected node "+(x.fromNodeIndex+1)+" · original peer cell "+(x.peerCellOrdinal+1))))),
+    e("button",{type:"button",disabled:!peerChoice||peerPresent.has(peerChoice)||
+      connections.length>=MAX||busy||sending,
+      "data-office-p2-add":"true",onClick:addConnection},
+      "Review this explicitly declared peer cell"),
+    e("p",{"data-office-p2-selected-count":String(connections.length)},
+      "Reviewed peer cells: "+connections.length+" / "+MAX+"; only exact selected node IDs can be endpoints."),
+    e("ol",{className:"validation-list"},...connections.map(link=>{
+      const key=peerKey(link);
+      return e("li",{key,"data-office-p2-selection":key},
+        e("span",null,"Selected node "+(link.fromNodeIndex+1)+
+          " · same row, original peer cell "+(link.peerCellOrdinal+1)+" "),
+        e("label",null,e("input",{type:"checkbox",checked:link.acknowledgePeerCell,
+          disabled:busy||sending,"data-office-p2-peer-ack":key,
+          onChange:event=>editConnection(key,event.currentTarget.checked)}),
+          " I authorize disclosure of ONLY this original cell to map its exact peer ID."),
+        e("button",{type:"button",disabled:busy||sending,
+          "data-office-p2-remove":key,onClick:()=>removeConnection(key)},"Remove"));
+    })),
+    e("label",null,e("input",{type:"checkbox",checked:connectionAck,
+      disabled:busy||sending||connections.length===0,
+      "data-office-p2-modeled-ack":"true",
+      onChange:event=>{setConnectionAck(event.currentTarget.checked);setLocalError("");}}),
+      " I explicitly approve ONLY these source-declared peer references as UNVERIFIED modeled Builder connections."),
     e("label",null,e("input",{type:"checkbox",checked:modeledAck,
       disabled:busy||sending||nodes.length===0,"data-office-p1b-modeled-ack":"true",
       onChange:event=>{setModeledAck(event.currentTarget.checked);setLocalError("");}}),

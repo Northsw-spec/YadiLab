@@ -4355,9 +4355,11 @@ function App() {
         checkCurrent();
         const mapped = await verifyOfficeCandidateFile(originalFile, expected, decision, isCurrentSelection);
         checkCurrent();
-        // Exact P1a source-only node candidate, no links, interfaces or probes.
+        // Only separately reviewed original peer cells may become modeled links.
+        // P1a node-only decisions must continue to create zero connections.
+        const expectedConnections = Array.isArray(decision.connections) ? decision.connections.length : 0;
         if (mapped.status !== "READY_FOR_COMPILATION" || !mapped.source ||
-            mapped.source.connections.length || mapped.source.tests.length ||
+            mapped.source.connections.length !== expectedConnections || mapped.source.tests.length ||
             mapped.canActivate !== false || mapped.engineVerified !== false)
           blocked("IC040_P1B_CANDIDATE_BLOCKED");
         const compiled = await compileBuilderWorkspace(
@@ -4374,6 +4376,7 @@ function App() {
         checkCurrent();
         if (JSON.stringify(refreshed.source) !== JSON.stringify(mapped.source) ||
             JSON.stringify(refreshed.origins) !== JSON.stringify(mapped.origins) ||
+            JSON.stringify(refreshed.connectionOrigins ?? []) !== JSON.stringify(mapped.connectionOrigins ?? []) ||
             refreshed.sourceSha256 !== mapped.sourceSha256)
           blocked("IC040_P1B_SOURCE_CHANGED");
         checkCurrent(); // no await between final live check and commit
@@ -4381,7 +4384,7 @@ function App() {
         setImportedProbeAutoOpen(false);
         setDiagnostics([...layout.diagnostics, {
           severity: "warning", code: "IC040_P1B_MODELED_NODES_NOT_VERIFIED",
-          message: "Only independently consented original DOCX/ODT node-ID cells and operator roles entered Builder. No private unselected cells, physical cables, interfaces, IPs, real devices, reachability, Engine or Runtime PASS verified."
+          message: "Only independently consented DOCX/ODT node-ID cells, operator roles and selected original peer-ID cells entered Builder. Peer connections are modeled, NOT independently verified physical cables. No invented ports, IPs, routes, real devices, reachability, Engine or Runtime PASS."
         }]);
         setWorkspace(layout.workspace);
         setOfficeReviewedBuilderOpen(false);
