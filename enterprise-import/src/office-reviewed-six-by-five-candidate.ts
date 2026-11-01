@@ -6,12 +6,15 @@ export const OFFICE_REVIEWED_SIX_BY_FIVE_PROFILE=
   "office.reviewed-network-tables.six-by-five.v1" as const;
 export const OFFICE_REVIEWED_SIX_BY_FIVE_OPTIONAL_PORTS_PROFILE=
   "office.reviewed-network-tables.six-by-five-optional-ports.v1" as const;
+export const OFFICE_REVIEWED_SIX_BY_FIVE_PARALLEL_PORT_LINKS_PROFILE=
+  "office.reviewed-network-tables.six-by-five-parallel-port-links.v1" as const;
 export interface OfficeReviewedSixByFiveDecision extends OfficeReviewedLinkRowsDecision {
   readonly capacityProfile: string;
 }
 export interface OfficeReviewedSixByFiveCandidate extends OfficeReviewedLinkRowsCandidate {
   readonly capacityProfile: typeof OFFICE_REVIEWED_SIX_BY_FIVE_PROFILE |
-    typeof OFFICE_REVIEWED_SIX_BY_FIVE_OPTIONAL_PORTS_PROFILE;
+    typeof OFFICE_REVIEWED_SIX_BY_FIVE_OPTIONAL_PORTS_PROFILE |
+    typeof OFFICE_REVIEWED_SIX_BY_FIVE_PARALLEL_PORT_LINKS_PROFILE;
 }
 const exactly=(v:unknown,keys:readonly string[]):boolean=>
   !!v&&typeof v==="object"&&!Array.isArray(v)&&
@@ -30,7 +33,7 @@ function blocked(
   physicalTopologyVerified:false,diagnostics:[{code}],
  };
 }
-/** P5 and P6 require distinct opt-in profiles; all P4/P1b/P2/P3 exact-shape contracts remain unchanged. */
+/** P5/P6/P7 are independent opt-in choices; P1b/P2/P3/P4 exact contracts stay closed. */
 export async function mapReviewedOfficeOriginalToSixByFive(
  original:Uint8Array,decision:OfficeReviewedSixByFiveDecision,
 ):Promise<OfficeReviewedSixByFiveCandidate> {
@@ -38,12 +41,17 @@ export async function mapReviewedOfficeOriginalToSixByFive(
    ?decision.sourceSha256:"";
  const optionalPorts=decision?.capacityProfile===
    OFFICE_REVIEWED_SIX_BY_FIVE_OPTIONAL_PORTS_PROFILE;
- const profile=optionalPorts?OFFICE_REVIEWED_SIX_BY_FIVE_OPTIONAL_PORTS_PROFILE:
+ const parallelPorts=decision?.capacityProfile===
+   OFFICE_REVIEWED_SIX_BY_FIVE_PARALLEL_PORT_LINKS_PROFILE;
+ const profile=parallelPorts?OFFICE_REVIEWED_SIX_BY_FIVE_PARALLEL_PORT_LINKS_PROFILE:
+   optionalPorts?OFFICE_REVIEWED_SIX_BY_FIVE_OPTIONAL_PORTS_PROFILE:
    OFFICE_REVIEWED_SIX_BY_FIVE_PROFILE;
  if(!exactly(decision,keys)||
-    (decision?.capacityProfile!==OFFICE_REVIEWED_SIX_BY_FIVE_PROFILE && !optionalPorts))
+    (decision?.capacityProfile!==OFFICE_REVIEWED_SIX_BY_FIVE_PROFILE &&
+     !optionalPorts&&!parallelPorts))
    return blocked(sha,"IC040_P5_CAPACITY_PROFILE_INVALID");
- const invalid=optionalPorts?"IC040_P6_CAPACITY_DECISION_INVALID":
+ const invalid=parallelPorts?"IC040_P7_CAPACITY_DECISION_INVALID":
+   optionalPorts?"IC040_P6_CAPACITY_DECISION_INVALID":
    "IC040_P5_CAPACITY_DECISION_INVALID";
  if(!Array.isArray(decision.nodes)||decision.nodes.length!==6||
    !Array.isArray(decision.linkRows)||decision.linkRows.length!==5||
@@ -65,9 +73,9 @@ export async function mapReviewedOfficeOriginalToSixByFive(
    linkRows:decision.linkRows,
    acknowledgeModeledLinkRows:decision.acknowledgeModeledLinkRows,
  };
- const mapped=await mapReviewedOfficeOriginalToLinkRows(original,legacy,{
-   maxNodes:6,maxLinks:5,
- });
+ const mapped=await mapReviewedOfficeOriginalToLinkRows(original,legacy,
+   parallelPorts?{maxNodes:6,maxLinks:5,allowParallelPorts:true}:
+   {maxNodes:6,maxLinks:5});
  if(mapped.status!=="READY_FOR_COMPILATION"||!mapped.source)
    return {...mapped,capacityProfile:profile};
  return {...mapped,capacityProfile:profile};
