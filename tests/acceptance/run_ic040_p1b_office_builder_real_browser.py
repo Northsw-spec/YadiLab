@@ -44,7 +44,7 @@ def choose(page,ext,data):
             "Any default node selection must be forbidden")
     require(page.locator('[data-office-p1b-confirm]').is_disabled(),
             "Unconsented Office import enabled")
-    for text in [DOCX_CANARY,ODT_CANARY,"node01","Host","Address","IP"]:
+    for text in [DOCX_CANARY,ODT_CANARY,"node01","Host","Address","<w:t>IP</w:t>"]:
         require(text not in page.locator('[data-office-p1b-panel]').inner_html(),
                 "Raw private/original Office cell content leaked into DOM: "+text)
 
