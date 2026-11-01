@@ -55,7 +55,9 @@ export async function mapReviewedOfficeOriginalToSixByFive(
        r.acknowledgeSourcePortCell===false&&r.acknowledgeTargetPortCell===false;
      const present=r.sourcePortCellOrdinal!==null&&r.targetPortCellOrdinal!==null&&
        r.acknowledgeSourcePortCell===true&&r.acknowledgeTargetPortCell===true;
-     return optionalPorts?!(absent||present):!present;
+     // Let P4 retain its stable exact one-sided-port denial code.
+     const oneSided=(r.sourcePortCellOrdinal===null)!==(r.targetPortCellOrdinal===null);
+     return optionalPorts?(oneSided?false:!(absent||present)):!present;
    }))return blocked(sha,invalid,profile);
  const legacy:OfficeReviewedLinkRowsDecision={
    format:decision.format,sourceSha256:sha,nodes:decision.nodes,
