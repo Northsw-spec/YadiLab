@@ -16,6 +16,21 @@ const LIMITS: WorkbookArchiveLimits = {
   maxSingleFileBytes: 4*1024*1024, maxCompressionRatio: 100,
 };
 function fail(code:string):never { throw new EnterpriseImportError(code,code); }
+/** SCALE-001 P1a opt-in; never an import/approval or Engine capability. */
+export const SCALE_OFFICE_LARGE_STRUCTURE_PROFILE = "office.scaled-structural-review.v1" as const;
+export interface OfficeLargeStructureDecision {
+  readonly capacityProfile: typeof SCALE_OFFICE_LARGE_STRUCTURE_PROFILE;
+}
+function acceptLargeCapacity(decision: OfficeLargeStructureDecision | undefined): boolean {
+  if (decision === undefined) return false;
+  if (!decision || typeof decision !== "object" || Array.isArray(decision) ||
+      Object.keys(decision).length !== 1 ||
+      decision.capacityProfile !== SCALE_OFFICE_LARGE_STRUCTURE_PROFILE) {
+    fail("SCALE_P1A_CAPACITY_PROFILE_INVALID");
+  }
+  return true;
+}
+
 function exactly(node:XmlNode, name:string):boolean { return node.name===name; }
 function onlyChildren(node:XmlNode, allowed:readonly string[]):void {
   if(node.children.some(child=>!allowed.includes(child.name)))fail("ODT_UNSUPPORTED_MARKUP");
@@ -49,8 +64,8 @@ function validateFirstMimetype(bytes:Uint8Array):void {
     fail("ODT_MIMETYPE_VALUE_INVALID");
   }
 }
-function safeXmlPart(bytes:Uint8Array,label:string):XmlNode {
-  if(bytes.byteLength>1024*1024)fail("ODT_XML_TOO_LARGE");
+function safeXmlPart(bytes:Uint8Array,label:string,maxBytes=1024*1024):XmlNode {
+  if(bytes.byteLength>maxBytes)fail("ODT_XML_TOO_LARGE");
   const root=parseSafeXml(bytes,label);
   noNamespaceRedefinition(root,true);
   const inspect=(node:XmlNode):void=>{
@@ -85,6 +100,7 @@ export interface OdtTableStructural {
 }
 export interface OdtStructuralPreview {
   readonly profileId:typeof ODT_TABLES_PROFILE;
+  readonly capacityProfile?:typeof SCALE_OFFICE_LARGE_STRUCTURE_PROFILE;
   readonly status:"REVIEW_REQUIRED";
   readonly semanticTrack:"CONFIG_DOCUMENTED";
   readonly sourceSha256:string;
@@ -113,7 +129,9 @@ function cellLength(node:XmlNode):number{
 }
 
 /** ODT table structure only, never source cell values or per-cell hashes. */
-export async function previewOdtTableStructure(input:Uint8Array):Promise<OdtStructuralPreview> {
+export async function previewOdtTableStructure(input:Uint8Array,
+  decision?:OfficeLargeStructureDecision):Promise<OdtStructuralPreview> {
+  const large=acceptLargeCapacity(decision);
   if(!(input instanceof Uint8Array) || input.byteLength<42 ||
     input.byteLength>16*1024*1024)fail("ODT_SOURCE_SIZE_INVALID");
   validateFirstMimetype(input);
@@ -147,7 +165,8 @@ export async function previewOdtTableStructure(input:Uint8Array):Promise<OdtStru
     for(const name of archive.paths.filter(x=>x.endsWith(".xml") && x!=="content.xml" && x!=="META-INF/manifest.xml")){
       safeXmlPart(await archive.read(name),"ODT metadata");
     }
-    const doc=safeXmlPart(await archive.read("content.xml"),"ODT content");
+    const doc=safeXmlPart(await archive.read("content.xml"),"ODT content",
+      (large?4:1)*1024*1024);
     if(!exactly(doc,"office:document-content") || doc.attributes["xmlns:office"]!==OFFICE_NS ||
       doc.attributes["xmlns:table"]!==TABLE_NS || doc.attributes["xmlns:text"]!==TEXT_NS){
       fail("ODT_DOCUMENT_NAMESPACE_INVALID");
@@ -178,7 +197,7 @@ export async function previewOdtTableStructure(input:Uint8Array):Promise<OdtStru
         if(column.children.length)fail("ODT_UNSUPPORTED_MARKUP");
       }
       const rowNodes=table.children.filter(x=>exactly(x,"table:table-row"));
-      if(rowNodes.length<1||rowNodes.length>200)fail("ODT_ROW_COUNT_UNSUPPORTED");
+      if(rowNodes.length<1||rowNodes.length>(large?1001:200))fail("ODT_ROW_COUNT_UNSUPPORTED");
       const rows:OdtTableRowStructural[]=[];
       for(let r=0;r<rowNodes.length;r++){
         const row=rowNodes[r]!;
@@ -190,7 +209,7 @@ export async function previewOdtTableStructure(input:Uint8Array):Promise<OdtStru
         for(let c=0;c<cells.length;c++){
           const cell=cells[c]!;
           totalCells++;
-          if(totalCells>2000)fail("ODT_TOO_MANY_CELLS");
+          if(totalCells>(large?20000:2000))fail("ODT_TOO_MANY_CELLS");
           items.push(Object.freeze({
             cellOrdinal:c,textCodeUnits:cellLength(cell),
             locator:Object.freeze({kind:"odt-table-cell" as const,
@@ -203,7 +222,9 @@ export async function previewOdtTableStructure(input:Uint8Array):Promise<OdtStru
       tables.push(Object.freeze({tableOrdinal:t,rows:Object.freeze(rows)}));
     }
     return Object.freeze({
-      profileId:ODT_TABLES_PROFILE,status:"REVIEW_REQUIRED",
+      profileId:ODT_TABLES_PROFILE,
+      ...(large?{capacityProfile:SCALE_OFFICE_LARGE_STRUCTURE_PROFILE}:{}),
+      status:"REVIEW_REQUIRED",
       semanticTrack:"CONFIG_DOCUMENTED",sourceSha256,
       tables:Object.freeze(tables),totalCells,textIncluded:false,
       canActivate:false,engineVerified:false,physicalTopologyVerified:false,
