@@ -53,6 +53,8 @@ jobs:
           npm run test:scale001-p1a-office-structure
           npm run test:scale001-p1b1-office-batch
           npm run test:scale001-p1b2-office-topology
+          python3 -c 'import ast,pathlib;ast.parse(pathlib.Path("tests/acceptance/run_scale001_p2a_office_100_real_browser.py").read_text(encoding="utf-8"))'
+          npm run test:scale001-p2a-office-ui-contract
           npm run test:imported-probes
           npm run test:ic000-capabilities
           npm run test:ic010-xml-discovery
@@ -139,6 +141,8 @@ jobs:
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_release_identity_real_browser.py \
             --url http://127.0.0.1:18995/ --expected-commit "$YADILAB_EXPECTED_COMMIT" \
             --evidence-dir /tmp/yadilab-required-ci-evidence
+          /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_scale001_p2a_office_100_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic010_p2_shared_xml_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic010_p3a_shared_ansible_real_browser.py \

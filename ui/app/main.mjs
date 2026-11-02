@@ -72,6 +72,10 @@ import { AnsibleIniInventoryPanel } from "./ansible-ini-inspection-panel.mjs";
 import { previewDocxFileStructure, reviewDocxFileCell } from "../src/browser/docx-file-structural-preview.js";
 import { DocxTableStructurePanel } from "./docx-structure-panel.mjs";
 import { OfficeReviewedBuilderPanel } from "./office-reviewed-builder-panel.mjs";
+import { ScaledOfficeBuilderPanel } from "./scaled-office-builder-panel.mjs";
+import { mapReviewedOfficeBatchesToSource } from "../../enterprise-import/src/office-large-reviewed-topology.js";
+import { previewDocxTableStructure, SCALE_OFFICE_LARGE_STRUCTURE_PROFILE as DOCX_LARGE_PROFILE } from "../../enterprise-import/src/docx-tables-structural-preview.js";
+import { previewOdtTableStructure, SCALE_OFFICE_LARGE_STRUCTURE_PROFILE as ODT_LARGE_PROFILE } from "../../enterprise-import/src/odt-tables-structural-preview.js";
 import { previewOfficeNodesFile, verifyOfficeCandidateFile } from "../src/browser/office-reviewed-nodes-file.js";
 import { previewOdtFileStructure, reviewOdtFileCell } from "../src/browser/odt-file-structural-preview.js";
 import { OdtStructurePanel } from "./odt-structure-panel.mjs";
@@ -3371,7 +3375,7 @@ function NetworkTopologyImportPanel({ onClose, onActivate, compilerOptions, setD
   );
 }
 
-function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructuredXml, onInspectGraphml, onInspectNmap, onInspectNmapReplay, onInspectNessus, onInspectNessusReplay, onInspectDrawio, onReviewDrawioBuilder, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onReviewOfficeBuilder, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
+function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructuredXml, onInspectGraphml, onInspectNmap, onInspectNmapReplay, onInspectNessus, onInspectNessusReplay, onInspectDrawio, onReviewDrawioBuilder, onInspectDrawioReplay, onInspectAnsible, onInspectAnsibleYamlReplay, onInspectAnsibleIni, onInspectAnsibleIniReplay, onInspectDocx, onReviewOfficeBuilder, onReviewScaledOfficeBuilder, onInspectDocxReplay, onInspectOdt, onInspectOdtReplay, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }) {
   const fileAction = (label, accept, onChange, dataAttribute) => e("label", { className: "workspace-menu-action file-button" }, label, e("input", { type: "file", accept, onChange, hidden: true, ...(dataAttribute ? { "data-menu-action": dataAttribute } : {}) }));
   const networkPickerRef = useRef(null);
   // Opening the native picker happens synchronously within the user's click,
@@ -3442,6 +3446,7 @@ function MainActions({ onImportNetwork, onImportNetworkFile, onInspectStructured
         e("button", { type: "button", "data-inspect-ansible-ini-replay": "CONFIG_DOCUMENTED", onClick: onInspectAnsibleIniReplay }, "Inspect saved Ansible INI references (read-only replay)"),
         e("button", { type: "button", "data-inspect-docx": "CONFIG_DOCUMENTED", onClick: onInspectDocx }, "Inspect Word DOCX (structure only)"),
         e("button", { type: "button", "data-review-office-builder": "REVIEW_REQUIRED", onClick: onReviewOfficeBuilder }, "Review DOCX / ODT nodes into Builder"),
+        e("button", { type: "button", "data-review-scaled-office-builder": "REVIEW_REQUIRED", onClick: onReviewScaledOfficeBuilder }, "Review 100 DOCX / ODT source-declared network nodes into Builder"),
         e("button", { type: "button", "data-inspect-docx-replay": "CONFIG_DOCUMENTED", onClick: onInspectDocxReplay }, "Inspect saved DOCX references (read-only)"),
         e("button", { type: "button", "data-inspect-odt": "CONFIG_DOCUMENTED", onClick: onInspectOdt }, "Inspect OpenDocument ODT (structure only)"),
         e("button", { type: "button", "data-inspect-odt-replay": "CONFIG_DOCUMENTED", onClick: onInspectOdtReplay }, "Inspect saved ODT references (read-only)"),
@@ -3617,6 +3622,7 @@ function App() {
   const [ansibleIniReplayOpen, setAnsibleIniReplayOpen] = useState(false);
   const [docxStructureOpen, setDocxStructureOpen] = useState(false);
   const [officeReviewedBuilderOpen, setOfficeReviewedBuilderOpen] = useState(false);
+  const [scaledOfficeBuilderOpen, setScaledOfficeBuilderOpen] = useState(false);
   const [docxReplayOpen, setDocxReplayOpen] = useState(false);
   const [odtReplayOpen, setOdtReplayOpen] = useState(false);
   const [odtStructureOpen, setOdtStructureOpen] = useState(false);
@@ -4177,7 +4183,7 @@ function App() {
     e("header", { className: "app-header" },
       e("div", null, e("strong", null, branding.displayName), e("span", null, branding.tagline), e("small", { className: "build-version", "data-yadilab-build-version": releaseIdentity.version, "data-source-commit": releaseIdentity.sourceCommit, title: `Git ${releaseIdentity.sourceCommit}` }, `v${releaseIdentity.version} · ${releaseIdentity.sourceCommit.slice(0,12)}`), e("small", { "data-development-checkpoint": releaseIdentity.checkpoint }, `${releaseIdentity.checkpoint} · ${releaseIdentity.description}`)),
       e(MainActions, { onInspectStructuredXml: () => setStructuredXmlInspectionOpen(true), onInspectGraphml: () => setGraphmlPreviewOpen(true), onInspectNmap: () => setNmapObservationOpen(true), onInspectNmapReplay: () => setNmapReplayOpen(true), onInspectNessus: () => setNessusSeverityOpen(true), onInspectNessusReplay: () => setNessusReplayOpen(true),
-        onInspectDrawio: () => setDrawioStructureOpen(true), onReviewDrawioBuilder: () => setDrawioBuilderReviewOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectAnsibleIniReplay: () => setAnsibleIniReplayOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onReviewOfficeBuilder: () => setOfficeReviewedBuilderOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
+        onInspectDrawio: () => setDrawioStructureOpen(true), onReviewDrawioBuilder: () => setDrawioBuilderReviewOpen(true), onInspectDrawioReplay: () => setDrawioReplayOpen(true), onInspectAnsible: () => setAnsibleInventoryOpen(true), onInspectAnsibleYamlReplay: () => setAnsibleYamlReplayOpen(true), onInspectAnsibleIni: () => setAnsibleIniOpen(true), onInspectAnsibleIniReplay: () => setAnsibleIniReplayOpen(true), onInspectDocx: () => setDocxStructureOpen(true), onReviewOfficeBuilder: () => setOfficeReviewedBuilderOpen(true), onReviewScaledOfficeBuilder: () => setScaledOfficeBuilderOpen(true), onInspectDocxReplay: () => setDocxReplayOpen(true), onInspectOdt: () => setOdtStructureOpen(true), onInspectOdtReplay: () => setOdtReplayOpen(true), onImportNetwork: () => setNetworkImportOpen(true), onImportNetworkFile: (file) => { setNetworkImportSelection({ file }); setNetworkImportOpen(true); }, workspace, busy, branding, enterpriseScenarioId, setEnterpriseScenarioId, enterpriseOfficeScenarios, openEnterpriseScenario, verifiedDeliveryScenarioId, setVerifiedDeliveryScenarioId, openVerifiedDeliveryScenario, guidedLabId, setGuidedLabId, builtinGuidedLabs, openGuidedLab, openSource, openPackage, compileAndLayout, preview, exportSource, exportPackage, exportProgress, loadProgress, exportTroubleshootingSession, loadTroubleshootingSession, autosaveProgress, restoreAutosave, clearAutosave, backToBuilder }),
     ),
     e("section", { className: "mission-strip" }, e("strong", null, title)),
     selectedGuidedLab ? e("section", { className: "curriculum-strip", "data-curriculum-wave": "guided_troubleshooting_wave1" },
@@ -4335,6 +4341,109 @@ function App() {
         return replaySavedDocxReportFiles(docxFile, reportFile, currentModel, acknowledged);
       },
       onClose: () => setDocxReplayOpen(false),
+    }) : null,
+    scaledOfficeBuilderOpen ? e(ScaledOfficeBuilderPanel, {
+      inspectFile: async file => {
+        const denied=code=>{const error=new Error(code);error.code=code;throw error;};
+        if(!file||typeof file.name!=="string"||
+          !/^[^/\\\0]+\.(?:docx|odt)$/i.test(file.name)||
+          typeof file.arrayBuffer!=="function"||
+          (file.size!==undefined&&(!Number.isSafeInteger(file.size)||
+            file.size<4||file.size>16*1024*1024)))
+          denied("SCALE_P2A_FILE_INVALID");
+        const format=/\.docx$/i.test(file.name)?"docx":"odt";
+        const buffer=await file.arrayBuffer();
+        if(!(buffer instanceof ArrayBuffer)||buffer.byteLength<4||
+          buffer.byteLength>16*1024*1024)denied("SCALE_P2A_FILE_INVALID");
+        const bytes=new Uint8Array(buffer);
+        const preview=format==="docx"
+          ?await previewDocxTableStructure(bytes,{capacityProfile:DOCX_LARGE_PROFILE})
+          :await previewOdtTableStructure(bytes,{capacityProfile:ODT_LARGE_PROFILE});
+        if(preview.status!=="REVIEW_REQUIRED"||preview.textIncluded!==false||
+           preview.canActivate!==false||preview.engineVerified!==false||
+           preview.physicalTopologyVerified!==false)
+          denied("SCALE_P2A_PREVIEW_BLOCKED");
+        return {format,preview};
+      },
+      onClose:()=>setScaledOfficeBuilderOpen(false),
+      onConfirm: async (expected,decision,file,isCurrentSelection) => {
+        const denied=code=>{const error=new Error(code);error.code=code;throw error;};
+        const active=latestDrawioWorkspaceRef.current;
+        if(active.mode!=="builder")denied("SCALE_P2A_BUILDER_REQUIRED");
+        const activeIdentity=JSON.stringify(active);
+        const activeTransition=scenarioTransitionRef.current;
+        const current=()=>{
+          if(scenarioTransitionRef.current!==activeTransition||
+            latestDrawioWorkspaceRef.current.mode!=="builder"||
+            JSON.stringify(latestDrawioWorkspaceRef.current)!==activeIdentity)
+            denied("SCALE_P2A_WORKSPACE_CHANGED");
+          if(typeof isCurrentSelection!=="function"||!isCurrentSelection())
+            denied("SCALE_P2A_SELECTION_STALE");
+        };
+        const reread=async()=>{
+          current();
+          const buffer=await file.arrayBuffer();
+          current();
+          if(!(buffer instanceof ArrayBuffer)||buffer.byteLength<4||
+            buffer.byteLength>16*1024*1024)
+            denied("SCALE_P2A_SOURCE_CHANGED");
+          const raw=new Uint8Array(buffer);
+          let preview;
+          try{
+            preview=expected.format==="docx"
+              ?await previewDocxTableStructure(raw,{capacityProfile:DOCX_LARGE_PROFILE})
+              :await previewOdtTableStructure(raw,{capacityProfile:ODT_LARGE_PROFILE});
+          }catch{denied("SCALE_P2A_SOURCE_BLOCKED");}
+          current();
+          if(JSON.stringify(preview)!==JSON.stringify(expected.preview)||
+             preview.sourceSha256!==decision.sourceSha256)
+            denied("SCALE_P2A_SOURCE_CHANGED");
+          return raw;
+        };
+        const bytes=await reread();
+        let candidate;
+        try{candidate=await mapReviewedOfficeBatchesToSource(bytes,decision);}
+        catch(cause){
+          if(typeof cause?.code==="string"&&/^SCALE_P1B[12]_/.test(cause.code))
+            denied(cause.code);
+          denied("SCALE_P2A_MAPPING_BLOCKED");
+        }
+        current();
+        if(candidate.status!=="READY_FOR_COMPILATION"||
+          candidate.canActivate!==false||candidate.engineVerified!==false||
+          candidate.physicalTopologyVerified!==false||
+          candidate.sourceSha256!==decision.sourceSha256||
+          candidate.source.resources.length!==100||
+          candidate.source.connections.length!==99||
+          candidate.source.tests.length!==0)
+          denied("SCALE_P2A_CANDIDATE_BLOCKED");
+        const compiled=await compileBuilderWorkspace(
+          createBuilderWorkspace(candidate.source),compilerOptions);
+        current();
+        if(compiled.compile.status!=="valid")denied("SCALE_P2A_COMPILE_BLOCKED");
+        const layout=await autoLayoutBuilder(compiled,new ElkLayoutBackend());
+        current();
+        if(!layout.ok)denied("SCALE_P2A_LAYOUT_BLOCKED");
+        const fresh=await reread();
+        let checked;
+        try{checked=await mapReviewedOfficeBatchesToSource(fresh,decision);}
+        catch{denied("SCALE_P2A_SOURCE_CHANGED");}
+        current();
+        if(JSON.stringify(checked.source)!==JSON.stringify(candidate.source)||
+           JSON.stringify(checked.origins)!==JSON.stringify(candidate.origins)||
+           checked.sourceSha256!==candidate.sourceSha256)
+          denied("SCALE_P2A_SOURCE_CHANGED");
+        current(); // No await between final live check and source replacement.
+        beginScenarioTransition();
+        setImportedProbeAutoOpen(false);
+        setDiagnostics([...layout.diagnostics,{
+          severity:"warning",
+          code:"SCALE_P2A_TOPOLOGY_MODELED_UNVERIFIED",
+          message:"100 approved original DOCX/ODT device rows and 99 separately approved port-linked source references entered editable Builder. No physical cables, actual reachability, Runtime or Engine PASS were asserted."
+        }]);
+        setWorkspace(layout.workspace);
+        setScaledOfficeBuilderOpen(false);
+      },
     }) : null,
     officeReviewedBuilderOpen ? e(OfficeReviewedBuilderPanel, {
       inspectFile: previewOfficeNodesFile,
