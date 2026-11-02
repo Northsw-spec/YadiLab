@@ -74,12 +74,12 @@ function cellKey(row:OfficeReviewedLinkRowSelection,col:number):string {
 }
 export async function mapReviewedOfficeOriginalToLinkRows(
   original:Uint8Array,decision:OfficeReviewedLinkRowsDecision,
-  capacity?:{readonly maxNodes:6|8|10;readonly maxLinks:5|7|9;readonly allowParallelPorts?:true},
+  capacity?:{readonly maxNodes:6|8|10|12;readonly maxLinks:5|7|9|11;readonly allowParallelPorts?:true},
 ):Promise<OfficeReviewedLinkRowsCandidate> {
   const sha=typeof decision?.sourceSha256==="string"&&SHA.test(decision.sourceSha256)
     ?decision.sourceSha256:"";
-  // Existing P5/P6 6/5, P7 parallel 6/5, and P8 parallel 8/7
-  // capabilities remain exact. Only P9 opts into 10/9 with parallel ports.
+  // Existing P5/P6 6/5, P7 parallel 6/5, P8 parallel 8/7 and P9
+  // parallel 10/9 remain exact. Only P10 opts into 12/11 source-port rows.
   const parallel=capacity?.allowParallelPorts===true;
   const oldCap=capacity?.maxNodes===6&&capacity.maxLinks===5&&
     (parallel?exact(capacity,["maxNodes","maxLinks","allowParallelPorts"]):
@@ -88,7 +88,9 @@ export async function mapReviewedOfficeOriginalToLinkRows(
     exact(capacity,["maxNodes","maxLinks","allowParallelPorts"]);
   const tenCap=capacity?.maxNodes===10&&capacity.maxLinks===9&&parallel&&
     exact(capacity,["maxNodes","maxLinks","allowParallelPorts"]);
-  if(capacity!==undefined&&!oldCap&&!expandedCap&&!tenCap)
+  const twelveCap=capacity?.maxNodes===12&&capacity.maxLinks===11&&parallel&&
+    exact(capacity,["maxNodes","maxLinks","allowParallelPorts"]);
+  if(capacity!==undefined&&!oldCap&&!expandedCap&&!tenCap&&!twelveCap)
     return blocked(sha,"IC040_P5_CAPACITY_DECISION_INVALID");
   const linkLimit=capacity?.maxLinks??OFFICE_REVIEWED_NODES_MAX;
   if(!(original instanceof Uint8Array)||!exact(decision,decisionKeys)||

@@ -73,7 +73,7 @@ const record = (sheet: string, row: number, values: Readonly<Record<string, stri
 export async function mapReviewedOfficeOriginalToNodes(
   original: Uint8Array,
   decision: OfficeReviewedNodesDecision,
-  maxNodes: 4 | 6 | 8 | 10 = OFFICE_REVIEWED_NODES_MAX,
+  maxNodes: 4 | 6 | 8 | 10 | 12 = OFFICE_REVIEWED_NODES_MAX,
 ): Promise<OfficeReviewedNodesCandidate> {
   const sha = typeof decision?.sourceSha256 === "string" && VALID_SHA.test(decision.sourceSha256)
     ? decision.sourceSha256 : "";
