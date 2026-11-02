@@ -35,6 +35,7 @@ jobs:
           go test ./launcher/...
           npm run test:network-topology-import
           npm run test:scale001-p0-source
+          npm run test:scale001-p1a-office-structure
           npm run test:imported-probes
           npm run test:ic000-capabilities
           npm run test:ic010-xml-discovery
