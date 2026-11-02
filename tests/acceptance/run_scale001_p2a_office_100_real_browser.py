@@ -58,9 +58,9 @@ def odt_xml(tables):
         '<table:table table:name="Network'+str(i)+'"><table:table-column/>'+
         "".join("<table:table-row>"+"".join(cell(value) for value in row)+"</table:table-row>" for row in rows)+
         "</table:table>" for i,rows in enumerate(tables))
-    return '<office:document-content xmlns:office="'+OFFICE+'" xmlns:table="'+TABLE+'" xmlns:text="'+TEXT+
+    return ('<office:document-content xmlns:office="'+OFFICE+'" xmlns:table="'+TABLE+'" xmlns:text="'+TEXT+
         '" office:version="1.3"><office:body><office:text>'+tables_xml+
-        "</office:text></office:body></office:document-content>"
+        "</office:text></office:body></office:document-content>")
 
 def original(format,invalid=False):
     rows=original_rows(invalid)
