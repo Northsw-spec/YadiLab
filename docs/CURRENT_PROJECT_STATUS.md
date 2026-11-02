@@ -2,6 +2,12 @@
 
 **Authority:** [GitHub `main`](https://github.com/Northsw-spec/YadiLab/tree/main) is the only canonical source. `package.json` is the current version/checkpoint source, and `AGENTS.md` is the operating rule. Do not use historical ZIPs, old README headings, Drive documents or previous conversation summaries as code authority.
 
+## SCALE-001 — current enterprise-scale target (2026-11-02)
+
+**Priority changed:** 100, 1,000, 5,000 and 10,000+ devices across municipal/campus/airport-scale *synthetic* documented networks, without any claim about real installations. [Owner-approved SCALE-001 contract](architecture/SCALE_001_ENTERPRISE_NETWORK_CAPACITY_ADDENDUM.md) supersedes IC-050 PDF as next development priority. The exact 12-node/11-link DOCX/ODT P10 remains verified but is not a general limit for other import paths or proof of enterprise-scale rendering. Freeze source→Builder/Chromium performance and fidelity gates progressively. Retain all original approvals, no false connectivity/Engine PASS. Masterprompt v1.3 locked original and hash are unchanged.
+
+**Verified starting authority:** protected `main=5f0f3765f37d023b58a03ce15a3e6cca12c81624`; independently P10 RELEASE_VERIFIED in [Linux/DOM release #41369162683](https://github.com/Northsw-spec/YadiLab/actions/runs/41369162683), source+Builder P10 114 PASS and real Chromium 12 nodes/11 original port-linked SVG edges PASS; Linux artifact 13108174979 and mounted DOM artifact 13108742949 expire 2027-01-31. Larger capacities are **UNVERIFIED** before SCALE-001 tests.
+
 ## Current software/release verification
 
 - Follow the latest `.github/workflows/release-identity.yml` run for **exact current main SHA**; its SUCCESS proves only the tested Ubuntu environment and packaged Linux artifact. Required gate: Git-indexed copied/bundled assets; clean tracked source; locked dependencies; compiled source/marker hashes; **actual Chromium visible version, checkpoint, full source-commit DOM identity and an interactive menu**; rejection of a token-only JS bundle.

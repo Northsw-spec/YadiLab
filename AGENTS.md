@@ -2,6 +2,10 @@
 
 **Status:** Mandatory project operating rule. Applies to all developers, coding agents, CI changes, scripts, and future checkpoints. This is an instruction for how to work, **not** a pin to a historical code version.
 
+## SCALE-001 owner-approved priority (2026-11-02)
+
+**Binding override:** enterprise/campus-scale imported topologies take priority over the next IC-050 PDF adapter or discretionary OSPF/SPF enhancements. Read [SCALE-001 source-to-topology addendum](docs/architecture/SCALE_001_ENTERPRISE_NETWORK_CAPACITY_ADDENDUM.md) before new import/visualization work. Target 100, 1,000, 5,000 and 10,000+ devices as progressively **proven** synthetic benchmarks, not accepted capacities. Keep exact source identities, provenance, separate old P4–P10 contracts, fail-closed review, and no inferred cables or Engine PASS. The SHA-256 locked verified Masterprompt v1.3 is historical and **must not be edited**; this is its prospective owner-approved addendum. Initial SCALE-001 P0 validates existing CSV→Builder capacity before any Office capacity claim. Continue only with exact-HEAD Ubuntu CI, protected merge and independent release evidence.
+
 ## Source of truth
 
 1. **ONLY current `main` in `https://github.com/Northsw-spec/YadiLab` is the authoritative source-code base.** Before beginning every checkpoint, fetch `main`, record its HEAD/tree identity, examine the actual code, and base a fresh GitHub branch on that current HEAD. If `main` changes, re-check and reconcile before merging.
