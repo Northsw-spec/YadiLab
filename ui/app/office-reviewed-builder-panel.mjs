@@ -105,10 +105,11 @@ export function OfficeReviewedNodeChoices({
         [parallelPortsMode,setParallelPortsMode]=useState(false),
         [eightBySevenMode,setEightBySevenMode]=useState(false),
         [tenByNineMode,setTenByNineMode]=useState(false),
+        [twelveByElevenMode,setTwelveByElevenMode]=useState(false),
         [modeledAck,setModeledAck]=useState(false),[sending,setSending]=useState(false),
         [localError,setLocalError]=useState("");
-  const nodeLimit=tenByNineMode?10:eightBySevenMode?8:capacityMode?6:MAX;
-  const linkLimit=tenByNineMode?9:eightBySevenMode?7:capacityMode?5:MAX;
+  const nodeLimit=twelveByElevenMode?12:tenByNineMode?10:eightBySevenMode?8:capacityMode?6:MAX;
+  const linkLimit=twelveByElevenMode?11:tenByNineMode?9:eightBySevenMode?7:capacityMode?5:MAX;
   const choices=[];
   for(const table of result.preview.tables.slice(0,4)){
     for(const row of table.rows.slice(1,21)){
@@ -148,8 +149,8 @@ export function OfficeReviewedNodeChoices({
       ?.rows[selectedLinkRow.rowOrdinal]?.cells.slice(0,4).map(x=>x.cellOrdinal)??[]
     :[];
   const canSubmit=nodes.length>=1 && nodes.length<=nodeLimit &&
-    (!capacityMode||(nodes.length===(tenByNineMode?10:eightBySevenMode?8:6) &&
-      linkRows.length===(tenByNineMode?9:eightBySevenMode?7:5) &&
+    (!capacityMode||(nodes.length===(twelveByElevenMode?12:tenByNineMode?10:eightBySevenMode?8:6) &&
+      linkRows.length===(twelveByElevenMode?11:tenByNineMode?9:eightBySevenMode?7:5) &&
       connections.length===0 && portSelections.length===0 &&
       (optionalPortsMode || linkRows.every(v=>v.sourcePortCellOrdinal!==null &&
         v.targetPortCellOrdinal!==null &&
@@ -257,13 +258,14 @@ export function OfficeReviewedNodeChoices({
     setLinkRows(prev=>prev.map(x=>linkRowKey(x)===key?{...x,...patch}:x));clear();
   };
   const removeLinkRow=key=>{setLinkRows(prev=>prev.filter(x=>linkRowKey(x)!==key));clear();};
-  const changeCapacityMode=(checked,permitPortless=false,permitParallel=false,permitEight=false,permitTen=false)=>{
+  const changeCapacityMode=(checked,permitPortless=false,permitParallel=false,permitEight=false,permitTen=false,permitTwelve=false)=>{
     if(busy||sending)return;
     setCapacityMode(checked);
     setOptionalPortsMode(checked&&permitPortless);
     setParallelPortsMode(checked&&permitParallel);
     setEightBySevenMode(checked&&permitEight);
     setTenByNineMode(checked&&permitTen);
+    setTwelveByElevenMode(checked&&permitTwelve);
     // Changing profile must discard ALL prior cell/role/peer/port consents:
     // ordinal limits and the decision shape have changed.
     setNodes([]);setConnections([]);setLinkRows([]);setPortSelections([]);
@@ -283,7 +285,9 @@ export function OfficeReviewedNodeChoices({
       decision.linkRows=linkRows.map(x=>({...x}));
       decision.acknowledgeModeledLinkRows=linkRowAck;
       if(capacityMode){
-        decision.capacityProfile=tenByNineMode
+        decision.capacityProfile=twelveByElevenMode
+          ?"office.reviewed-network-tables.twelve-by-eleven-parallel-port-links.v1"
+          :tenByNineMode
           ?"office.reviewed-network-tables.ten-by-nine-parallel-port-links.v1"
           :eightBySevenMode
           ?"office.reviewed-network-tables.eight-by-seven-parallel-port-links.v1"
@@ -339,7 +343,7 @@ export function OfficeReviewedNodeChoices({
         "Changing P4/P5/P6/P7 profile clears ALL previous choices and approvals.")),
     e("section",{"data-office-p7-capacity":"REVIEW_REQUIRED"},
       e("label",null,e("input",{type:"checkbox",
-        "data-office-p7-capacity-toggle":"true",checked:capacityMode&&parallelPortsMode&&!eightBySevenMode&&!tenByNineMode,
+        "data-office-p7-capacity-toggle":"true",checked:capacityMode&&parallelPortsMode&&!eightBySevenMode&&!tenByNineMode&&!twelveByElevenMode,
         disabled:busy||sending,onChange:event=>changeCapacityMode(event.currentTarget.checked,false,true)}),
         " Enable reviewed P7: six devices, five original Links rows and "+
         "distinct port-annotated parallel links between the same two devices."),
@@ -375,6 +379,20 @@ export function OfficeReviewedNodeChoices({
         "approval. Same-device parallel links require distinct non-reused port pairs. "+
         "Switching any profile clears ALL previous choices and acknowledgments. "+
         "No inferred physical cable, subnet-derived links, or Engine PASS.")),
+    e("section",{"data-office-p10-capacity":"REVIEW_REQUIRED"},
+      e("label",null,e("input",{type:"checkbox",
+        "data-office-p10-capacity-toggle":"true",checked:capacityMode&&twelveByElevenMode,
+        disabled:busy||sending,
+        onChange:event=>changeCapacityMode(event.currentTarget.checked,false,true,false,false,true)}),
+        " Enable reviewed P10: exactly 12 original device-ID cells and 11 separate Links rows "+
+        "with BOTH original source and target port cells individually approved on EVERY row."),
+      e("p",{"data-office-p10-capacity-boundary":"UNVERIFIED"},
+        "P10 is a separate versioned source-table capacity. Twelve individually "+
+        "approved original device IDs, eleven original Links rows and twenty-two original "+
+        "port cells require explicit operator consent. Port-distinct parallel links "+
+        "may coexist; reused or reversed duplicate port pairs BLOCK. Switching the "+
+        "profile resets ALL old P4-P9 selections and approvals. No invented links, "+
+        "physical cable verification or Engine/Runtime PASS.")),
     e("label",null,"Original cell position (never the header)",
       e("select",{value:choice,disabled:busy||sending,
         "data-office-p1b-cell-ordinal":"true",onChange:event=>{
@@ -516,7 +534,7 @@ export function OfficeReviewedNodeChoices({
         "both must contain already selected device IDs. Optional local and "+
         "remote port cells must be selected together and approved separately. "+
         "Multiple rows may share a switch with DISTINCT reviewed ports. P4 is max four; "+
-        "P5/P6/P7 support five; P8 seven; explicit P9 nine Links rows. "+
+        "P5/P6/P7 support five; P8 seven; P9 nine; explicit P10 eleven Links rows. "+
         "No inferred cables, no Runtime or Engine PASS. "+
         "Use either this separate-row profile or the earlier P2/P3 same-row profile."),
       e("label",null,"Original separate link row",
