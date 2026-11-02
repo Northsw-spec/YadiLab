@@ -53,6 +53,7 @@ jobs:
           npm run test:scale001-p1a-office-structure
           npm run test:scale001-p1b1-office-batch
           npm run test:scale001-p1b2-office-topology
+          npm run test:scale001-p2a-office-ui-contract
           npm run test:imported-probes
           npm run test:ic000-capabilities
           npm run test:ic010-xml-discovery
@@ -172,6 +173,8 @@ jobs:
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic030_p2b_drawio_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
           /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_ic040_p1b_office_builder_real_browser.py \
+            --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
+          /tmp/yadilab-required-ci-venv/bin/python tests/acceptance/run_scale001_p2a_office_100_real_browser.py \
             --url http://127.0.0.1:18995/ --evidence-dir /tmp/yadilab-required-ci-evidence
       - name: Preserve bounded verification evidence
         if: always()
