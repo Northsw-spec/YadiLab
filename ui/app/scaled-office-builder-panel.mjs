@@ -3,12 +3,12 @@ const e=React.createElement;
 const EMPTY={nodeTable:"",linkTable:"",nodeId:"",nodeRole:"",
   linkFrom:"",linkTo:"",sourcePort:"",targetPort:""};
 const COLUMN_FIELDS=[
- ["node-id","nodeId","Original device ID","node"],
- ["node-role","nodeRole","Original canonical device role","node"],
- ["link-from","linkFrom","Original link FROM ID","link"],
- ["link-to","linkTo","Original link TO ID","link"],
- ["source-port","sourcePort","Original FROM port","link"],
- ["target-port","targetPort","Original TO port","link"],
+ ["data-scale-p2a-node-id","nodeId","Original device ID","node"],
+ ["data-scale-p2a-node-role","nodeRole","Original canonical device role","node"],
+ ["data-scale-p2a-link-from","linkFrom","Original link FROM ID","link"],
+ ["data-scale-p2a-link-to","linkTo","Original link TO ID","link"],
+ ["data-scale-p2a-source-port","sourcePort","Original FROM port","link"],
+ ["data-scale-p2a-target-port","targetPort","Original TO port","link"],
 ];
 const validOrdinal=value=>typeof value==="string"&&/^(0|[1-9]\d*)$/.test(value);
 const safeCode=cause=>typeof cause?.code==="string"&&
@@ -122,7 +122,7 @@ export function ScaledOfficeBuilderPanel({inspectFile,onConfirm,onClose}){
    const table=owner==="node"?nodes:links;
    return e("label",{key:selector},title,
      e("select",{value:config[key],disabled:busy||!table,
-       ["data-scale-p2a-"+selector]:"true",
+       [selector]:"true",
        onChange:event=>change(key,event.currentTarget.value)},
        e("option",{value:""},"Select original column"),
        ...(table?.rows?.[0]?.cells??[]).map(cell=>
