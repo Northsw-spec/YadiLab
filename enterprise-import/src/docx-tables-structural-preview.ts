@@ -16,6 +16,21 @@ const LIMITS: WorkbookArchiveLimits = {
 };
 
 function fail(code: string): never { throw new EnterpriseImportError(code, code); }
+/** SCALE-001 P1a opt-in; never an import/approval or Engine capability. */
+export const SCALE_OFFICE_LARGE_STRUCTURE_PROFILE = "office.scaled-structural-review.v1" as const;
+export interface OfficeLargeStructureDecision {
+  readonly capacityProfile: typeof SCALE_OFFICE_LARGE_STRUCTURE_PROFILE;
+}
+function acceptLargeCapacity(decision: OfficeLargeStructureDecision | undefined): boolean {
+  if (decision === undefined) return false;
+  if (!decision || typeof decision !== "object" || Array.isArray(decision) ||
+      Object.keys(decision).length !== 1 ||
+      decision.capacityProfile !== SCALE_OFFICE_LARGE_STRUCTURE_PROFILE) {
+    fail("SCALE_P1A_CAPACITY_PROFILE_INVALID");
+  }
+  return true;
+}
+
 function tag(node: XmlNode, wanted: string): boolean { return node.name === "w:" + wanted; }
 function only(node: XmlNode, allowed: readonly string[]): void {
   for (const item of node.children) if (!allowed.some((name) => tag(item, name))) fail("DOCX_UNSUPPORTED_CELL_MARKUP");
@@ -84,6 +99,7 @@ export interface DocxTableStructural {
 }
 export interface DocxStructuralPreview {
   readonly profileId: typeof DOCX_TABLES_PROFILE;
+  readonly capacityProfile?: typeof SCALE_OFFICE_LARGE_STRUCTURE_PROFILE;
   readonly status: "REVIEW_REQUIRED";
   readonly semanticTrack: "CONFIG_DOCUMENTED";
   readonly canActivate: false;
@@ -100,7 +116,9 @@ export interface DocxStructuralPreview {
  * obfuscated values or per-cell hashes (which can leak low-entropy secrets).
  * Not registered as an active workbook/scenario adapter.
  */
-export async function previewDocxTableStructure(input: Uint8Array): Promise<DocxStructuralPreview> {
+export async function previewDocxTableStructure(input: Uint8Array,
+  decision?: OfficeLargeStructureDecision): Promise<DocxStructuralPreview> {
+  const large = acceptLargeCapacity(decision);
   if (!(input instanceof Uint8Array) || input.byteLength < 4 || input.byteLength > 16 * 1024 * 1024) {
     fail("DOCX_SOURCE_SIZE_INVALID");
   }
@@ -140,7 +158,7 @@ export async function previewDocxTableStructure(input: Uint8Array): Promise<Docx
       fail("DOCX_ACTIVE_OR_EMBEDDED_CONTENT");
     }
     const xmlBytes = await archive.read("word/document.xml");
-    if (xmlBytes.byteLength > 1024 * 1024) fail("DOCX_DOCUMENT_XML_TOO_LARGE");
+    if (xmlBytes.byteLength > (large ? 4 : 1) * 1024 * 1024) fail("DOCX_DOCUMENT_XML_TOO_LARGE");
     const doc = parseSafeXml(xmlBytes, "DOCX document");
     namespace(doc, "w:document", "xmlns:w", WORD_NS);
     rejectUnsupportedDocument(doc);
@@ -159,7 +177,7 @@ export async function previewDocxTableStructure(input: Uint8Array): Promise<Docx
       const table = bodyTables[t]!;
       only(table, ["tblPr", "tblGrid", "tr"]);
       const rowNodes = childElements(table, "tr");
-      if (rowNodes.length < 1 || rowNodes.length > 200) fail("DOCX_ROW_COUNT_UNSUPPORTED");
+      if (rowNodes.length < 1 || rowNodes.length > (large ? 1001 : 200)) fail("DOCX_ROW_COUNT_UNSUPPORTED");
       const rows: DocxTableRowStructural[] = [];
       for (let r = 0; r < rowNodes.length; r++) {
         const row = rowNodes[r]!;
@@ -169,7 +187,7 @@ export async function previewDocxTableStructure(input: Uint8Array): Promise<Docx
         const items: DocxTableCellStructural[] = [];
         for (let c = 0; c < cells.length; c++) {
           totalCells++;
-          if (totalCells > 2000) fail("DOCX_TOO_MANY_CELLS");
+          if (totalCells > (large ? 20000 : 2000)) fail("DOCX_TOO_MANY_CELLS");
           items.push(Object.freeze({
             cellOrdinal: c,
             textCodeUnits: cellTextLength(cells[c]!),
@@ -182,7 +200,9 @@ export async function previewDocxTableStructure(input: Uint8Array): Promise<Docx
       tables.push(Object.freeze({tableOrdinal: t, rows: Object.freeze(rows)}));
     }
     return Object.freeze({
-      profileId: DOCX_TABLES_PROFILE, status: "REVIEW_REQUIRED",
+      profileId: DOCX_TABLES_PROFILE,
+      ...(large ? {capacityProfile:SCALE_OFFICE_LARGE_STRUCTURE_PROFILE} : {}),
+      status: "REVIEW_REQUIRED",
       semanticTrack: "CONFIG_DOCUMENTED", canActivate: false,
       sourceSha256: sha, tables: Object.freeze(tables), totalCells,
       textIncluded: false, engineVerified: false, physicalTopologyVerified: false,
