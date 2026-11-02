@@ -96,14 +96,14 @@ function plan(
       batch.tableOrdinal!==tableOrdinal)
       block("SCALE_P1B2_SELECTION_INVALID");
     if(batch.acknowledgeSelectedRange!==true || batch.acknowledgeDisclosure!==true ||
-      batch.columns?.some(c=>c?.acknowledge!==true))
+      batch.columns?.some((c:OfficeScaledBatchDecision["columns"][number])=>c?.acknowledge!==true))
       block("SCALE_P1B2_CONSENT_REQUIRED");
     if(!integer(batch.rowStart)||!integer(batch.rowEnd) ||
       batch.rowStart!==expectedRow||batch.rowEnd<expectedRow ||
       batch.rowEnd>1000 || batch.rowEnd-batch.rowStart>=100)
       block("SCALE_P1B2_BATCH_COVERAGE_INVALID");
     if(!Array.isArray(batch.columns)||batch.columns.length!==columns.length ||
-      batch.columns.some((c,i)=>!exact(c,COLUMN_KEYS)||c.cellOrdinal!==columns[i]))
+      batch.columns.some((c:OfficeScaledBatchDecision["columns"][number],i:number)=>!exact(c,COLUMN_KEYS)||c.cellOrdinal!==columns[i]))
       block("SCALE_P1B2_SELECTION_INVALID");
     expectedRow=batch.rowEnd+1;
   }
