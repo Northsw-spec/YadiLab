@@ -219,4 +219,6 @@ export async function revealReviewedOfficeBatch(
   }finally{
     if(archive) await archive.close().catch(()=>{});
   }
+  // Statically exhaustive fail-closed fallback: no implicit undefined return.
+  return deny("SCALE_P1B1_SOURCE_BLOCKED");
 }
