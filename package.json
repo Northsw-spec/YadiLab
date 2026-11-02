@@ -166,7 +166,8 @@
     "test:scale001-p1a-office-structure": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_scale001_p1a_office_large_structural_tests.mjs",
     "test:scale001-p1b1-office-batch": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_scale001_p1b1_office_batch_disclosure_tests.mjs",
     "test:scale001-p1b2-office-topology": "tsc -p tests/tsconfig.browser.json && node tests/browser/run_scale001_p1b2_office_reviewed_topology_tests.mjs",
-    "test:scale001-p2a-office-ui-contract": "node tests/browser/run_scale001_p2a_office_ui_contract_tests.mjs"
+    "test:scale001-p2a-office-ui-contract": "node tests/browser/run_scale001_p2a_office_ui_contract_tests.mjs",
+    "test:scale001-p2b1-office-thousand-ui": "node tests/browser/run_scale001_p2b1_office_thousand_ui_contract_tests.mjs"
   },
   "dependencies": {
     "@xyflow/react": "12.11.6",
