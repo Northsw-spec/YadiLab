@@ -10,6 +10,8 @@ export const OFFICE_REVIEWED_SIX_BY_FIVE_PARALLEL_PORT_LINKS_PROFILE=
   "office.reviewed-network-tables.six-by-five-parallel-port-links.v1" as const;
 export const OFFICE_REVIEWED_EIGHT_BY_SEVEN_PARALLEL_PORT_LINKS_PROFILE=
   "office.reviewed-network-tables.eight-by-seven-parallel-port-links.v1" as const;
+export const OFFICE_REVIEWED_TEN_BY_NINE_PARALLEL_PORT_LINKS_PROFILE=
+  "office.reviewed-network-tables.ten-by-nine-parallel-port-links.v1" as const;
 export interface OfficeReviewedSixByFiveDecision extends OfficeReviewedLinkRowsDecision {
   readonly capacityProfile: string;
 }
@@ -17,7 +19,8 @@ export interface OfficeReviewedSixByFiveCandidate extends OfficeReviewedLinkRows
   readonly capacityProfile: typeof OFFICE_REVIEWED_SIX_BY_FIVE_PROFILE |
     typeof OFFICE_REVIEWED_SIX_BY_FIVE_OPTIONAL_PORTS_PROFILE |
     typeof OFFICE_REVIEWED_SIX_BY_FIVE_PARALLEL_PORT_LINKS_PROFILE |
-    typeof OFFICE_REVIEWED_EIGHT_BY_SEVEN_PARALLEL_PORT_LINKS_PROFILE;
+    typeof OFFICE_REVIEWED_EIGHT_BY_SEVEN_PARALLEL_PORT_LINKS_PROFILE |
+    typeof OFFICE_REVIEWED_TEN_BY_NINE_PARALLEL_PORT_LINKS_PROFILE;
 }
 const exactly=(v:unknown,keys:readonly string[]):boolean=>
   !!v&&typeof v==="object"&&!Array.isArray(v)&&
@@ -36,7 +39,7 @@ function blocked(
   physicalTopologyVerified:false,diagnostics:[{code}],
  };
 }
-/** P5/P6/P7/P8 are distinct opt-ins. Legacy P1b/P2/P3/P4 exact contracts stay closed. */
+/** P5/P6/P7/P8/P9 are separate opt-ins. Legacy P1b/P2/P3/P4 remain closed. */
 export async function mapReviewedOfficeOriginalToSixByFive(
  original:Uint8Array,decision:OfficeReviewedSixByFiveDecision,
 ):Promise<OfficeReviewedSixByFiveCandidate> {
@@ -46,9 +49,12 @@ export async function mapReviewedOfficeOriginalToSixByFive(
    OFFICE_REVIEWED_SIX_BY_FIVE_OPTIONAL_PORTS_PROFILE;
  const eightBySeven=decision?.capacityProfile===
    OFFICE_REVIEWED_EIGHT_BY_SEVEN_PARALLEL_PORT_LINKS_PROFILE;
- const parallelPorts=eightBySeven||decision?.capacityProfile===
+ const tenByNine=decision?.capacityProfile===
+   OFFICE_REVIEWED_TEN_BY_NINE_PARALLEL_PORT_LINKS_PROFILE;
+ const parallelPorts=tenByNine||eightBySeven||decision?.capacityProfile===
    OFFICE_REVIEWED_SIX_BY_FIVE_PARALLEL_PORT_LINKS_PROFILE;
- const profile=eightBySeven?OFFICE_REVIEWED_EIGHT_BY_SEVEN_PARALLEL_PORT_LINKS_PROFILE:
+ const profile=tenByNine?OFFICE_REVIEWED_TEN_BY_NINE_PARALLEL_PORT_LINKS_PROFILE:
+   eightBySeven?OFFICE_REVIEWED_EIGHT_BY_SEVEN_PARALLEL_PORT_LINKS_PROFILE:
    parallelPorts?OFFICE_REVIEWED_SIX_BY_FIVE_PARALLEL_PORT_LINKS_PROFILE:
    optionalPorts?OFFICE_REVIEWED_SIX_BY_FIVE_OPTIONAL_PORTS_PROFILE:
    OFFICE_REVIEWED_SIX_BY_FIVE_PROFILE;
@@ -56,12 +62,15 @@ export async function mapReviewedOfficeOriginalToSixByFive(
     (decision?.capacityProfile!==OFFICE_REVIEWED_SIX_BY_FIVE_PROFILE &&
      !optionalPorts&&!parallelPorts))
    return blocked(sha,"IC040_P5_CAPACITY_PROFILE_INVALID");
- const invalid=eightBySeven?"IC040_P8_CAPACITY_DECISION_INVALID":
+ const invalid=tenByNine?"IC040_P9_CAPACITY_DECISION_INVALID":
+   eightBySeven?"IC040_P8_CAPACITY_DECISION_INVALID":
    parallelPorts?"IC040_P7_CAPACITY_DECISION_INVALID":
    optionalPorts?"IC040_P6_CAPACITY_DECISION_INVALID":
    "IC040_P5_CAPACITY_DECISION_INVALID";
- if(!Array.isArray(decision.nodes)||decision.nodes.length!==(eightBySeven?8:6)||
-   !Array.isArray(decision.linkRows)||decision.linkRows.length!==(eightBySeven?7:5)||
+ if(!Array.isArray(decision.nodes)||
+   decision.nodes.length!==(tenByNine?10:eightBySeven?8:6)||
+   !Array.isArray(decision.linkRows)||
+   decision.linkRows.length!==(tenByNine?9:eightBySeven?7:5)||
    decision.acknowledgeModeledResources!==true||
    decision.acknowledgeModeledLinkRows!==true||
    decision.linkRows.some(r=>{
@@ -81,6 +90,7 @@ export async function mapReviewedOfficeOriginalToSixByFive(
    acknowledgeModeledLinkRows:decision.acknowledgeModeledLinkRows,
  };
  const mapped=await mapReviewedOfficeOriginalToLinkRows(original,legacy,
+   tenByNine?{maxNodes:10,maxLinks:9,allowParallelPorts:true}:
    eightBySeven?{maxNodes:8,maxLinks:7,allowParallelPorts:true}:
    parallelPorts?{maxNodes:6,maxLinks:5,allowParallelPorts:true}:
    {maxNodes:6,maxLinks:5});
