@@ -185,9 +185,13 @@ def invalid_link(browser,url,format):
         approve(panel)
         panel.locator("[data-scale-p2a-confirm]").click()
         expect(panel.locator("[data-scale-p2a-error='BLOCKED']")).to_be_visible(timeout=60000)
-        require(exported_source(page)==before,"Invalid endpoint partially replaced Builder")
         require(CANARY_NODE not in panel.inner_html() and CANARY_LINK not in panel.inner_html(),
                 "Sensitive source leaked in blocked import")
+        # The blocked overlay still captures pointer events, so perform a
+        # genuine user cancel before comparing the same live Builder export.
+        panel.locator("[data-scale-p2a-cancel]").click()
+        expect(page.locator("[data-scale-p2a-panel]")).to_have_count(0,timeout=15000)
+        require(exported_source(page)==before,"Invalid endpoint partially replaced Builder")
         require(not errors and not external,"Unexpected errors/network on invalid source")
         return {"format":format,"case":"unknown_source_endpoint_preserves_builder","status":"PASS"}
     finally:page.close()
