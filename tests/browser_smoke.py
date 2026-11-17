@@ -1254,7 +1254,8 @@ def run():
             assert started['dhcpCheck'] == 'NOT_VERIFIED'
             assert 'fault' not in json.dumps(started)
             assert not any(name in json.dumps(started) for name in (
-                'CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH', 'STATIC_ROUTE_MISSING'))
+                'CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH',
+                'STATIC_ROUTE_MISSING', 'IPV4_PREFIX_MISMATCH'))
             expect(icmp_page.locator('#icmp-investigation-status')).to_contain_text(
                 'Aktiv dold övning')
             expect(icmp_page.locator('#icmp-investigation-diagnose')).to_be_disabled()
@@ -1322,6 +1323,22 @@ def run():
                 assert port_observation['documentedEnabled'] is True
                 if port_observation['observedEnabled'] is False:
                     shut_ports.append((nid, pid))
+            # Investigate the documented IPv4/CIDR on every routed interface;
+            # unlike route lookup, this can distinguish a wrong prefix from
+            # a route that has actually been removed.
+            prefix_changes = []
+            for nid, pid in (('a', 'eth0'), ('r', 'wan'),
+                             ('r', 'lan'), ('b', 'eth0')):
+                icmp_page.locator('#icmp-investigation-port').select_option(
+                    json.dumps([nid, pid], separators=(',', ':')))
+                with icmp_page.expect_response('**/api/icmp/investigation/probe') as ip_check:
+                    icmp_page.locator('#icmp-investigation-measure').click()
+                ip_observation = ip_check.value.json()['observation']
+                assert ip_observation['documentedIpv4'] is not None
+                if ip_observation['documentedIpv4'] != ip_observation['observedIpv4']:
+                    assert (ip_observation['documentedIpv4'].split('/')[0] ==
+                            ip_observation['observedIpv4'].split('/')[0])
+                    prefix_changes.append((nid, pid))
             if disconnected:
                 assert len(disconnected) == 1
                 inferred = 'CABLE_DOWN'
@@ -1331,11 +1348,15 @@ def run():
             elif mismatched:
                 assert len(mismatched) == 1
                 inferred = 'VLAN_MISMATCH'
+            elif prefix_changes:
+                assert len(prefix_changes) == 1
+                inferred = 'IPV4_PREFIX_MISMATCH'
             else:
                 assert forward['status'] == 'NO_ROUTE' or reverse['status'] == 'NO_ROUTE'
                 inferred = 'STATIC_ROUTE_MISSING'
             expect(icmp_page.locator('#icmp-investigation-diagnose')).to_be_enabled()
-            wrong = next(x for x in ('CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH', 'STATIC_ROUTE_MISSING')
+            wrong = next(x for x in ('CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH',
+                                     'STATIC_ROUTE_MISSING', 'IPV4_PREFIX_MISMATCH')
                          if x != inferred)
             icmp_page.locator('#icmp-investigation-diagnosis').select_option(wrong)
             with icmp_page.expect_response('**/api/icmp/investigation/diagnose') as false_guess:

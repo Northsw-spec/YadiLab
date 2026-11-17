@@ -20,7 +20,8 @@ from .troubleshooting import _mutation, _observed_wires, compare_fault
 
 MAX_PROBES = 48
 MAX_GUESSES = 3
-KINDS = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH", "STATIC_ROUTE_MISSING")
+KINDS = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH", "STATIC_ROUTE_MISSING",
+         "IPV4_PREFIX_MISMATCH")
 PROBES = ("address", "route", "ping", "link", "port", "vlan")
 
 
@@ -62,6 +63,37 @@ def _candidates(project: dict, baseline: dict) -> list[tuple[str, dict]]:
                     "type": "PORT_DISABLED", "nodeId": node["id"],
                     "portId": port["id"],
                 }))
+    # Limit possible prefix mistakes to interfaces on cables that carried
+    # real baseline Echo traffic. The peer addresses are documented facts,
+    # not inferred connectivity; compare_fault must verify the causal effect.
+    observed_endpoints = {
+        (end["node"], end["port"])
+        for link in project["links"] if link["id"] in visited
+        for end in (link["a"], link["b"])
+    }
+    interfaces = [
+        (node, port, ipaddress.IPv4Interface(port["ipv4"]))
+        for node in project["nodes"] if node["kind"] != "switch"
+        for port in node["ports"] if port["enabled"] and port["ipv4"] is not None
+        and (node["id"], port["id"]) in observed_endpoints
+    ]
+    for node, port, configured in interfaces:
+        peers = [
+            other.ip for _, _, other in interfaces
+            if other.ip != configured.ip and other.ip in configured.network
+        ]
+        if not peers:
+            continue
+        new_prefix = next((
+            prefix for prefix in range(configured.network.prefixlen + 1, 31)
+            if any(peer not in ipaddress.IPv4Network(
+                (configured.ip, prefix), strict=False) for peer in peers)
+        ), None)
+        if new_prefix is not None:
+            candidates.append(("IPV4_PREFIX_MISMATCH", {
+                "type": "IPV4_PREFIX_CHANGED", "nodeId": node["id"],
+                "portId": port["id"], "newPrefix": new_prefix,
+            }))
     documented_vlans = sorted({
         number
         for node in project["nodes"] if node["kind"] == "switch"
@@ -124,7 +156,7 @@ class IcmpInvestigation:
                 allowed.append((kind, fault))
         if not allowed:
             raise ProjectValidationError(
-                "icmp investigation: no verified reversible link/port/VLAN/route fault")
+                "icmp investigation: no verified reversible link/port/VLAN/route/prefix fault")
         if _test_kind is None:
             choice = allowed[secrets.randbelow(len(allowed))]
         else:
@@ -282,6 +314,8 @@ class IcmpInvestigation:
                 "nodeId": node_id, "portId": port_id,
                 "documentedEnabled": original["enabled"],
                 "observedEnabled": observed["enabled"],
+                "documentedIpv4": original["ipv4"],
+                "observedIpv4": observed["ipv4"],
                 "source": "SIMULATED_CONFIG",
             }
         else:
