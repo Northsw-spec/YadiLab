@@ -129,7 +129,7 @@ class DhcpMessage:
     def serialize(self) -> bytes:
         client = bytes.fromhex(self.client_mac.replace(":", ""))
         yiaddr = (ipaddress.IPv4Address(self.offered_address).packed
-                  if self.message_type in (_OFFER, _ACK) else _ZERO_IP)
+                  if self.offered_address is not None else _ZERO_IP)
         renewed = self.client_address is not None
         header = _BOOTP.pack(
             1 if self.message_type in (_DISCOVER, _REQUEST) else 2, 1, 6, 0,
@@ -265,8 +265,8 @@ def _decode_datagram(frame: EthernetFrame) -> tuple[str, DhcpMessage]:
     renewing = message.client_address is not None
     ip_source = str(ipaddress.IPv4Address(src))
     ip_destination = str(ipaddress.IPv4Address(dst))
-    if (src_port, dst_port) != expected_ports or
-            (client_message and ip_source != (
+    if ((src_port, dst_port) != expected_ports
+            or (client_message and ip_source != (
                 message.client_address if renewing else "0.0.0.0"))):
         _fail("DHCP message type, IPv4 source or UDP ports mismatch")
     if not client_message and ip_source != message.server_identifier:
