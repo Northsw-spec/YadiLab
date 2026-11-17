@@ -19,6 +19,7 @@ from network_core.icmp_ping import EchoExchange
 from network_core.model import ProjectValidationError
 from network_core.server import LabHTTPServer
 from network_core.storage import ProjectStore
+from network_core.troubleshooting import compare_fault
 from test_icmp_echo import routed_reply_lab
 
 
@@ -139,6 +140,52 @@ class IcmpInvestigationTests(unittest.TestCase):
         self.assertEqual(recovery["repair"]["scope"], "PREVIEW_ONLY")
         self.assertTrue(recovery["replyMatched"])
         self.assertEqual(case.project, original)
+
+    def test_hidden_host_address_fault_has_arp_failure_and_exact_recovery(self):
+        original = routed_reply_lab()
+        before = json.dumps(original, sort_keys=True)
+        case = scenario("IPV4_HOST_ADDRESS_MISMATCH")
+        self.assertNotIn("IPV4_HOST_ADDRESS_MISMATCH", json.dumps(case.state()))
+        self.assertNotIn("newIpv4", json.dumps(case.state()))
+        self.assertEqual(case._fault["nodeId"], "b")
+        self.assertEqual(case._fault["portId"], "eth0")
+        port = case.probe("port", {"nodeId": "b", "portId": "eth0"})["observation"]
+        documented, observed = port["documentedIpv4"], port["observedIpv4"]
+        self.assertNotEqual(documented.split("/")[0], observed.split("/")[0])
+        self.assertEqual(documented.split("/")[1], observed.split("/")[1])
+        ping = case.probe("ping", {})["observation"]
+        self.assertEqual(ping["requestStatus"], "ARP_FAILED")
+        self.assertFalse(ping["replyMatched"])
+        self.assertTrue(any(step["arpStatus"] == "NO_REPLY"
+                            and step["nextHopIpv4"] == "203.0.113.20"
+                            for step in ping["requestSteps"]))
+        self.assertEqual(case.probe("route", {"nodeId": "a",
+            "destinationIpv4": "203.0.113.20"})["observation"]["status"], "MATCH")
+        self.assertFalse(case.diagnose("IPV4_PREFIX_MISMATCH")["correct"])
+        self.assertTrue(case.diagnose("IPV4_HOST_ADDRESS_MISMATCH")["correct"])
+        repaired = case.repair()
+        self.assertEqual(repaired["status"], "RECOVERED")
+        self.assertEqual(repaired["repair"]["expectedIpv4"], documented)
+        self.assertEqual(json.dumps(original, sort_keys=True), before)
+        self.assertEqual(case.project, original)
+
+    def test_host_address_fault_rejects_invalid_occupied_and_unproven_addresses(self):
+        project = routed_reply_lab()
+        fault = {"type": "IPV4_HOST_ADDRESS_CHANGED", "nodeId": "b",
+                 "portId": "eth0", "newIpv4": "203.0.113.21"}
+        for address in ("203.0.113.1", "203.0.113.0", "203.0.113.255",
+                        "192.0.2.21", "203.0.113.20", "203.0.113.021", "bad"):
+            with self.subTest(address=address), self.assertRaises(ProjectValidationError):
+                compare_fault(project, "a", "eth0", "203.0.113.20", 5,
+                              101, 1, {**fault, "newIpv4": address})
+        with self.assertRaises(ProjectValidationError):
+            compare_fault(project, "a", "eth0", "203.0.113.20", 5,
+                          101, 1, {**fault, "newPrefix": 25})
+        unavailable = deepcopy(project)
+        next(n for n in unavailable["nodes"] if n["id"] == "b")["ports"][0]["ipv4"] = "203.0.113.20/31"
+        with self.assertRaises(ProjectValidationError):
+            IcmpInvestigation(unavailable, "a", "eth0", "203.0.113.20", 5,
+                              _test_kind="IPV4_HOST_ADDRESS_MISMATCH")
 
     def test_hidden_static_next_hop_must_fail_arp_and_recover_exact_route(self):
         case = scenario("STATIC_NEXT_HOP_UNREACHABLE")
