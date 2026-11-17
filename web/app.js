@@ -53,6 +53,9 @@ let arpHighlightedLinks = [];
 let dhcpDiagnostic = null;
 let dhcpGeneration = 0;
 let dhcpBusy = false;
+let doraDiagnostic = null;
+let doraGeneration = 0;
+let doraBusy = false;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -86,9 +89,11 @@ const canvas = new TopologyCanvas($('topology'), {
       pingDiagnostic = null;
       troubleDiagnostic = null;
       invalidateDhcpDiagnostics();
+      invalidateDoraDiagnostics();
       invalidateSimulationSession();
       renderSessionDiagnostics();
       renderDhcpDiagnostics();
+      renderDoraDiagnostics();
       canvas.setData(project, selection, pendingPort, highlightedLinks);
       updateSaveIndicator();
     }
@@ -135,9 +140,14 @@ function invalidateDhcpDiagnostics() {
   dhcpGeneration += 1;
   dhcpDiagnostic = null;
 }
+function invalidateDoraDiagnostics() {
+  doraGeneration += 1;
+  doraDiagnostic = null;
+}
 function changed({keepTrace = false} = {}) {
   editRevision += 1;
   invalidateDhcpDiagnostics();
+  invalidateDoraDiagnostics();
   if (!keepTrace) {traceResult = null; highlightedLinks = [];}
   routeLookup = null;
   ipv4Diagnostic = null;
@@ -295,30 +305,37 @@ function renderArpDiagnostics() {
   ].join('\n\n');
 }
 
-function renderDhcpDiagnostics() {
-  const choices = role => project.nodes
+function dhcpPortChoices(role) {
+  return project.nodes
     .filter(n => role === 'client' ? n.kind === 'host' :
       (n.kind === 'host' || n.kind === 'router'))
     .flatMap(n => n.ports
       .filter(p => role === 'client' ? p.ipv4 === null : p.ipv4 !== null)
       .map(p => ({
         value: JSON.stringify([n.id, p.id]),
-        label: `${n.label} / ${p.name} (${n.id}/${p.id})`
+        label: n.label + ' / ' + p.name + ' (' + n.id + '/' + p.id + ')'
           + (p.mac ? '' : ' · MAC saknas'),
       })));
-  const clientOptions = choices('client');
-  const serverOptions = choices('server');
+}
+function populateDhcpPortSelectors(prefix) {
+  const clientOptions = dhcpPortChoices('client');
+  const serverOptions = dhcpPortChoices('server');
   for (const [id, options, empty] of [
-    ['dhcp-client', clientOptions, 'Ingen hostport utan IPv4'],
-    ['dhcp-server', serverOptions, 'Ingen host/routerport med IPv4'],
+    [prefix + '-client', clientOptions, 'Ingen hostport utan IPv4'],
+    [prefix + '-server', serverOptions, 'Ingen host/routerport med IPv4'],
   ]) {
     const selector = $(id);
     const previous = selector.value;
-    selector.replaceChildren(
-      ...(options.length ? options.map(item => el('option', {value: item.value}, item.label))
-        : [el('option', {value: ''}, empty)]));
+    selector.replaceChildren(...(options.length
+      ? options.map(item => el('option', {value: item.value}, item.label))
+      : [el('option', {value: ''}, empty)]));
     if (options.some(item => item.value === previous)) selector.value = previous;
   }
+  return {clientOptions, serverOptions};
+}
+
+function renderDhcpDiagnostics() {
+  const {clientOptions, serverOptions} = populateDhcpPortSelectors('dhcp');
   $('run-dhcp').disabled = dhcpBusy || !clientOptions.length || !serverOptions.length;
   const output = $('dhcp-result');
   output.classList.remove('ok', 'fail');
@@ -366,6 +383,77 @@ function renderDhcpDiagnostics() {
       : 'Inget erbjudande bekräftat på klientporten.',
     'Lease skapad: NEJ. Ingen DHCPREQUEST/ACK. Ingen adress konfigureras, och ledighet i verkligt nät är inte verifierad.',
   ].join('\n\n');
+}
+
+function renderDoraDiagnostics() {
+  const {clientOptions, serverOptions} = populateDhcpPortSelectors('dora');
+  $('run-dora').disabled = doraBusy || !clientOptions.length || !serverOptions.length;
+  const output = $('dora-result');
+  output.classList.remove('ok', 'fail');
+  if (doraBusy && !doraDiagnostic) {
+    output.textContent = 'Simulerar fyra DHCP-meddelanden. Ingen adress skrivs till projektet.';
+    return;
+  }
+  if (!doraDiagnostic) {
+    output.textContent = 'Ingen aktuell DORA-diagnostik. Välj klient, server och en uttrycklig pool. Ingen adress tilldelas i det sparade projektet.';
+    return;
+  }
+  if (doraDiagnostic.error) {
+    output.classList.add('fail');
+    output.textContent = 'DORA avvisad: ' + doraDiagnostic.error
+      + '\nIngen simulerad lease skapad. Dokumenterad IPv4 är oförändrad.';
+    return;
+  }
+  const data = doraDiagnostic;
+  const bound = data.status === 'ACK_RECEIVED' && data.leaseCommitted === true
+    && data.lease && data.lease.state === 'BOUND';
+  output.classList.add(bound ? 'ok' : 'fail');
+  const phaseLines = (title, phase) => {
+    const lines = [title + ' – ' + phase.transmissions.length + ' deklarerade överföringar'];
+    for (const t of phase.transmissions) lines.push(
+      '  ' + t.linkId + ': ' + t.from.node + '/' + t.from.port
+      + ' → ' + t.to.node + '/' + t.to.port
+      + (t.vlanId == null ? ' · otaggad' : ' · VLAN ' + t.vlanId)
+      + (t.tagged ? ' (802.1Q)' : ''));
+    for (const drop of phase.vlanDrops) lines.push(
+      '  VLAN-drop: ' + drop.switch + '/' + drop.port + ' ' + drop.reason
+      + (drop.vlanId == null ? '' : ' VLAN ' + drop.vlanId));
+    if (phase.transmissions.length === 0 && phase.vlanDrops.length === 0) {
+      lines.push('  Inga överföringar eller VLAN-droppar');
+    }
+    return lines.join('\n');
+  };
+  const macs = data.macTables.flatMap(t => [
+    '  ' + t.switchId + (t.vlanId == null ? ' (otaggad)' : ' VLAN ' + t.vlanId) + ':',
+    ...Object.entries(t.entries).map(([mac, port]) => '    ' + mac + ' → ' + port),
+  ]);
+  const resultLines = [
+    'DORA-status: ' + data.status,
+    data.meaning,
+    'Transaktions-ID: ' + data.transactionId + ' · Pool: '
+      + data.poolStart + ' – ' + data.poolEnd,
+    phaseLines('DISCOVER (klient → server)', data.discover),
+    'DISCOVER nådde vald serverport: ' + (data.discover.receivedAtServer ? 'ja' : 'nej'),
+    phaseLines('OFFER (server → klient)', data.offer),
+    phaseLines('REQUEST (klient → server)', data.request),
+    'REQUEST nådde vald serverport: ' + (data.request.receivedAtServer ? 'ja' : 'nej'),
+    phaseLines('ACK (server → klient)', data.ack),
+    'ACK nådde ursprunglig klientport: ' + (data.ack.receivedAtClient ? 'ja' : 'nej'),
+    'Tillfälligt inlärda MAC-tabeller:\n' + (macs.join('\n') || '  Inga'),
+  ];
+  if (bound) {
+    const lease = data.lease;
+    resultLines.push('SIMULERAD BOUND-lease: ' + lease.ipv4 + ' / ' + lease.subnetMask
+      + '\nKlient: ' + lease.clientNode + '/' + lease.clientPort
+      + ' · MAC: ' + lease.clientMac
+      + '\nDHCP-server: ' + lease.serverIdentifier
+      + ' · Leasetid: ' + lease.leaseSeconds + ' sekunder');
+  } else {
+    resultLines.push('Ingen simulerad lease bekräftad. ACK mottogs inte på klientporten.');
+  }
+  resultLines.push('Endast tillfällig DHCP-simuleringssession. Klientens kanoniska IPv4 ändras inte.'
+    + ' Ingen fil sparas. Ingen faktisk adresskonfliktskontroll eller lease-förnyelse.');
+  output.textContent = resultLines.join('\n\n');
 }
 
 function renderSessionDiagnostics() {
@@ -1007,6 +1095,7 @@ function render() {
   updateTraceSelectors();
   renderArpDiagnostics();
   renderDhcpDiagnostics();
+  renderDoraDiagnostics();
   renderSessionDiagnostics();
   renderRouteLookup();
   renderIPv4Trace();
@@ -1138,6 +1227,7 @@ async function openProject() {
     selection = null; pendingPort = null; traceResult = null; highlightedLinks = [];
     arpDiagnostic = null; arpHighlightedLinks = [];
     invalidateDhcpDiagnostics();
+    invalidateDoraDiagnostics();
     render(); canvas.fit();
     notify(`Öppnade verklig projektfil: ${loaded.filename}.yadilab · SHA-256 ${loaded.sha256.slice(0,14)}…`);
   } catch (error) { notify(`Kunde inte öppna: ${error.message}`,true); }
@@ -1230,6 +1320,54 @@ async function exportProject() {
     notify('Export/nedladdning initierad. Webbläsarens faktiska skrivning till disk är inte verifierad.');
   } catch (error) { notify(`Export avvisad: ${error.message}`,true); }
 }
+async function runDora() {
+  if (doraBusy) return;
+  const currentInputs = () => [
+    $('dora-client').value, $('dora-server').value,
+    $('dora-pool-start').value.trim(), $('dora-pool-end').value.trim(),
+    $('dora-transaction-id').value.trim(), $('dora-lease-seconds').value.trim(),
+  ];
+  const inputs = currentInputs();
+  const [client, server, poolStart, poolEnd, rawTransaction, rawLease] = inputs;
+  const toInteger = value => /^[0-9]+$/.test(value) ? Number(value) : NaN;
+  const transactionId = toInteger(rawTransaction);
+  const leaseSeconds = toInteger(rawLease);
+  if (!client || !server || !poolStart || !poolEnd
+      || !Number.isSafeInteger(transactionId) || transactionId < 1
+      || transactionId > 4294967295 || !Number.isSafeInteger(leaseSeconds)
+      || leaseSeconds < 60 || leaseSeconds > 604800) {
+    invalidateDoraDiagnostics();
+    doraDiagnostic = {error: 'Välj giltiga klient-/serverportar, poolens start/slut, transaktions-ID 1–4294967295 och leasetid 60–604800.'};
+    renderDoraDiagnostics();
+    return;
+  }
+  const [clientNode, clientPort] = JSON.parse(client);
+  const [serverNode, serverPort] = JSON.parse(server);
+  const snapshot = JSON.stringify(project);
+  const snapshotWorkspace = workspaceRevision;
+  const snapshotEdit = editRevision;
+  const generation = ++doraGeneration;
+  doraBusy = true;
+  doraDiagnostic = null;
+  renderDoraDiagnostics();
+  const stillCurrent = () => generation === doraGeneration
+    && workspaceRevision === snapshotWorkspace && editRevision === snapshotEdit
+    && JSON.stringify(project) === snapshot
+    && JSON.stringify(currentInputs()) === JSON.stringify(inputs);
+  try {
+    const result = await api('/api/dhcp/dora', {
+      project: JSON.parse(snapshot), clientNode, clientPort, serverNode, serverPort,
+      poolStart, poolEnd, transactionId, leaseSeconds,
+    });
+    if (stillCurrent()) doraDiagnostic = result;
+  } catch (error) {
+    if (stillCurrent()) doraDiagnostic = {error: error.message};
+  } finally {
+    doraBusy = false;
+    renderDoraDiagnostics();
+  }
+}
+
 async function runDhcp() {
   if (dhcpBusy) return;
   const currentInputs = () => [
@@ -1622,6 +1760,15 @@ $('route-destination-ip').addEventListener('input', () => {
 });
 $('run-arp').addEventListener('click', runArp);
 $('run-dhcp').addEventListener('click', runDhcp);
+$('run-dora').addEventListener('click', runDora);
+for (const id of ['dora-client', 'dora-server', 'dora-pool-start', 'dora-pool-end',
+                  'dora-transaction-id', 'dora-lease-seconds']) {
+  $(id).addEventListener(id === 'dora-client' || id === 'dora-server' ? 'change' : 'input', () => {
+    invalidateDoraDiagnostics();
+    renderDoraDiagnostics();
+  });
+}
+
 for (const id of ['dhcp-client', 'dhcp-server', 'dhcp-offered-ip',
                   'dhcp-transaction-id', 'dhcp-lease-seconds']) {
   $(id).addEventListener(id === 'dhcp-client' || id === 'dhcp-server' ? 'change' : 'input', () => {
