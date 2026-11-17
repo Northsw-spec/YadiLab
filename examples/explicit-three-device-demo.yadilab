@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "name": "DEMO – två klienter och en switch",
+  "zones": [{"id": "zone-lab", "label": "Exempelzon"}],
+  "nodes": [
+    {"id": "pc-1", "label": "Klient A", "kind": "host", "x": 90, "y": 235, "zoneId": "zone-lab", "ports": [{"id": "eth0", "name": "eth0", "enabled": true, "ipv4": "192.0.2.10/24"}]},
+    {"id": "sw-1", "label": "Switch 1", "kind": "switch", "x": 400, "y": 215, "zoneId": "zone-lab", "ports": [{"id": "ge1", "name": "GigabitEthernet1", "enabled": true, "ipv4": null}, {"id": "ge2", "name": "GigabitEthernet2", "enabled": true, "ipv4": null}]},
+    {"id": "pc-2", "label": "Klient B", "kind": "host", "x": 740, "y": 235, "zoneId": "zone-lab", "ports": [{"id": "eth0", "name": "eth0", "enabled": true, "ipv4": "192.0.2.11/24"}]}
+  ],
+  "links": [
+    {"id": "cable-1", "a": {"node": "pc-1", "port": "eth0"}, "b": {"node": "sw-1", "port": "ge1"}, "enabled": true},
+    {"id": "cable-2", "a": {"node": "sw-1", "port": "ge2"}, "b": {"node": "pc-2", "port": "eth0"}, "enabled": true}
+  ]
+}

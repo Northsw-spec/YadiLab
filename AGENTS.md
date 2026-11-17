@@ -1,0 +1,28 @@
+# Utvecklingskontrakt för nätverksapplikationen
+
+## Projektgräns
+
+- Detta är en **ny, fristående implementation**, inte en fork eller ompaketering av äldre produktkod.
+- Kopiera inte källfiler, komponentträd, bakåtkompatibilitetslager eller testkod från äldre projekt utan ett separat uttryckligt beslut baserat på verifierad funktionalitet.
+- Undvik parallella arkitekturer. En kanonisk dokumentationsmodell och en presentationsväg.
+- Körbar nytta prioriteras över mängden kod, projektbeteckningar eller antalet passerade kontroller.
+
+- **Produktnamn:** `APP_NAME` i `network_core/config.py` är den enda deklarationen av appens visningsnamn. Repositorynamnet är inte appnamnet. HTML, fönstertitel, loggar, hälsosvar och terminal måste härleda namnet härifrån. Alla klass-, funktions-, paket- och filnamn måste vara generiska.
+
+## Oförhandlingsbara funktionella invariants
+
+1. **Inga implicita länkar:** IP-adresser, default gateways, geografisk zon, nodposition och liknande får aldrig skapa en kabel, router eller enhet.
+2. **Förlustfri eller avvisad import:** okända eller ogiltiga data får inte tyst försvinna; avvisa hellre formatet med ett begripligt fel.
+3. **Äkta identiteter:** noder, portar, zoner och länkar ska överleva Save/Open med exakt samma identifierare och deklarerade ändpunkter.
+4. **Begränsa sanningsanspråk:** topologisk grafväg är inte verklig Layer-2-/Layer-3-reachability. Bygg aldrig en generisk ping-PASS ovanpå BFS.
+5. **Avgränsa nya funktioner:** lägg till en beteenderegel och ett negativt test före en ny integrationsväg.
+6. **Beständighet:** skriv bara efter användarens uttryckliga Save. Ingen autosave, dold overwrite eller falsk verifiering av webbläsarnedladdning.
+7. **Ingen skönmålning i tester:** riktiga negativa tester, riktig fil på disk och omstart ska skiljas från en simulerad filväljare eller syntetisk stub.
+
+## Scope och process
+
+- Fokus är korrekt funktionalitet, begripliga användarflöden och borttagning av onödig eller felaktig kod. Starta inte pentest eller separata säkerhetshärdningsprojekt utan användarens begäran.
+- Gör så små verifierbara ändringar som möjligt. Ha bara en aktiv utvecklingsgren/PR.
+- Kör `python3 -m unittest discover -s tests -p 'test_*.py' -v`, `npm run check` och `python3 tests/browser_smoke.py` före kodleverans när miljön tillåter.
+- Om webbläsaren blockerar lokal HTTP kan browser_smoke använda sin uttryckligt märkta bro, men det är **inte** bevis för normal direkt HTTP i den miljön.
+- Föreslå aldrig merge av ej verifierad kod. Gör ingen merge utan användarens godkännande.

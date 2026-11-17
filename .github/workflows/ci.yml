@@ -1,0 +1,28 @@
+name: Functional correctness
+on:
+  push:
+  pull_request:
+jobs:
+  unit-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Model, storage and HTTP functional tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Browser module syntax
+        run: |
+          node --check web/model.js
+          node --check web/canvas.js
+          node --check web/app.js
+      - name: Browser acceptance prerequisites
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium
+      - name: Real Chromium interaction and durable Save/Open
+        run: python3 tests/browser_smoke.py

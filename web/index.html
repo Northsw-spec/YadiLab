@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111c2c">
+  <title>{{APP_NAME}} · Nätverkslabb</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand" aria-label="{{APP_NAME}}"><div class="brand-mark" aria-hidden="true">◎</div><div><strong>{{APP_NAME}}</strong><small>CANONICAL NETWORK LAB · v0.1</small></div></div>
+      <div class="header-actions">
+        <button id="new-project" class="btn btn-ghost" type="button">Nytt</button>
+        <button id="import-project" class="btn btn-ghost" type="button">Importera</button>
+        <button id="export-project" class="btn btn-ghost" type="button">Exportera</button>
+        <button id="save-project" class="btn btn-primary" type="button">Spara projekt</button>
+        <input id="import-file" type="file" accept=".yadilab,application/json,.json" hidden>
+      </div>
+    </header>
+    <div class="subbar"><span class="system-tag"><i class="status-dot"></i> LOKALT LABB</span><span class="separator">/</span><span id="breadcrumb">Nytt nätverkslabb</span><span class="subbar-spacer"></span><span id="save-indicator" class="save-state">Ej sparat</span></div>
+    <div class="workspace">
+      <aside class="panel left-panel" aria-label="Inventering">
+        <div class="panel-section">
+          <div class="eyebrow">ARBETSOMRÅDE</div>
+          <h2>Inventering</h2>
+          <p class="muted tiny">Endast uttryckligen skapade enheter och länkar.</p>
+        </div>
+        <div class="stats" aria-label="Resurser och länkar">
+          <div><strong id="count-nodes">0</strong><span>Enheter</span></div><div><strong id="count-links">0</strong><span>Länkar</span></div><div><strong id="count-zones">0</strong><span>Zoner</span></div>
+        </div>
+        <div class="panel-section action-stack">
+          <button id="add-node" class="btn btn-soft full" type="button"><span class="plus">+</span> Lägg till enhet</button>
+          <button id="add-zone" class="btn btn-outline full" type="button"><span class="plus">+</span> Lägg till zon</button>
+        </div>
+        <div class="list-header"><span>ENHETER</span><span id="node-list-size">0</span></div>
+        <div id="node-list" class="object-list" aria-label="Dokumenterade enheter"></div>
+        <div class="list-header"><span>LÄNKAR</span><span id="link-list-size">0</span></div>
+        <div id="link-list" class="object-list" aria-label="Dokumenterade länkar"></div>
+        <div class="list-header"><span>ZONER</span></div>
+        <div id="zone-list" class="object-list" aria-label="Deklarerade zoner"></div>
+        <div class="left-bottom">
+          <div class="eyebrow">SPARADE PROJEKT</div>
+          <label for="saved-projects" class="sr-only">Öppna sparat projekt</label>
+          <select id="saved-projects" class="control"><option value="">Välj sparat projekt…</option></select>
+          <button id="open-project" type="button" class="btn btn-outline full">Öppna valt projekt</button>
+          <p class="muted tiny">Spara skriver riktiga <code>.yadilab</code>-filer på din dator via den lokala servern.</p>
+        </div>
+      </aside>
+      <main class="canvas-column" aria-label="Topologiarbetsyta">
+        <div class="canvas-toolbar">
+          <div class="canvas-tab"><span class="tab-indicator"></span> Topologi <span class="tab-caption">/ dokumenterad graf</span></div>
+          <div class="canvas-tools"><span id="canvas-mode">REDIGERING</span><button id="zoom-out" title="Zooma ut" aria-label="Zooma ut" class="icon-button" type="button">−</button><button id="zoom-in" title="Zooma in" aria-label="Zooma in" class="icon-button" type="button">+</button><button id="zoom-fit" class="btn btn-small btn-ghost" type="button">Anpassa</button></div>
+        </div>
+        <div class="canvas-container">
+          <svg id="topology" aria-label="Nätverkstopologi med verkliga deklarerade länkar" role="img" tabindex="0"></svg>
+          <div id="empty-state" class="empty-state">
+            <div class="empty-illustration"><span class="empty-node">▣</span><span class="empty-line"></span><span class="empty-node">▣</span></div>
+            <h2>Ett nätverk börjar med en enhet</h2>
+            <p>Skapa enheter, deklarera portar och anslut dem. Inga nätverk eller kopplingar hittas på automatiskt.</p>
+            <button id="empty-add" class="btn btn-primary" type="button">+ Skapa första enheten</button>
+            <button id="load-example" class="btn btn-ghost" type="button">Öppna märkt demoexempel</button>
+          </div>
+          <div class="canvas-bottom"><span id="canvas-hint">Dra enheter för att placera dem. Klicka två portar för att skapa en fysisk länk.</span><span class="chip" id="scale-label">100 %</span></div>
+        </div>
+        <div class="canvas-footer"><span>Visualisering: dokumenterade fakta, aldrig antagen uppkoppling.</span><span>{{APP_NAME}} · Lokal version</span></div>
+      </main>
+      <aside class="panel right-panel" aria-label="Inspektör och tester">
+        <div class="panel-section inspector-title"><div class="eyebrow">EGENSKAPER & LABB</div><h2 id="inspector-heading">Projekt</h2><p id="inspector-subtitle" class="muted tiny">Redigera källdokumenterade värden.</p></div>
+        <div id="inspector" class="inspector-body"></div>
+        <section class="trace-panel">
+          <div class="eyebrow">TOPOLOGISK SPÅRNING</div>
+          <h3>Undersök grafväg</h3>
+          <p class="muted tiny">Kontrollerar endast deklarerade noder, portar och länkar. Inte ping, VLAN, routing eller IP-trafik.</p>
+          <label for="trace-source">Från enhet</label><select id="trace-source" class="control"></select>
+          <label for="trace-target">Till enhet</label><select id="trace-target" class="control"></select>
+          <button id="run-trace" class="btn btn-soft full" type="button">Spåra dokumenterad väg</button>
+          <div id="trace-result" class="trace-result" aria-live="polite">Ingen spårning utförd.</div>
+        </section>
+      </aside>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

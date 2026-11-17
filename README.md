@@ -1,19 +1,19 @@
-# YadiLab A — nytt kanoniskt nätverkslabb
+# Ren nätverkslabb-app — kanonisk topologi
 
-**Självständig nyimplementation.** Ingen kod har kopierats från YadiLab-n. Detta repository ska inte förväxlas med den äldre applikationen.
+**Självständig nyimplementation.** Repositoryt heter `YadiLab-a`, men det är **inte appens namn**. Ändra endast `APP_NAME` i `network_core/config.py` för att byta appens visningsnamn. Ingen kod har kopierats från det äldre projektet.
 
-YadiLab A 0.1 är en körbar lokal desktop/webb-hybrid för att dokumentera enheter, portar, zoner och **uttryckligen deklarerade** fysiska länkar. Grafspårningen är avsiktligt begränsad. Projekt lagras på riktigt i `.yadilab`-filer. Programmet fungerar helt lokalt utan npm-installation, moln eller tredjepartsbibliotek i runtime.
+Version 0.1 är en körbar lokal desktop/webb-hybrid för att dokumentera enheter, portar, zoner och **uttryckligen deklarerade** fysiska länkar. Grafspårningen är avsiktligt begränsad. Projekt lagras på riktigt i `.yadilab`-filer. Programmet fungerar helt lokalt utan npm-installation, moln eller tredjepartsbibliotek i runtime.
 
 ## Starta på Linux (Python 3.10+)
 
 ```bash
-python3 -m yadilab_a
+python3 -m network_core
 ```
 
 En lokal webbläsare öppnas på `http://127.0.0.1:8765/`. Vill du styra datamapp och webbläsare:
 
 ```bash
-python3 -m yadilab_a --data-dir ~/YadiLab-A-Projects --no-browser --port 8765
+python3 -m network_core --data-dir ~/NetworkProjects --no-browser --port 8765
 ```
 
 Öppna därefter `http://127.0.0.1:8765/`. Avsluta servern med `Ctrl+C`.
