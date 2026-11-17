@@ -33,7 +33,24 @@ python3 -m network_core --data-dir ~/NetworkProjects --no-browser --port 8765
 
 **Topologisk väg är inte ping, IP-routing, VLAN-forwarding, brandväggslogik eller ett bevis på nätverksanslutning.** Första versionens grafspårning traverserar dokumentationsgrafen, inte verkliga protokoll.
 
-Ännu inte implementerat: XLSX/ODS/CSV-import, IP forwarding, Layer 2 bridging, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+Ännu inte implementerat: XLSX/ODS-import eller godtyckliga CSV-format, IP forwarding, Layer 2 bridging, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+
+## Import av explicit CSV-dokumentation
+
+Markera `Devices.csv` samt valfria `Interfaces.csv`, `Links.csv` och `Zones.csv` samtidigt i **Importera**. Appen validerar samtliga tabeller före uttryckligt godkännande att ersätta aktuell arbetsyta. Ingenting sparas automatiskt.
+
+Det är ett **definierat CSV-utbytesformat**, inte en generell importerare för godtyckliga kalkylblad. Varje tabell kräver exakt följande kolumner (i valfri ordning):
+
+| Tabell | Kolumner |
+| --- | --- |
+| `Devices.csv` (krävs) | `id,label,kind,x,y,zoneId` |
+| `Interfaces.csv` | `nodeId,id,name,enabled,ipv4` |
+| `Links.csv` | `id,aNode,aPort,bNode,bPort,enabled` |
+| `Zones.csv` | `id,label` |
+
+`kind` är `host`, `switch`, `router` eller `firewall`. `x` och `y` är uttryckligen angivna presentationskoordinater. `zoneId` och `ipv4` kan lämnas tomma (motsvarar null); övriga värden krävs. `enabled` måste vara exakt `true` eller `false`. Länkar skapas **enbart** från `Links.csv` med ändpunkter som deklarerats i `Interfaces.csv`.
+
+Okända fält, odeklarerade portar, ogiltiga referenser och malformed CSV avvisas helt. Exempel finns i `examples/csv/`. XLSX/ODS och godtyckliga CSV-format stöds inte ännu.
 
 ## Filformat
 

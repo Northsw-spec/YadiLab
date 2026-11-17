@@ -204,8 +204,9 @@ function renderInspector() {
     }, {id:'project-name'})));
     box.append(field('Lokalt filnamn (utan .yadilab)', input(filename, value => {
       if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value)) return notify('Filnamn: 1–64 tecken, endast A–Z, 0–9, _ och -.', true);
+      // Do not synchronously replace a focused input during its own change
+      // event: that can fire a second blur/change and corrupt DOM replacement.
       filename = value;
-      renderInspector();
     }, {id:'project-filename'})));
     box.append(el('div', {className:'muted-panel'}, 'Börja med en enhet, lägg till portar och anslut två lediga portar. Kabeln skapas först efter två uttryckliga val.'));
     box.append(button('Skapa enhet', createNode, 'btn-soft'));
@@ -411,17 +412,41 @@ async function openProject() {
     notify(`Öppnade verklig projektfil: ${loaded.filename}.yadilab · SHA-256 ${loaded.sha256.slice(0,14)}…`);
   } catch (error) { notify(`Kunde inte öppna: ${error.message}`,true); }
 }
-async function importProject(file) {
-  if (!file || !confirmDiscard()) return;
-  try {
-    const raw = await file.text();
-    if (raw.length > 8 * 1024 * 1024) throw new Error('Filen får vara högst 8 MiB.');
-    const data = JSON.parse(raw);
-    const result = await api('/api/validate',data);
-    resetProject(result.project);
-    notify(`Importerade dokumenterade fakta från ${file.name}. Inget sparades automatiskt.`);
-  } catch (error) { notify(`Import avvisad: ${error.message}`,true); }
+async function decodeUtf8(file) {
+  // File.text() silently substitutes malformed bytes; canonical imports must
+  // either preserve the input or report an error without replacing the project.
+  return new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer());
 }
+async function importProjects(files) {
+  if (!files?.length) return;
+  try {
+    let result;
+    if (files.every(file => file.name.endsWith('.csv'))) {
+      if (files.length > 4) throw new Error('Välj högst fyra CSV-tabeller.');
+      const projectName = prompt('Projektnamn för CSV-importen:', project.name);
+      if (projectName === null) return;
+      const sources = [];
+      for (const file of files) {
+        if (file.size > 8 * 1024 * 1024) throw new Error('CSV-fil är större än 8 MiB.');
+        sources.push({name: file.name, text: await decodeUtf8(file)});
+      }
+      result = await api('/api/import/csv', {projectName, files: sources});
+    } else if (files.length === 1 && /\.(?:json|yadilab)$/i.test(files[0].name)) {
+      if (files[0].size > 8 * 1024 * 1024) throw new Error('Filen är större än 8 MiB.');
+      result = await api('/api/validate', JSON.parse(await decodeUtf8(files[0])));
+    } else {
+      throw new Error('Välj antingen en .json/.yadilab-fil eller CSV-tabellerna Devices.csv, Interfaces.csv, Links.csv och eventuellt Zones.csv.');
+    }
+    // Validate completely before asking to replace the current workspace.
+    // Cancel or invalid CSV must not disturb existing edits or disk bytes.
+    const incoming = result.project;
+    if (!confirmDiscard()) return;
+    if (!confirm(`Importen innehåller ${incoming.nodes.length} enheter och ${incoming.links.length} uttryckligt deklarerade länkar. Ersätta nuvarande arbetsyta? Ingen fil skrivs automatiskt.`)) return;
+    resetProject(incoming);
+    notify(`Importerade ${incoming.nodes.length} enheter, ${incoming.links.length} länkar och ${incoming.zones.length} zoner. Inget sparades automatiskt.`);
+  } catch (error) { notify(`Import avvisad: ${error.message}`, true); }
+}
+
 async function exportProject() {
   try {
     const validated = await api('/api/validate',project);
@@ -457,8 +482,8 @@ $('load-example').addEventListener('click', () => {
 });
 $('import-project').addEventListener('click', () => $('import-file').click());
 $('import-file').addEventListener('change', async event => {
-  const file = event.target.files[0];
-  await importProject(file);
+  const files = Array.from(event.target.files);
+  await importProjects(files);
   event.target.value = '';
 });
 $('export-project').addEventListener('click', exportProject);

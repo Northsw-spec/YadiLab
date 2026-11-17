@@ -14,6 +14,7 @@ from urllib.parse import unquote, urlsplit
 
 from . import __version__, config
 from .model import ProjectValidationError, topology_trace, validate_project
+from .csv_import import import_csv_tables
 from .storage import ProjectConflictError, ProjectStore
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -96,6 +97,8 @@ class Handler(BaseHTTPRequestHandler):
             body = self._read_json()
             if path == "/api/validate":
                 self._json(200, {"project": validate_project(body)})
+            elif path == "/api/import/csv":
+                self._json(200, {"project": import_csv_tables(body)})
             elif path == "/api/trace":
                 if not isinstance(body, dict) or set(body) != {"project", "source", "target"}:
                     raise ProjectValidationError("trace: expected project, source, target")

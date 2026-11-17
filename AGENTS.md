@@ -26,3 +26,9 @@
 - Kör `python3 -m unittest discover -s tests -p 'test_*.py' -v`, `npm run check` och `python3 tests/browser_smoke.py` före kodleverans när miljön tillåter.
 - Om webbläsaren blockerar lokal HTTP kan browser_smoke använda sin uttryckligt märkta bro, men det är **inte** bevis för normal direkt HTTP i den miljön.
 - Föreslå aldrig merge av ej verifierad kod. Gör ingen merge utan användarens godkännande.
+
+## Explicit CSV-import
+
+- Använd endast `network_core/csv_import.py` för de namngivna tabellerna Devices/Interfaces/Links/Zones. Ingen heuristisk import och ingen implicit kabelskapning.
+- Validera hela importen före användarens uttryckliga godkännande att ersätta arbetsytan; ingen autosave.
+- Funktionella negativa tester ska omfatta saknade, dubblerade, okända och inkonsekventa uppgifter. Verifiera också verklig browser-import och Save/Open.
