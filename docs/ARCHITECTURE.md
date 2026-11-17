@@ -27,11 +27,13 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 | `csv_import.py` | Explicit fyrtabells-CSV till verifierad kanonisk modell | Implicita kablar, heuristisk kolumnmappning, filskrivning |
 | `arp.py` | Explicit Ethernet/IPv4 ARP-request/reply över `EthernetFabric` med sparade 1.2-VLAN eller sessions-VLAN, flyktig cache och enskild HTTP/UI-diagnostik | Ingen IP-routing, ping, proxy-ARP eller varaktig ARP-session i UI |
 | `ethernet.py` | Flyktig MAC-inlärning, explicit v1.1-port-MAC samt VLAN-forwarding på deklarerade kablar med 1.2-konfiguration eller sessionstillägg | ARP-protokoll, ping, IP, STP, NIC-acceptans eller lagring av inlärda tabeller |
-| `server.py` | Lokal UI, API, validering, engångs-ARP, sessioner, read-only routingfrågor och isolerad IPv4-paketspårning | Tolka källdata som topologi, spara diagnostik eller påstå generiskt ping |
+| `server.py` | Lokal UI, API, validering, ARP, sessioner, routingtabell, IPv4- och ICMP Echo-diagnostik | Tolka källdata som topologi, spara diagnostik eller påstå extern nätverksreachability |
 | `simulation.py` | Begränsat processlokalt sessionsregister som återanvänder en `ArpSession`/`EthernetFabric` mellan ARP- och Ethernetoperationer och validerar oförändrat projekt | Beständig session, IP-routing, ICMP eller delad projektmodell |
 | `routing.py` | Read-only IPv4-tabell per nod med connected och explicit statiska routes, on-link next-hop och deterministisk longest-prefix match | IP-paketframföring sker inte här; ingen metric eller ECMP |
-| `ipv4_packet.py` | Validerat minimalt RFC 791-datagram, headerchecksumma, TTL och experimentellt opakt protokoll 253 | IPv4-options, fragmentering, ICMP, transport |
-| `ipv4.py` | Enspårig IPv4-leverans över samma ARP- och Ethernetmotor, explicit next-hop per routesteg, TTL per transitrouter och matchad mottagarport | ICMP Echo/Time Exceeded, NAT, brandväggsregler, returtrafik, IP-fragmentering |
+| `ipv4_packet.py` | Validerat minimalt RFC 791-datagram, headerchecksumma, TTL, experimentellt protokoll 253 och ICMP-protokoll 1 | IPv4-options, fragmentering, transport och IP-felmeddelanden |
+| `icmp.py` | Strikt RFC 792 Echo Request/Reply typ 8/0 och typ 0/0, checksumma, ID, sekvens och payload | Andra ICMP-typer, timeoutmätning, applikationsstack |
+| `icmp_ping.py` | Riktig tur-och-retur-bunden ICMP Echo över en enda `IPv4Trace` med befintlig ARP-/Ethernetmotor | Automatiska gateways, brandväggsregler, RTT, ICMP Time Exceeded/Unreachable |
+| `ipv4.py` | Enspårig IPv4-leverans över samma ARP- och Ethernetmotor, explicit next-hop per routesteg, TTL per transitrouter och matchad mottagarport | Returtrafik orkestreras separat i `icmp_ping.py`; inga ICMP-fel, NAT, ACL eller fragmentering |
 | `web/model.js` | Explicit UI-modell, enhets- och portkommandon | Adressbaserad länkförutsägelse |
 | `web/canvas.js` | SVG-geometri och direktträff på portpunkter | Ändra noders eller länkars identitet |
 | `web/app.js` | Användarinteraktion, read-only routingtabell/lookup, fel, Save/Open | Egen implementation av Layer 2/Layer 3-protokoll |
@@ -44,4 +46,4 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 
 ## Nästa steg (inte implementerade)
 
-Utöka den avgränsade IPv4-paketmodellen först efter validerad one-way forwarding med explicit routing, ARP, Ethernet och TTL. Implementera ICMP Echo/Time Exceeded först med korrekt returväg, kodning och separata negativa tester. Integrera inte äldre projekts motorkod per automatik. Det definierade fyrtabells-CSV-formatet har en separat strikt importör. XLSX/ODS och godtyckliga CSV-scheman kräver egna kontrakt och verifierbara avvisningsfall.
+Utöka den avgränsade IPv4-paketmodellen först efter validerad one-way forwarding med explicit routing, ARP, Ethernet och TTL. ICMP Echo Request/Reply har nu ett eget strikt kontrakt med verifierad returväg. Implementera senare ICMP Time Exceeded/Unreachable endast med korrekt felkodning och separata negativa tester. Integrera inte äldre projekts motorkod per automatik. Det definierade fyrtabells-CSV-formatet har en separat strikt importör. XLSX/ODS och godtyckliga CSV-scheman kräver egna kontrakt och verifierbara avvisningsfall.

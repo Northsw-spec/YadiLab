@@ -127,6 +127,23 @@
           <button id="run-ipv4-trace" type="button" class="btn btn-soft full">Simulera IPv4-paket</button>
           <div id="ipv4-result" class="trace-result" aria-live="polite">Inget IPv4-datagram har skickats.</div>
         </section>
+        <section class="trace-panel" aria-label="ICMP Echo Request och Reply">
+          <div class="eyebrow">LAYER 3 · ICMP ECHO</div>
+          <h3>Ping – verifierad tur och retur</h3>
+          <p class="muted tiny">Echo Request måste nå rätt port och Echo Reply måste verkligen hitta tillbaka. ARP, kablar, VLAN och routes simuleras för båda riktningar. Ingen uppmätt svarstid eller extern ping.</p>
+          <label for="ping-source">Källgränssnitt</label>
+          <select id="ping-source" class="control"></select>
+          <label for="ping-destination">Destinations-IPv4</label>
+          <input id="ping-destination" class="control" type="text" autocomplete="off" placeholder="192.0.2.20">
+          <label for="ping-ttl">TTL per riktning (1–255)</label>
+          <input id="ping-ttl" class="control" type="number" min="1" max="255" step="1" value="4">
+          <label for="ping-identifier">ICMP-identifierare (0–65535)</label>
+          <input id="ping-identifier" class="control" type="number" min="0" max="65535" step="1" value="1">
+          <label for="ping-sequence">ICMP-sekvens (0–65535)</label>
+          <input id="ping-sequence" class="control" type="number" min="0" max="65535" step="1" value="1">
+          <button id="run-ping" class="btn btn-soft full" type="button">Skicka ICMP Echo</button>
+          <div id="ping-result" class="trace-result" aria-live="polite">Ingen Echo-förfrågan har skickats.</div>
+        </section>
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

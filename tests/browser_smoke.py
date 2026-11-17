@@ -565,6 +565,44 @@ def run():
             assert invalid_ttl.value.status == 422
             expect(page.locator('#ipv4-result')).to_contain_text('IPv4-simulering avvisad')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # Real ICMP Echo Request + Reply over explicit same-subnet VLAN
+            # cables. Verifies both directions; this is not merely graph/BFS.
+            page.locator('#ping-source').select_option(source_option)
+            page.locator('#ping-destination').fill('192.0.2.20')
+            page.locator('#ping-ttl').fill('1')
+            page.locator('#ping-identifier').fill('345')
+            page.locator('#ping-sequence').fill('7')
+            with page.expect_response('**/api/icmp/echo') as round_trip:
+                page.locator('#run-ping').click()
+            assert round_trip.value.status == 200
+            assert round_trip.value.json()['status'] == 'REPLIED'
+            assert round_trip.value.json()['replyMatched'] is True
+            expect(page.locator('#ping-result')).to_contain_text('Ping-status: REPLIED')
+            expect(page.locator('#ping-result')).to_contain_text('Echo id=345 seq=7')
+            expect(page.locator('#ping-result')).to_contain_text('Request: DELIVERED')
+            expect(page.locator('#ping-result')).to_contain_text('Reply: DELIVERED')
+            expect(page.locator('#ping-result')).to_contain_text('Echo Reply matchad: JA')
+            expect(page.locator('#ping-result')).to_contain_text('Svarstid: ej uppmätt')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # A configured static destination route without a reachable
+            # next-hop is NOT proof of an Echo Reply or ping success.
+            page.locator('#ping-destination').fill('203.0.113.10')
+            page.locator('#ping-ttl').fill('4')
+            with page.expect_response('**/api/icmp/echo') as unresolved:
+                page.locator('#run-ping').click()
+            assert unresolved.value.status == 200
+            assert unresolved.value.json()['status'] == 'REQUEST_FAILED'
+            assert unresolved.value.json()['request']['status'] == 'ARP_FAILED'
+            expect(page.locator('#ping-result')).to_contain_text('Ping-status: REQUEST_FAILED')
+            expect(page.locator('#ping-result')).to_contain_text('Reply: ingen faktisk datagramöverföring')
+            page.locator('#ping-destination').fill('2001:db8::20')
+            with page.expect_response('**/api/icmp/echo') as invalid_ip:
+                page.locator('#run-ping').click()
+            assert invalid_ip.value.status == 422
+            expect(page.locator('#ping-result')).to_contain_text('ICMP Echo avvisad')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')

@@ -1,7 +1,8 @@
 """Minimal IPv4 datagram codec (RFC 791 header, no options/fragmentation).
 
-Protocol 253 is an experimental opaque payload, NOT ICMP, TCP or UDP.
-We model no transport, host reply, NAT, IP fragmentation or ICMP errors.
+Protocol 253 remains an opaque experimental payload. Protocol 1 is allowed
+only for separately validated ICMPv4 Echo. No transport, NAT, fragmentation
+or ICMP error messages are implemented.
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from .model import ProjectValidationError
 
 _HEADER = struct.Struct("!BBHHHBBH4s4s")
 EXPERIMENTAL_PROTOCOL = 253
+ICMP_PROTOCOL = 1
 
 
 def checksum(data: bytes) -> int:
@@ -43,10 +45,13 @@ class IPv4Datagram:
     destination: str
     ttl: int
     payload: bytes = b""
+    protocol: int = EXPERIMENTAL_PROTOCOL
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "source", _ip(self.source, "source"))
         object.__setattr__(self, "destination", _ip(self.destination, "destination"))
+        if type(self.protocol) is not int or self.protocol not in (EXPERIMENTAL_PROTOCOL, ICMP_PROTOCOL):
+            raise ProjectValidationError("ipv4: only experimental protocol 253 and ICMP protocol 1 supported")
         if type(self.ttl) is not int or not 1 <= self.ttl <= 255:
             raise ProjectValidationError("ipv4: TTL must be an integer 1..255")
         if type(self.payload) is not bytes or len(self.payload) > 1480:
@@ -55,7 +60,7 @@ class IPv4Datagram:
     def serialize(self) -> bytes:
         head = _HEADER.pack(
             0x45, 0, 20 + len(self.payload), 0, 0, self.ttl,
-            EXPERIMENTAL_PROTOCOL, 0,
+            self.protocol, 0,
             ipaddress.IPv4Address(self.source).packed,
             ipaddress.IPv4Address(self.destination).packed,
         )
@@ -67,17 +72,17 @@ class IPv4Datagram:
         if type(data) is not bytes or len(data) < 20:
             raise ProjectValidationError("ipv4: truncated datagram")
         version, tos, total, identification, flags, ttl, protocol, crc, src, dst = _HEADER.unpack(data[:20])
-        if (version, tos, identification, flags, protocol) != (
-                0x45, 0, 0, 0, EXPERIMENTAL_PROTOCOL):
+        if (version, tos, identification, flags) != (0x45, 0, 0, 0) or protocol not in (
+                EXPERIMENTAL_PROTOCOL, ICMP_PROTOCOL):
             raise ProjectValidationError("ipv4: unsupported header, options, fragmentation or protocol")
         if not 20 <= total <= len(data) or any(data[total:]):
             raise ProjectValidationError("ipv4: invalid total length or nonzero Ethernet padding")
         if checksum(data[:20]) != 0:
             raise ProjectValidationError("ipv4: invalid header checksum")
         return cls(str(ipaddress.IPv4Address(src)), str(ipaddress.IPv4Address(dst)),
-                   ttl, data[20:total])
+                   ttl, data[20:total], protocol)
 
     def forwarded(self) -> "IPv4Datagram":
         if self.ttl <= 1:
             raise ProjectValidationError("ipv4: packet TTL exhausted at forwarding router")
-        return IPv4Datagram(self.source, self.destination, self.ttl - 1, self.payload)
+        return IPv4Datagram(self.source, self.destination, self.ttl - 1, self.payload, self.protocol)

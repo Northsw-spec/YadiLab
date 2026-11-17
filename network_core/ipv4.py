@@ -2,7 +2,9 @@
 
 Each hop uses the canonical per-node routing table, actual simulated ARP
 request/reply and a real Ethernet II frame with an RFC 791 IPv4 header.
-Nothing here simulates an ICMP echo, transport service or return route.
+ICMP Echo is an explicit caller-supplied datagram payload, while request/
+reply orchestration is delegated to the same engine by icmp_ping.py.
+No transport service, IP error messages, or invented route exists.
 """
 from __future__ import annotations
 
@@ -10,7 +12,8 @@ import ipaddress
 
 from .arp import ArpSession
 from .ethernet_frame import EthernetFrame
-from .ipv4_packet import IPv4Datagram, _ip
+from .ipv4_packet import IPv4Datagram, _ip, ICMP_PROTOCOL, EXPERIMENTAL_PROTOCOL
+from .icmp import ICMPEcho
 from .model import ProjectValidationError
 from .routing import ConnectedRoutingTable
 
@@ -33,7 +36,8 @@ class IPv4Trace:
         }
 
     def send(self, source_node: str, source_port: str,
-             destination_ipv4: str, ttl: int) -> dict:
+             destination_ipv4: str, ttl: int, *,
+             protocol: int = EXPERIMENTAL_PROTOCOL, payload: bytes = b"") -> dict:
         if not isinstance(source_node, str) or not isinstance(source_port, str):
             raise ProjectValidationError("ipv4: source must name an explicit node and port")
         endpoint = (source_node, source_port)
@@ -49,10 +53,14 @@ class IPv4Trace:
         source_ip = str(self.interfaces[endpoint].ip)
         if dest == source_ip:
             raise ProjectValidationError("ipv4: self-delivery is not a wire forwarding operation")
-        packet = IPv4Datagram(source_ip, dest, ttl)
+        packet = IPv4Datagram(source_ip, dest, ttl, payload, protocol)
+        # Reject malformed Echo messages before any route/ARP/packet state change.
+        if protocol == ICMP_PROTOCOL:
+            ICMPEcho.parse(payload)
         steps: list[dict] = []
 
-        def finish(status: str, reason: str, receiver: tuple[str, str] | None = None) -> dict:
+        def finish(status: str, reason: str, receiver: tuple[str, str] | None = None,
+                   received_packet: IPv4Datagram | None = None) -> dict:
             return {
                 "status": status, "meaning": reason,
                 "sourceIpv4": packet.source,
@@ -62,7 +70,14 @@ class IPv4Trace:
                 "steps": steps,
                 "macTables": self.fabric.learned_mac_tables(),
                 "ephemeral": True,
-                "icmpSent": False,
+                "icmpSent": protocol == ICMP_PROTOCOL and any(step["ipv4Transmissions"] for step in steps),
+                "deliveredDatagram": ({
+                    "sourceIpv4": received_packet.source,
+                    "destinationIpv4": received_packet.destination,
+                    "ttl": received_packet.ttl,
+                    "protocol": received_packet.protocol,
+                    "payloadHex": received_packet.payload.hex(),
+                } if received_packet is not None else None),
             }
 
         for hop in range(MAX_FORWARDING_ROUTERS + 1):
@@ -108,8 +123,11 @@ class IPv4Trace:
             # Validate actual IP header/checksum and Ethernet serialization,
             # not just a fabricated status computed from route lookup.
             encoded = EthernetFrame.parse(frame.serialize())
-            if IPv4Datagram.parse(encoded.payload) != packet:
+            decoded_packet = IPv4Datagram.parse(encoded.payload)
+            if decoded_packet != packet:
                 raise ProjectValidationError("ipv4: serialized datagram failed byte roundtrip")
+            if decoded_packet.protocol == ICMP_PROTOCOL:
+                ICMPEcho.parse(decoded_packet.payload)
             forwarded = self.fabric.inject_frame(device_id, out_port, frame)
             step["ipv4Transmissions"] = forwarded["transmissions"]
             step["vlanDrops"] = forwarded.get("vlanDrops", [])
@@ -130,8 +148,8 @@ class IPv4Trace:
             endpoint = arrived[0]
             if str(self.interfaces[endpoint].ip) == dest:
                 return finish("DELIVERED",
-                              "Experimental IPv4 datagram reached the matching configured destination interface; no transport or reply simulated.",
-                              endpoint)
+                              "IPv4 datagram reached the matching configured destination port; no transport application acceptance claimed.",
+                              endpoint, decoded_packet)
             if self.nodes[endpoint[0]]["kind"] != "router":
                 return finish("NON_ROUTER",
                               "The next-hop IP belongs to an endpoint without IPv4 transit forwarding.")
