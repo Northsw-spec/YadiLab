@@ -1,31 +1,20 @@
 """Deterministic, MAC-only Ethernet forwarding over the canonical project graph.
 
-This is a deliberately narrow Layer-2 model. A caller supplies a source and
-unicast/broadcast destination MAC; the project does not declare NIC MACs yet.
+This is a deliberately narrow Layer-2 model. A caller supplies source and
+unicast/broadcast destination MACs, or a validated Ethernet II frame with an
+explicit session-only source interface MAC binding.
 Only switches learn and forward, over explicitly enabled links and ports.
 Endpoint arrival means a frame reached a port, NOT that a host accepted it.
-No IP, ARP, VLAN, STP, aging, FCS, or packet serialization is implemented.
+No IP, ARP, VLAN, STP, aging, FCS, or host NIC acceptance is implemented.
+Ethernet II serialization lives in ethernet_frame.py and is payload-opaque.
 """
 from __future__ import annotations
 
-import re
 from collections import deque
+from collections.abc import Mapping
 
 from .model import ProjectValidationError, validate_project
-
-_MAC = re.compile(r"^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$")
-_BROADCAST = "FF:FF:FF:FF:FF:FF"
-
-
-def _mac(value: str, *, source: bool) -> str:
-    if not isinstance(value, str) or not _MAC.fullmatch(value):
-        raise ProjectValidationError("frame: MAC must contain six colon-separated hex octets")
-    mac = value.upper()
-    if source and ((int(mac[:2], 16) & 1) or mac == "00:00:00:00:00:00"):
-        raise ProjectValidationError("frame: source MAC must be nonzero unicast")
-    if not source and mac != _BROADCAST and (int(mac[:2], 16) & 1):
-        raise ProjectValidationError("frame: destination multicast is not supported")
-    return mac
+from .ethernet_frame import BROADCAST, EthernetFrame, normalize_mac
 
 
 class EthernetFabric:
@@ -36,7 +25,7 @@ class EthernetFabric:
     with active switch-to-switch loops are rejected rather than pretending STP.
     """
 
-    def __init__(self, project: dict):
+    def __init__(self, project: dict, *, interface_macs: Mapping[tuple[str, str], str] | None = None):
         self.project = validate_project(project)
         self.nodes = {node["id"]: node for node in self.project["nodes"]}
         self.ports = {
@@ -54,6 +43,29 @@ class EthernetFabric:
             self.wires[(a["node"], a["port"])] = (b["node"], b["port"], link["id"])
             self.wires[(b["node"], b["port"])] = (a["node"], a["port"], link["id"])
         self._reject_switch_loops()
+        # Explicit session-only NIC identities. No defaults, inference, or
+        # project mutation. Persisted MAC configuration requires its own
+        # separately versioned project-schema change.
+        if interface_macs is None:
+            interface_macs = {}
+        if not isinstance(interface_macs, Mapping):
+            raise ProjectValidationError("ethernet: interface_macs must be a mapping")
+        self._interface_macs: dict[tuple[str, str], str] = {}
+        seen_macs: set[str] = set()
+        for endpoint, address in interface_macs.items():
+            if not isinstance(endpoint, tuple) or len(endpoint) != 2 or \
+                    not all(isinstance(part, str) for part in endpoint):
+                raise ProjectValidationError("ethernet: MAC binding requires (node ID, port ID)")
+            node_id, port_id = endpoint
+            if node_id not in self.nodes or port_id not in self.ports[node_id]:
+                raise ProjectValidationError("ethernet: MAC binding has undeclared endpoint")
+            if self.nodes[node_id]["kind"] == "switch":
+                raise ProjectValidationError("ethernet: switch interfaces cannot have host NIC bindings")
+            mac = normalize_mac(address, source=True)
+            if mac in seen_macs:
+                raise ProjectValidationError("ethernet: duplicate interface MAC binding")
+            seen_macs.add(mac)
+            self._interface_macs[endpoint] = mac
         self._tables: dict[str, dict[str, str]] = {
             node_id: {} for node_id, node in self.nodes.items()
             if node["kind"] == "switch"
@@ -96,6 +108,33 @@ class EthernetFabric:
             raise ProjectValidationError("ethernet: undeclared switch ID")
         return dict(sorted(self._tables[switch_id].items()))
 
+    def bound_macs(self) -> dict[tuple[str, str], str]:
+        """Return a detached snapshot of explicit session NIC identity bindings."""
+        return dict(self._interface_macs)
+
+    def inject_frame(self, node_id: str, port_id: str, frame: EthernetFrame) -> dict:
+        """Forward a validated Ethernet II frame from an explicitly bound NIC.
+
+        The result reports wire transmissions and switch state, not whether
+        an endpoint accepted or decoded the payload. No ARP or IP simulation.
+        """
+        if not isinstance(frame, EthernetFrame):
+            raise ProjectValidationError("ethernet: inject_frame requires EthernetFrame")
+        if not isinstance(node_id, str) or not isinstance(port_id, str):
+            raise ProjectValidationError("ethernet: undeclared source node/port")
+        assigned = self._interface_macs.get((node_id, port_id))
+        if assigned is None:
+            raise ProjectValidationError("ethernet: source port has no explicit MAC binding")
+        if frame.source != assigned:
+            raise ProjectValidationError("ethernet: source MAC does not match configured interface")
+        result = self.inject(node_id, port_id, frame.source, frame.destination)
+        return {
+            **result,
+            "frame": {"source": frame.source, "destination": frame.destination,
+                      "etherType": frame.ether_type,
+                      "lengthWithoutFcs": len(frame.serialize())},
+        }
+
     def inject(self, node_id: str, port_id: str, source_mac: str,
                destination_mac: str) -> dict:
         """Inject one abstract frame from an explicitly declared non-switch port.
@@ -103,8 +142,8 @@ class EthernetFabric:
         This traces wire transmissions, switch decisions and port arrivals only.
         It does not simulate endpoint MAC filtering, reply generation or IP.
         """
-        source = _mac(source_mac, source=True)
-        destination = _mac(destination_mac, source=False)
+        source = normalize_mac(source_mac, source=True)
+        destination = normalize_mac(destination_mac, source=False)
         if not isinstance(node_id, str) or not isinstance(port_id, str) \
                 or node_id not in self.nodes or port_id not in self.ports[node_id]:
             raise ProjectValidationError("ethernet: undeclared source node/port")
@@ -149,7 +188,7 @@ class EthernetFabric:
                 if port["id"] != ingress and (nid, port["id"]) in self.wires
             ]
             learned = table.get(destination)
-            if destination == _BROADCAST or learned is None:
+            if destination == BROADCAST or learned is None:
                 action, outgoing = "FLOOD", candidates
             elif learned == ingress:
                 action, outgoing = "FILTER_SAME_PORT", []
