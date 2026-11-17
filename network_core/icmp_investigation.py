@@ -21,7 +21,8 @@ from .troubleshooting import _mutation, _observed_wires, compare_fault
 MAX_PROBES = 48
 MAX_GUESSES = 3
 KINDS = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH", "STATIC_ROUTE_MISSING",
-         "IPV4_PREFIX_MISMATCH", "STATIC_NEXT_HOP_UNREACHABLE")
+         "IPV4_PREFIX_MISMATCH", "STATIC_NEXT_HOP_UNREACHABLE",
+         "IPV4_HOST_ADDRESS_MISMATCH")
 PROBES = ("address", "route", "ping", "link", "port", "vlan")
 
 
@@ -57,6 +58,25 @@ def _candidates(project: dict, baseline: dict) -> list[tuple[str, dict]]:
         for node in project["nodes"] for port in node["ports"]
         if port["ipv4"] is not None
     }
+    receiver = baseline["request"]["receiver"]
+    target = next(n for n in project["nodes"] if n["id"] == receiver["node"])
+    if target["kind"] == "host":
+        port = next(p for p in target["ports"] if p["id"] == receiver["port"])
+        configured = ipaddress.IPv4Interface(port["ipv4"])
+        network = configured.network
+        first, last = int(network.network_address), int(network.broadcast_address)
+        possible = [first + offset for offset in range(1, 9)]
+        possible += [last - offset for offset in range(1, 5)]
+        alternative = next((str(address) for number in possible
+                            if first < number < last
+                            for address in (ipaddress.IPv4Address(number),)
+                            if address not in configured_addresses
+                            and not address.is_reserved), None)
+        if alternative is not None:
+            candidates.append(("IPV4_HOST_ADDRESS_MISMATCH", {
+                "type": "IPV4_HOST_ADDRESS_CHANGED", "nodeId": target["id"],
+                "portId": port["id"], "newIpv4": alternative,
+            }))
     for node in project["nodes"]:
         if node["kind"] == "switch":
             continue
@@ -196,7 +216,7 @@ class IcmpInvestigation:
                 continue
             if confirmed["status"] != "FAULT_CONFIRMED":
                 continue
-            if kind == "STATIC_NEXT_HOP_UNREACHABLE":
+            if kind in ("STATIC_NEXT_HOP_UNREACHABLE", "IPV4_HOST_ADDRESS_MISMATCH"):
                 # The failure must be the modeled lack of an ARP reply to
                 # the injected next-hop, not an unrelated packet failure.
                 traces = (confirmed["faulted"]["request"],
@@ -204,6 +224,8 @@ class IcmpInvestigation:
                 if not any(
                     trace is not None and trace["status"] == "ARP_FAILED"
                     and any(step["arp"]["status"] == "NO_REPLY"
+                            and (kind != "IPV4_HOST_ADDRESS_MISMATCH"
+                                 or step["nextHopIpv4"] == destination_ipv4)
                             for step in trace["steps"])
                     for trace in traces
                 ):

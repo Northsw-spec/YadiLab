@@ -85,7 +85,51 @@ def _mutation(project: dict, fault: object) -> tuple[dict, dict, callable, calla
             inject, undo,
         )
 
-    if kind in ("IPV4_PREFIX_CHANGED", "STATIC_ROUTE_REMOVED", "STATIC_NEXT_HOP_CHANGED"):
+    if kind in ("IPV4_PREFIX_CHANGED", "IPV4_HOST_ADDRESS_CHANGED",
+                "STATIC_ROUTE_REMOVED", "STATIC_NEXT_HOP_CHANGED"):
+        if kind == "IPV4_HOST_ADDRESS_CHANGED":
+            _exact_fault(fault, kind, {"type", "nodeId", "portId", "newIpv4"})
+            node_id, port_id = fault["nodeId"], fault["portId"]
+            device, port = _port(project, node_id, port_id)
+            if device["kind"] != "host" or not port["enabled"] or port["ipv4"] is None:
+                raise ProjectValidationError("troubleshoot: address fault requires an enabled host IPv4 port")
+            original = port["ipv4"]
+            configured = ipaddress.IPv4Interface(original)
+            address = fault["newIpv4"]
+            if type(address) is not str:
+                raise ProjectValidationError("troubleshoot: newIpv4 must be a canonical host address")
+            try:
+                changed_ip = ipaddress.IPv4Address(address)
+            except ipaddress.AddressValueError:
+                raise ProjectValidationError("troubleshoot: newIpv4 must be a canonical host address") from None
+            occupied = {ipaddress.IPv4Interface(p["ipv4"]).ip
+                        for node in project["nodes"] for p in node["ports"]
+                        if p["ipv4"] is not None}
+            network = configured.network
+            if (str(changed_ip) != address or changed_ip not in network
+                    or changed_ip in occupied or changed_ip.is_multicast
+                    or changed_ip.is_unspecified or changed_ip.is_reserved
+                    or (network.prefixlen <= 30 and changed_ip in
+                        (network.network_address, network.broadcast_address))):
+                raise ProjectValidationError("troubleshoot: newIpv4 must be an unused host address in the documented subnet")
+            changed = str(ipaddress.IPv4Interface(f"{address}/{network.prefixlen}"))
+
+            def select(doc: dict) -> dict:
+                return _port(doc, node_id, port_id)[1]
+
+            def inject(doc: dict) -> None:
+                select(doc)["ipv4"] = changed
+
+            def undo(doc: dict) -> None:
+                select(doc)["ipv4"] = original
+
+            return (
+                {"type": kind, "nodeId": node_id, "portId": port_id,
+                 "fromIpv4": original, "toIpv4": changed},
+                {"action": "RESTORE_IPV4", "nodeId": node_id, "portId": port_id,
+                 "expectedIpv4": original, "scope": "PREVIEW_ONLY"},
+                inject, undo,
+            )
         if kind == "IPV4_PREFIX_CHANGED":
             _exact_fault(fault, kind, {"type", "nodeId", "portId", "newPrefix"})
             node_id, port_id = fault["nodeId"], fault["portId"]
