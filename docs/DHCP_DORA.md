@@ -77,6 +77,31 @@ Vid `NO_ACTIVE_LINK`, `DISCOVER_NOT_RECEIVED`,
 `lease=null`. Felaktiga pooler, dubbleringar och ogiltiga
 fakta avvisas med HTTP 422.
 
+## DORA i Builder (PR #32)
+
+Den separata panelen **DHCP – Discover / Offer / Request / ACK**
+finns i högra laboratoriepanelen. Användaren väljer uttryckligen
+klientgränssnitt (host utan IPv4), servergränssnitt (host/router med
+dokumenterad IPv4), poolstart och poolslut, transaktions-ID och
+simulerad leasetid. Båda porternas MAC måste fortfarande vara
+uttryckligen dokumenterade; saknade identiteter avvisas.
+
+Knappen **Simulera full DHCP DORA** anropar det existerande
+`POST /api/dhcp/dora` utan extra nätverkslogik i JavaScript.
+Resultatet visar separata överföringsspår för DISCOVER, OFFER,
+REQUEST och ACK, observerade VLAN-droppar, inlärda MAC-tabeller,
+servermottagning av DISCOVER/REQUEST och klientmottagning av ACK.
+En **SIMULERAD BOUND-lease** visas endast när HTTP-motorn
+returnerar `ACK_RECEIVED` och `leaseCommitted=true`.
+
+Ändring av projekt, topologi, portval, pool eller tid ogiltigförklarar
+tidigare resultat. Även en redan avslutad HTTP-körnings fördröjda
+svar ignoreras om underlaget har ändrats. Inga UI-värden appliceras
+automatiskt på dokumenterade klientportar, ingen autosave sker, och
+ett nytt knapptryck startar en ny tom simuleringssession. Den
+befintliga Discover/Offer-panelen kvarstår separat och visar
+fortfarande bara två meddelanden.
+
 ## Avsiktliga begränsningar
 
 - Den simulerade leasen existerar endast i minnet. **Klientportens
@@ -90,8 +115,9 @@ fakta avvisas med HTTP 422.
 - Bara DHCP selecting-state broadcast med en vald server och
   en enda klient per `run`; inga konkurrerande servrar,
   relay-agenter, unicast ACK eller BOOTP-alternativ.
-- Inget nytt Builder-UI för DORA i denna etapp; tidigare
-  Discover/Offer-UI är kvar och ska inte påstå att det gör ACK.
+- Builder har nu en separat DORA-panel som utför ett API-anrop
+  per klick. Ingen delad lease-databas mellan knapptryckningar;
+  tidigare Discover/Offer-panel är oförändrad och påstår inte ACK.
 - Poolgränsen 256 adresser gäller denna uttryckligt begränsade
   modell och är ingen påstådd DHCP-protokollgräns.
 
