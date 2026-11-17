@@ -1059,6 +1059,32 @@ async function importProjects(files) {
   } catch (error) { notify(`Import avvisad: ${error.message}`, true); }
 }
 
+async function exportSpreadsheet(format) {
+  const snapshot = JSON.stringify(project);
+  try {
+    const reply = await api('/api/export/spreadsheet', {project, format});
+    if (snapshot !== JSON.stringify(project)) return; // No stale workbook downloads.
+    if (reply.filename !== 'network-documentation.' + format ||
+        typeof reply.contentBase64 !== 'string') {
+      throw new Error('Servern returnerade felaktigt exportformat.');
+    }
+    const raw = atob(reply.contentBase64);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    const type = format === 'xlsx'
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'application/vnd.oasis.opendocument.spreadsheet';
+    const url = URL.createObjectURL(new Blob([bytes], {type}));
+    const anchor = el('a', {href:url, download:reply.filename});
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    notify('Kalkylbladsexport initierad. Projektet har inte sparats. Webbläsarens faktiska nedladdning är inte verifierad.');
+  } catch (error) {
+    notify('Kalkylbladsexport avvisad: ' + error.message, true);
+  }
+}
 async function exportProject() {
   try {
     const validated = await api('/api/validate',project);
@@ -1383,6 +1409,8 @@ $('import-file').addEventListener('change', async event => {
   event.target.value = '';
 });
 $('export-project').addEventListener('click', exportProject);
+$('export-xlsx').addEventListener('click', () => exportSpreadsheet('xlsx'));
+$('export-ods').addEventListener('click', () => exportSpreadsheet('ods'));
 $('run-trace').addEventListener('click', runTrace);
 $('run-route-lookup').addEventListener('click', runRouteLookup);
 $('run-ipv4-trace').addEventListener('click', runIPv4Trace);

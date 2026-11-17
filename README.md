@@ -103,6 +103,14 @@ Longest-prefix match omfattar nu både `CONNECTED` och `STATIC`; lika specifika 
 
 Ännu inte implementerat: godtycklig kalkylbladsimport, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, extern nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
 
+## Export av aktuellt projekt till XLSX och ODS (PR #27)
+
+Builder har separata **Exportera XLSX** och **Exportera ODS**-knappar bredvid **Exportera JSON**. Exporten läser **arbetsytans aktuella** (även ännu osparade) nätverksdokumentation, validerar modellen och skapar verkliga binära kalkylbladsfiler med exakt definierade blad och kolumner. Noder, portar, länkar och länkändpunkter, zoner, MAC-adresser, VLAN och deklarerade statiska routes behålls. Ingen fil skrivs till serverns projektlagring. Webbläsarnedladdningen initieras separat från **Spara projekt**.
+
+Endast **schema 1.0 och schema 1.3** kan exporteras till det nuvarande kalkylbladsformatet. Schema 1.1/1.2 avvisas utan dold uppgradering. Explicit `null` för valfri MAC/VLAN-konfiguration och uttryckligen närvarande men tomma `staticRoutes` avvisas eftersom detta kalkylbladsformat inte kan representera skillnaden mellan utelämnat och `null`/tomt fält. Ett helt tomt nätverk avvisas eftersom en `Devices`-tabell kräver en enhet. På så sätt förhindras tyst dataförlust. Exportören importerar tillbaka den genererade filen via den faktiska XLSX-/ODS-importören **innan** den levereras, och avvisar varje avvikelse i kanoniska data.
+
+Det existerande schema 1.3-kontraktet har inget fält för projektets namn; vid återimport anger användaren därför samma projektnamn för att få identisk projektmodell. Se [roundtrip-kontraktet](docs/SPREADSHEET_EXPORT.md).
+
 ## Importmallar och cellbaserad felrapportering (PR #26)
 
 Under **SPARADE PROJEKT** i Builder finns två nedladdningslänkar: **Excel-mall (.xlsx)** och **Calc-mall (.ods)**. Servern levererar faktiska kalkylblads- och OpenDocument-ZIP-filer från `GET /api/templates/xlsx` och `GET /api/templates/ods`; ingen arbetsfil skapas eller ändras på servern vid nedladdningen. Filerna innehåller sex blad enligt schema 1.3, med en liten **tydligt märkt DEMO-topologi**, explicita portar och länkar, MAC-adresser, access-/trunk-VLAN samt en statisk route. De är pedagogiska exempel, **inte fakta om användarens nätverk**. Byt ut demonstrationsuppgifterna innan mallen används som dokumentation. Filerna går att importera via den befintliga knappen **Importera**, men import och nedladdning sparar inte något projekt automatiskt.

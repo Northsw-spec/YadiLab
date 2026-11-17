@@ -28,7 +28,8 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 | `xlsx_import.py` | Strikt OOXML ZIP-läsare för namngivna tabeller i schema 1.0 eller explicit 1.3 | Formler, dolda blad, makron, okända kalkylblad, filskrivning |
 | `ods_import.py` | Strikt ODF/ODS ZIP-/manifestläsare för namngivna tabeller i schema 1.0 eller explicit 1.3 | Formler, dolda blad/rader, makron, filskrivning |
 | `spreadsheet_schema.py` | Delad versionsmappning för XLSX/ODS; befintlig CSV-parser + schema 1.3-validering används för MAC, VLAN och statiska routes | Implicita länkar, tyst datatapp eller ny konkurrerande modell |
-| `spreadsheet_templates.py` | Real XLSX-/ODS-demomall direkt till browser via read-only GET; gemensamma 1.3-tabellkolumner | Projektfiler, autosave, påstådd verklig nätverksinventering |
+| `spreadsheet_templates.py` | Gemensamma binära XLSX-/ODS-skrivare för demo och exporterad dokumentation; delar tabellkontrakt men inte importlogik | Projektfiler, autosave, påstådd verklig nätverksinventering |
+| `spreadsheet_export.py` | Läs-only serialisering av validerad arbetsmodell i schema 1.0/1.3, med faktisk återimport för roundtrip-validering före nedladdning | Förlust av valfria null-fält, versionsuppgradering, filskrivning, implicita länkar |
 | `arp.py` | Explicit Ethernet/IPv4 ARP-request/reply över `EthernetFabric` med sparade 1.2-VLAN eller sessions-VLAN, flyktig cache och enskild HTTP/UI-diagnostik | Ingen IP-routing, ping, proxy-ARP eller varaktig ARP-session i UI |
 | `ethernet.py` | Flyktig MAC-inlärning, explicit v1.1-port-MAC samt VLAN-forwarding på deklarerade kablar med 1.2-konfiguration eller sessionstillägg | ARP-protokoll, ping, IP, STP, NIC-acceptans eller lagring av inlärda tabeller |
 | `server.py` | Lokal UI, API, validering, ARP, sessioner, routingtabell, IPv4-/ICMP Echo-diagnostik och temporär kabelbrottsjämförelse | Tolka källdata som topologi, spara diagnostik eller påstå extern nätverksreachability |

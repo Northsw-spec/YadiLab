@@ -1,6 +1,7 @@
 """Real Chromium end-to-end: UI, link semantics, faults and restart Save/Open."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -27,6 +28,8 @@ from network_core import config
 from xlsx_fixture import make_workbook, workbook_parts, zip_parts
 from ods_fixture import make_ods, ods_parts, zip_parts as zip_ods_parts
 from spreadsheet_v13_fixture import TABLES_13, expected_v13, xlsx_v13, ods_v13
+from network_core.xlsx_import import import_xlsx_workbook
+from network_core.ods_import import import_ods_workbook
 
 
 def port():
@@ -558,6 +561,82 @@ def run():
                     assert hashlib.sha256(
                         (store/(name+'.yadilab')).read_bytes()).hexdigest() == old_hash
                 assert not errors, errors
+
+            # PR27: current actual *working* schema-1.3 project is exported
+            # through both new controls. Inspect actual browser-written file
+            # bytes and reimport via the real two independent binary readers.
+            current_name = 'template-ods' if network_mode == 'DIRECT_HTTP' else 'v13-ods'
+            current_file = store/(current_name+'.yadilab')
+            current_bytes = current_file.read_bytes()
+            before_export = json.loads(current_bytes)
+            before_sha = hashlib.sha256(current_bytes).hexdigest()
+            workbook_downloads = {}
+            for extension, parser in (('xlsx', import_xlsx_workbook),
+                                      ('ods', import_ods_workbook)):
+                with page.expect_response('**/api/export/spreadsheet') as export_response:
+                    with page.expect_download(timeout=12000) as exported_event:
+                        page.locator('#export-'+extension).click()
+                response = export_response.value
+                assert response.status == 200
+                assert exported_event.value.suggested_filename == (
+                    'network-documentation.'+extension)
+                destination = store/('actual-export.'+extension)
+                exported_event.value.save_as(str(destination))
+                raw = destination.read_bytes()
+                assert raw[:2] == b'PK'
+                encoded = response.json()['contentBase64']
+                assert hashlib.sha256(raw).digest() == hashlib.sha256(
+                    base64.b64decode(encoded,validate=True)).digest()
+                restored = parser({
+                    'filename':'download.'+extension,
+                    'projectName':before_export['name'],
+                    'contentBase64':encoded,
+                })
+                assert restored == before_export
+                assert restored['nodes'][0]['staticRoutes'][0]['nextHop'] == (
+                    before_export['nodes'][0]['staticRoutes'][0]['nextHop'])
+                workbook_downloads[extension] = raw
+                assert hashlib.sha256(current_file.read_bytes()).hexdigest() == before_sha
+                assert not (store/('export-roundtrip-'+extension+'.yadilab')).exists()
+
+            # Upload precisely the downloaded bytes via both UI routes:
+            # no autosave; separate user Save; real disk reopen unchanged.
+            for extension in ('xlsx','ods'):
+                with page.expect_response('**/api/import/'+extension) as imported_event:
+                    page.locator('#import-file').set_input_files({
+                        'name':'actual-export.'+extension,
+                        'mimeType':(
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                            if extension == 'xlsx' else
+                            'application/vnd.oasis.opendocument.spreadsheet'
+                        ),
+                        'buffer':workbook_downloads[extension],
+                    })
+                assert imported_event.value.status == 200
+                result = imported_event.value.json()['project']
+                assert result['schemaVersion'] == before_export['schemaVersion']
+                assert result['nodes'] == before_export['nodes']
+                assert result['links'] == before_export['links']
+                assert result['zones'] == before_export['zones']
+                expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+                assert hashlib.sha256(current_file.read_bytes()).hexdigest() == before_sha
+                slug='export-roundtrip-'+extension
+                assert not (store/(slug+'.yadilab')).exists()
+                page.locator('#project-filename').fill(slug)
+                page.locator('#project-filename').dispatch_event('change')
+                page.locator('#save-project').click()
+                expect(page.locator('#save-indicator')).to_contain_text(
+                    'Sparat · '+slug+'.yadilab',timeout=12000)
+                disk=(store/(slug+'.yadilab')).read_bytes()
+                assert json.loads(disk) == result
+                sha=hashlib.sha256(disk).hexdigest()
+                page.locator('#new-project').click()
+                page.locator('#saved-projects').select_option(slug)
+                page.locator('#open-project').click()
+                expect(page.locator('[data-node-id="'+before_export['nodes'][0]['id']+'"]')).to_have_count(1)
+                assert hashlib.sha256((store/(slug+'.yadilab')).read_bytes()).hexdigest() == sha
+                assert hashlib.sha256(current_file.read_bytes()).hexdigest() == before_sha
+            assert not errors, errors
 
             # Browser ARP diagnostics use real HTTP and unsaved current workspace.
             # Reopen the previous genuinely persisted VLAN 1.2 file, then edit
