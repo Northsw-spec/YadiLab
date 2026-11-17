@@ -259,6 +259,55 @@ tidsdrivna automatiska retries eller serverstyrda T1/T2-alternativ.
 
 Protokollreferens: [RFC 2131](https://www.rfc-editor.org/rfc/rfc2131).
 
+## Kontrollerad felinjicering i pågående session (PR #36)
+
+`POST /api/dhcp/session/link-fault` kräver **exakt**:
+
+```json
+{"sessionId":"<opaque ID>","project":{},"linkId":"to-server","disabled":true}
+```
+
+`project` måste matcha **ursprunglig oförändrad projektsnapshot**;
+`linkId` måste vara ID för en faktiskt existerande kabel som var
+**aktiv vid sessionens start**, inklusive aktiva ändportar.
+`disabled` måste vara en bool (`true` för avbrott, `false` för
+återställning), inte sträng, siffra eller null. Ett okänt ID, en
+ursprungligen redan avstängd kabel, ett redundant avbrott/
+återställningsförsök, ett förändrat projekt eller överskriden
+operationsbudget ger HTTP 422 utan att ändra sessionen.
+
+En **godkänd** operation tar bort eller återställer kabelns **båda
+riktningar** från enbart `EthernetFabric.wires`, med den ursprungliga
+kabeluppsättningen som enda källa för återställning. Varje övergång
+tömmer switcharnas **inlärda** MAC-tabeller så att gamla destinationer
+aldrig refererar till en nu frånkopplad port. Ny MAC-inlärning uppstår
+bara när faktiska simulerade frames kommer fram. Efter en sådan
+tömning kan **okänd unicast floodas** på andra aktiva portar:
+en Ethernet-frame som ses på en annan kabel bevisar inte att den
+ursprungliga, frånkopplade serverporten har mottagit den.
+
+Svaret ger `linkId`, `disabled`, `faultedLinks`, `leases`,
+`clockSeconds`, `operationCount` och `macTables`. Alla
+efterföljande `run`, `renew` och `advance` använder samma
+påverkade fabric och inkluderar `faultedLinks`. En tidigare
+ACK-bekräftad lease består tills ett riktigt förnyat DHCPACK når
+klienten eller den virtuella tiden når `expiresAtSeconds`.
+Ett avbrott skapar aldrig en konstruerad ACK eller en ny
+IP-adress. Att återansluta en kabel återupplivar inte en redan
+utgången lease; klienten måste genomföra ny DORA.
+
+**Builder** tillhandahåller knappvalen *Bryt kabel i sessionen*
+och *Återställ kabel i sessionen*, visar aktivt frånkopplade
+kablar och uppdaterar tillgängliga åtgärder efter svar. Tidigare
+DHCP-paketspår ogiltigförklaras när sessionskablarna ändras,
+eftersom spåren annars skulle beskriva ett tidigare nätläge.
+Inga andra sessioner, engångs-DORA-körningar, dokumenterade länkar,
+filbytes eller verkliga nätverksenheter påverkas.
+`reset` bygger om originalfabric och tömmer faults/leases/tid;
+`stop` raderar hela den processlokala sessionen. Tidsbaserad
+automatisk felinjicering, portflap-historik och verklig
+hårdvarubaserad länkövervakning ingår inte.
+
 ## Avsiktliga begränsningar
 
 - Den simulerade leasen existerar endast i minnet. **Klientportens
