@@ -1,5 +1,9 @@
 # Utvecklingskontrakt för nätverksapplikationen
 
+## Permanent Masterprompt
+
+**Läs [docs/MASTERPROMPT.md](docs/MASTERPROMPT.md) före varje utvecklingsetapp.** Den är projektets långsiktiga utvecklingsdirektiv fram till användarens slutgodkännande. Denna AGENTS-fil anger korta, operativa regler; den fullständiga målbilden, prioriteringen, acceptanskriterierna och rapporteringskontraktet finns i Masterprompten. Vid konflikt ska den senaste uttryckliga användarinstruktionen följas och aktuell källkod/CI kontrolleras.
+
 ## Projektgräns
 
 - Detta är en **ny, fristående implementation**, inte en fork eller ompaketering av äldre produktkod.

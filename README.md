@@ -4,6 +4,10 @@
 
 Version 0.1 är en körbar lokal desktop/webb-hybrid för att dokumentera enheter, portar, zoner och **uttryckligen deklarerade** fysiska länkar. Grafspårningen är avsiktligt begränsad. Projekt lagras på riktigt i `.yadilab`-filer. Programmet fungerar helt lokalt utan npm-installation, moln eller tredjepartsbibliotek i runtime.
 
+## Permanent utvecklingsdirektiv
+
+Utvecklingen styrs av [Masterprompten](docs/MASTERPROMPT.md) och den korta operativa instruktionen i [AGENTS.md](AGENTS.md). Läs båda före varje utvecklingsetapp. Dokumentet beskriver slutmål och kvalitetskrav; alla planerade funktioner är **inte** redan implementerade.
+
 ## Starta på Linux (Python 3.10+)
 
 ```bash
