@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from html import escape
 import json
 import mimetypes
@@ -18,6 +19,7 @@ from .csv_import import import_csv_tables
 from .xlsx_import import import_xlsx_workbook
 from .ods_import import import_ods_workbook
 from .spreadsheet_templates import template_bytes
+from .spreadsheet_export import export_workbook
 from .arp import ArpSession
 from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
@@ -128,6 +130,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"project": import_xlsx_workbook(body)})
             elif path == "/api/import/ods":
                 self._json(200, {"project": import_ods_workbook(body)})
+            elif path == "/api/export/spreadsheet":
+                if not isinstance(body, dict) or set(body) != {"project", "format"}:
+                    raise ProjectValidationError(
+                        "spreadsheet export: expected exactly project and format")
+                extension = body["format"]
+                if not isinstance(extension, str) or extension not in ("xlsx", "ods"):
+                    raise ProjectValidationError("spreadsheet export: expected format xlsx or ods")
+                data = export_workbook(body["project"], extension)
+                self._json(200, {
+                    "filename": "network-documentation." + extension,
+                    "contentBase64": base64.b64encode(data).decode("ascii"),
+                })
             elif path == "/api/trace":
                 if not isinstance(body, dict) or set(body) != {"project", "source", "target"}:
                     raise ProjectValidationError("trace: expected project, source, target")
