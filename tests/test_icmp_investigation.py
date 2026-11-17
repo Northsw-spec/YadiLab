@@ -12,7 +12,10 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from network_core.icmp_investigation import IcmpInvestigation, IcmpInvestigationRegistry, KINDS
+from network_core.icmp_investigation import (
+    IcmpInvestigation, IcmpInvestigationRegistry, KINDS, _candidates,
+)
+from network_core.icmp_ping import EchoExchange
 from network_core.model import ProjectValidationError
 from network_core.server import LabHTTPServer
 from network_core.storage import ProjectStore
@@ -136,6 +139,70 @@ class IcmpInvestigationTests(unittest.TestCase):
         self.assertEqual(recovery["repair"]["scope"], "PREVIEW_ONLY")
         self.assertTrue(recovery["replyMatched"])
         self.assertEqual(case.project, original)
+
+    def test_hidden_static_next_hop_must_fail_arp_and_recover_exact_route(self):
+        case = scenario("STATIC_NEXT_HOP_UNREACHABLE")
+        before = deepcopy(case.project)
+        fault = case._fault
+        self.assertEqual(fault["type"], "STATIC_NEXT_HOP_CHANGED")
+        self.assertIn((fault["nodeId"], fault["routeId"]),
+                      {("a", "via-router"), ("b", "return-to-a")})
+        destination = ("203.0.113.20" if fault["nodeId"] == "a"
+                       else "192.0.2.10")
+        route = case.probe("route", {
+            "nodeId": fault["nodeId"], "destinationIpv4": destination,
+        })["observation"]
+        self.assertEqual(route["status"], "MATCH")
+        selected = route["selectedRoute"]
+        self.assertEqual(selected["routeId"], fault["routeId"])
+        documented = next(r for r in route["documentedStaticRoutes"]
+                          if r["id"] == fault["routeId"])
+        self.assertNotEqual(selected["nextHop"], documented["nextHop"])
+        self.assertEqual(selected["nextHop"], fault["newNextHop"])
+        self.assertEqual(selected["destination"], documented["destination"])
+        self.assertNotIn("STATIC_NEXT_HOP_UNREACHABLE", json.dumps(case.state()))
+        ping = case.probe("ping", {})["observation"]
+        self.assertNotEqual(ping["status"], "REPLIED")
+        self.assertFalse(ping["replyMatched"])
+        self.assertIn("ARP_FAILED", (ping["requestStatus"], ping["replyStatus"]))
+        steps = ping["requestSteps"] + ping["replySteps"]
+        self.assertTrue(any(step["arpStatus"] == "NO_REPLY" for step in steps))
+        case.probe("address", {})
+        self.assertTrue(case.state()["canDiagnose"])
+        self.assertFalse(case.diagnose("STATIC_ROUTE_MISSING")["correct"])
+        self.assertTrue(case.diagnose("STATIC_NEXT_HOP_UNREACHABLE")["correct"])
+        result = case.repair()
+        self.assertEqual(result["status"], "RECOVERED")
+        self.assertEqual(result["restoredEchoStatus"], "REPLIED")
+        self.assertTrue(result["replyMatched"])
+        self.assertEqual(result["repair"]["action"], "RESTORE_NEXT_HOP")
+        self.assertEqual(result["repair"]["expectedNextHop"], documented["nextHop"])
+        self.assertEqual(result["repair"]["scope"], "PREVIEW_ONLY")
+        self.assertEqual(case.project, before)
+
+    def test_next_hop_candidates_reject_unused_routes_and_configured_peers(self):
+        project = routed_reply_lab()
+        next(n for n in project["nodes"] if n["id"] == "r")["staticRoutes"] = [{
+            "id": "unrelated", "destination": "198.51.100.0/24",
+            "nextHop": "192.0.2.10", "outPort": "wan",
+        }]
+        baseline = EchoExchange(project).ping(
+            "a", "eth0", "203.0.113.20", 5, 101, 1)
+        self.assertEqual(baseline["status"], "REPLIED")
+        candidates = [fault for kind, fault in _candidates(project, baseline)
+                      if kind == "STATIC_NEXT_HOP_UNREACHABLE"]
+        self.assertTrue(candidates)
+        self.assertFalse(any(f["nodeId"] == "r" for f in candidates))
+        allocated = {port["ipv4"].split("/")[0]
+                     for node in project["nodes"] for port in node["ports"]
+                     if port["ipv4"] is not None}
+        for fault in candidates:
+            self.assertNotIn(fault["newNextHop"], allocated)
+            original = next(route for node in project["nodes"]
+                            if node["id"] == fault["nodeId"]
+                            for route in node["staticRoutes"]
+                            if route["id"] == fault["routeId"])
+            self.assertNotEqual(fault["newNextHop"], original["nextHop"])
 
     def test_lookup_reverse_route_proves_reply_failure_not_fake_ping_pass(self):
         case = scenario("STATIC_ROUTE_MISSING")
@@ -295,9 +362,14 @@ class IcmpInvestigationHttpTests(unittest.TestCase):
         self.assertEqual(address["observation"]["dhcpStatus"], "NOT_VERIFIED")
         self.assertEqual(call("probe", probe="ping", target={})[1]
                          ["observation"]["replyMatched"], False)
-        self.assertEqual(call("probe", probe="route", target={
+        status, routing = call("probe", probe="route", target={
             "nodeId": "a", "destinationIpv4": "203.0.113.20",
-        })[0], 200)
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(routing["observation"]["documentedStaticRoutes"],
+                         p["nodes"][0]["staticRoutes"])
+        self.assertEqual(routing["observation"]["selectedRoute"]["nextHop"],
+                         "192.0.2.1")
         status, port_status = call("probe", probe="port", target={
             "nodeId": "sw-left", "portId": "a",
         })

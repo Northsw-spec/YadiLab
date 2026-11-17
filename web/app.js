@@ -1126,12 +1126,22 @@ function icmpInvestigationDescription(item) {
       + '\n' + o.reason;
   }
   if (item.probe === 'route') {
+    const formatStatic = (id, destination, nextHop, outPort) =>
+      id + ' · ' + destination + ' via ' + nextHop + ' ut ' + outPort;
+    const documented = o.documentedStaticRoutes.map(r =>
+      formatStatic(r.id, r.destination, r.nextHop, r.outPort));
+    const simulated = o.routes.filter(r => r.type === 'STATIC').map(r =>
+      formatStatic(r.routeId, r.destination, r.nextHop, r.outInterface.port));
     return 'ROUTING (' + o.sourceNode + ' → ' + o.destinationIpv4 + '): ' + o.status
       + '\nVald route: ' + (o.selectedRoute
         ? o.selectedRoute.destination + ' via '
           + (o.selectedRoute.nextHop ?? 'CONNECTED')
           + ' ut ' + o.selectedRoute.outInterface.port : 'ingen entydig matchning')
-      + '\nAktiva dokumenterade routeposter: ' + o.routes.length;
+      + '\nDokumenterade statiska routes: '
+      + (documented.join(' | ') || 'inga')
+      + '\nSimulerade aktiva statiska routes: '
+      + (simulated.join(' | ') || 'inga')
+      + '\nEn route-matchning bevisar inte ARP-svar eller ping.';
   }
   if (item.probe === 'ping') {
     const steps = [...o.requestSteps.map(step => 'UT'),

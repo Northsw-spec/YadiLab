@@ -1255,7 +1255,8 @@ def run():
             assert 'fault' not in json.dumps(started)
             assert not any(name in json.dumps(started) for name in (
                 'CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH',
-                'STATIC_ROUTE_MISSING', 'IPV4_PREFIX_MISMATCH'))
+                'STATIC_ROUTE_MISSING', 'IPV4_PREFIX_MISMATCH',
+                'STATIC_NEXT_HOP_UNREACHABLE'))
             expect(icmp_page.locator('#icmp-investigation-status')).to_contain_text(
                 'Aktiv dold övning')
             expect(icmp_page.locator('#icmp-investigation-diagnose')).to_be_disabled()
@@ -1290,6 +1291,20 @@ def run():
             reverse = icmp_reverse.value.json()['observation']
             assert reverse['destinationIpv4'] == '192.0.2.10'
             assert reverse['status'] in ('MATCH', 'NO_ROUTE')
+            missing_routes = []
+            wrong_next_hops = []
+            for lookup in (forward, reverse):
+                documented = {r['id']: r for r in lookup['documentedStaticRoutes']}
+                simulated = {r['routeId']: r for r in lookup['routes']
+                             if r['type'] == 'STATIC'}
+                for route_id, expected in documented.items():
+                    actual = simulated.get(route_id)
+                    if actual is None:
+                        missing_routes.append((lookup['sourceNode'], route_id))
+                    elif actual['nextHop'] != expected['nextHop']:
+                        assert actual['destination'] == expected['destination']
+                        assert actual['outInterface']['port'] == expected['outPort']
+                        wrong_next_hops.append((lookup['sourceNode'], route_id))
             icmp_page.locator('#icmp-investigation-probe').select_option('link')
             disconnected = []
             for link_id in ('la', 'lr1', 'lr2', 'lb'):
@@ -1351,12 +1366,18 @@ def run():
             elif prefix_changes:
                 assert len(prefix_changes) == 1
                 inferred = 'IPV4_PREFIX_MISMATCH'
+            elif wrong_next_hops:
+                assert len(wrong_next_hops) == 1
+                assert not missing_routes
+                assert 'ARP_FAILED' in (echo['requestStatus'], echo['replyStatus'])
+                inferred = 'STATIC_NEXT_HOP_UNREACHABLE'
             else:
-                assert forward['status'] == 'NO_ROUTE' or reverse['status'] == 'NO_ROUTE'
+                assert len(missing_routes) == 1
                 inferred = 'STATIC_ROUTE_MISSING'
             expect(icmp_page.locator('#icmp-investigation-diagnose')).to_be_enabled()
             wrong = next(x for x in ('CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH',
-                                     'STATIC_ROUTE_MISSING', 'IPV4_PREFIX_MISMATCH')
+                                     'STATIC_ROUTE_MISSING', 'IPV4_PREFIX_MISMATCH',
+                                     'STATIC_NEXT_HOP_UNREACHABLE')
                          if x != inferred)
             icmp_page.locator('#icmp-investigation-diagnosis').select_option(wrong)
             with icmp_page.expect_response('**/api/icmp/investigation/diagnose') as false_guess:

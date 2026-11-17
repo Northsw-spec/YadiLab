@@ -11,7 +11,8 @@ Utan en sådan faktiskt verifierad referens avvisas övningen med HTTP 422.
 
 Endast fel från existerande dokumenterad konfigurering erbjuds:
 `LINK_DISABLED`, `PORT_DISABLED` (på använd, aktiverad switchport),
-`ACCESS_VLAN_CHANGED`, `STATIC_ROUTE_REMOVED` och `IPV4_PREFIX_CHANGED`.
+`ACCESS_VLAN_CHANGED`, `STATIC_ROUTE_REMOVED`, `IPV4_PREFIX_CHANGED`
+och `STATIC_NEXT_HOP_CHANGED`.
 Motorn bygger kandidater utifrån baslinjens
 faktiskt använda kablar, aktiva switchportar och dokumenterade switch-VLAN/statiska routes.
 Prefixfel får bara väljas på ett uttryckligt aktivt IPv4-gränssnitt
@@ -21,6 +22,20 @@ on-link peer med dokumenterad IPv4 faller utanför gränssnittets
 subnät. Om masken ogiltiggör en statisk next-hop eller inte bryter ett
 verkligt simulerat Echo Request/Reply avvisas kandidaten. IP-adressen
 ändras inte och inga nya gateways, routes eller kablar uppfinns.
+
+Ett **felaktigt statiskt next-hop** väljs endast för en uttryckligt
+konfigurerad route som den riktiga lyckade ICMP-baslinjen faktiskt
+använde. Ett begränsat urval av oanvända *unicast*-värdadresser inom
+routens deklarerade utgångsgränssnitts subnät prövas deterministiskt.
+Den valda alternativa adressen är en avsiktligt felaktig konfiguration,
+**inte** ett påstått existerande nätverksobjekt eller dokumenterad
+gateway. Redan dokumenterade gränssnittsadresser, egen IPv4, nät-/
+broadcastadress, ursprungligt next-hop och ogiltiga on-link-adresser
+utesluts. Om inget tillåtet alternativ finns startas inget sådant
+felcase. Kandidaten kräver därutöver en faktisk modellbaserad
+`ARP_FAILED` med `NO_REPLY`; route lookup `MATCH` betyder
+aldrig att nästa hopp svarar.
+
 En kandidat accepteras bara om den existerande `compare_fault`
 bekräftar en lyckad baslinje, misslyckad paketleverans med just det
 felet och återställd verklig Echo-kommunikation i en **oberoende
@@ -64,7 +79,7 @@ eller simulerad felpunkt exponeras.
 |---|---|---|
 | `address` | `{}` | Dokumenterad IPv4 och portstatus; adressursprung `UNKNOWN` och DHCP-kontroll `NOT_VERIFIED` |
 | `ping` | `{}` | Riktigt ICMP Echo: Request/Reply-status, riktiga route- och ARP-steg, VLAN-drops och faktiskt använda kablar |
-| `route` | `{"nodeId":"a","destinationIpv4":"203.0.113.20"}` | Aktuell route lookup på vald explicit host/router, längsta prefix och eventuellt `NO_ROUTE` |
+| `route` | `{"nodeId":"a","destinationIpv4":"203.0.113.20"}` | Simulerad longest-prefix route lookup samt separat dokumenterade statiska routes med route-ID/next-hop, för att skilja `NO_ROUTE` från `MATCH` med ARP-fel |
 | `link` | `{"linkId":"la"}` | Dokumenterat jämfört med simulerat länktillstånd och deklarerade ändpunkter |
 | `port` | `{"nodeId":"sw-left","portId":"a"}` | Dokumenterat kontra simulerat administrativt portläge och IPv4/CIDR (eller null för port utan IP); inte live-telemetri |
 | `vlan` | `{"nodeId":"sw-left","portId":"a"}` | Dokumenterad kontra simulerad explicit VLAN-konfiguration |
@@ -73,7 +88,11 @@ eller simulerad felpunkt exponeras.
 inom samma övning och på faktiskt existerande host/router. Detta
 möjliggör att särskilt granska returvägen från destinationen mot
 ursprungsklienten. Inga generiska rutter eller graf-baserade hop
-påstås vara verifierade. Alla observationer kommer från den
+påstås vara verifierade. `documentedStaticRoutes` är en kopia av
+projektets uttryckliga statiska routes; `routes` är den aktuella
+simulerade routingtabellen. De kan jämföras med identifierare utan
+att ett borttaget route-ID misstas för ett felaktigt next-hop.
+Alla observationer kommer från den
 faktiskt felinjicerade simulerade nätverkskopian och anges
 `SIMULATED` eller `SIMULATED_CONFIG`.
 
@@ -93,8 +112,8 @@ kopplas inte implicit in i detta ICMP-felsökningsfall.
 `POST /api/icmp/investigation/diagnose` kräver exakt
 `sessionId`, `project`, `diagnosis`, där en enda av
 `CABLE_DOWN`, `PORT_SHUTDOWN`, `VLAN_MISMATCH`,
-`STATIC_ROUTE_MISSING`, `IPV4_PREFIX_MISMATCH`
-är tillåten. Före diagnos krävs riktiga mätningar av **ping**,
+`STATIC_ROUTE_MISSING`, `IPV4_PREFIX_MISMATCH`,
+`STATIC_NEXT_HOP_UNREACHABLE` är tillåten. Före diagnos krävs riktiga mätningar av **ping**,
 **route** och minst en tredje kontrolltyp (**address**, **link**, **port**
 eller **vlan**). Fel gissning returnerar enbart `correct=false`
 och avslöjar inte feltypen. Högst 3 hypotesförsök accepteras.
@@ -128,6 +147,9 @@ efter projektändring.
 - Den är begränsad till befintlig statisk IPv4-routing och dokumenterat VLAN.
 - Den simulerar ingen DHCP-tilldelning för den dokumenterade
   IPv4-källan och vet inte varifrån dess adress kommer.
+- Ett ändrat static next-hop är avsiktligt injicerat och verifierat
+  *endast* i den begränsade ARP-/ICMP-modellen. Att en adress saknas i
+  dokumentationen bevisar inte att den är oanvänd på ett riktigt nät.
 - IPv4/CIDR-mätningen visar simulerad konfiguration mot dokumenterad
   baslinje, inte live-kontroll av faktisk nätmask på en riktig NIC.
 - Den ger ingen DNS-analys, TCP-test, NAT, dynamisk routing,
