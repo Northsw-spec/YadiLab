@@ -85,6 +85,14 @@ let routeLookup = null;
 let ipv4Diagnostic = null;
 let pingDiagnostic = null;
 let troubleDiagnostic = null;
+let icmpInvestigationId = null;
+let icmpInvestigationState = null;
+let icmpInvestigationGeneration = 0;
+let icmpInvestigationBusy = false;
+let icmpInvestigationLog = [];
+let icmpInvestigationVerdict = null;
+let icmpInvestigationRecovery = null;
+let icmpInvestigationError = null;
 let filename = 'lab';
 let savedName = null;
 let savedSha = null;
@@ -178,7 +186,23 @@ function invalidateInvestigation() {
   if (previous) void api('/api/dhcp/investigation/stop', {sessionId: previous}).catch(() => {});
 }
 
+function invalidateIcmpInvestigation() {
+  icmpInvestigationGeneration += 1;
+  const previous = icmpInvestigationId;
+  icmpInvestigationId = null;
+  icmpInvestigationState = null;
+  icmpInvestigationBusy = false;
+  icmpInvestigationLog = [];
+  icmpInvestigationVerdict = null;
+  icmpInvestigationRecovery = null;
+  icmpInvestigationError = null;
+  if (previous) {
+    void api('/api/icmp/investigation/stop', {sessionId: previous}).catch(() => {});
+  }
+}
+
 function invalidateDoraSession() {
+  invalidateIcmpInvestigation();
   invalidateInvestigation();
   doraSessionGeneration += 1;
   const previous = doraSessionId;
@@ -1630,6 +1654,7 @@ function render() {
   renderIPv4Trace();
   renderPing();
   renderTroubleshooting();
+  renderIcmpInvestigation();
   updateSaveIndicator();
   } finally {
     rendering = false;
