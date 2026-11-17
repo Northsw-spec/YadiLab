@@ -101,7 +101,11 @@ Longest-prefix match omfattar nu både `CONNECTED` och `STATIC`; lika specifika 
 
 **Topologisk grafväg är inte ping, IP-routing, VLAN-medveten reachability, brandväggslogik eller ett bevis på nätverksanslutning.** Första versionens grafspårning traverserar dokumentationsgrafen, inte verkliga protokoll.
 
-Ännu inte implementerat: godtycklig kalkylbladsimport, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, extern nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+Ännu inte implementerat: godtycklig kalkylbladsimport, fullständig DHCP-adresstilldelning/DORA, DNS, brandväggsregler, ACL, fysisk kabeltyp, extern nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+
+## Avgränsad DHCPv4 DISCOVER/OFFER via HTTP (PR #29)
+
+En ny read-only diagnos kan via `POST /api/dhcp/discover-offer` simulera en **DHCPDISCOVER** från en explicit vald hostport utan IP och en **DHCPOFFER** från en explicit vald serverport med MAC och IPv4/CIDR. Användaren anger också uttryckligen föreslagen ledig IPv4, transaktions-ID och leasetid. Bytekorrekt BOOTP/DHCP, UDP (68/67), IPv4-broadcast och checksummor skapas och valideras, och båda Ethernet-broadcasterna måste nå sina respektive portar via befintliga deklarerade kablar och VLAN. Olika broadcastdomäner och nedstängda länkar ger inget falskt erbjudande. **Ingen IP tilldelas, ingen lease skapas, inga projekt ändras eller sparas.** Detta är ännu **inte DORA** och saknar DHCPREQUEST/ACK, dynamiska adresspooler och relay. Builder-UI för diagnosen tillkommer i ett separat steg. Se [DHCP-kontraktet](docs/DHCP_DISCOVER_OFFER.md).
 
 ## Export av aktuellt projekt till XLSX och ODS (PR #27)
 
