@@ -1,8 +1,7 @@
-"""Read-only comparison of a declared link fault with verified restoration.
+"""Read-only fault comparison using the single existing Echo/IPv4/ARP/Ethernet engine.
 
-All three ICMP Echo trials execute independently on validated canonical project
-copies via the one existing EchoExchange / IPv4 / ARP / Ethernet engine.
-No diagnosis is claimed from topology alone or from a pre-existing failure.
+Link, port and explicit VLAN fault mutations operate only on a canonical copy.
+No speculative causal diagnosis, automatic repair, or file/working-state writes.
 """
 from __future__ import annotations
 
@@ -30,73 +29,196 @@ def _observed_wires(exchange: dict) -> list[str]:
     return sorted(visited)
 
 
-def compare_link_fault(project: dict, source_node: str, source_port: str,
-                       destination_ipv4: str, ttl: int, identifier: int,
-                       sequence: int, link_id: str) -> dict:
-    """Explicitly disconnect ONE enabled link, retest, reconnect, retest.
+def _exact_fault(value: object, kind: str, required: set[str]) -> dict:
+    if not isinstance(value, dict) or set(value) != required or value.get("type") != kind:
+        raise ProjectValidationError(
+            f"troubleshoot: {kind} requires exactly {', '.join(sorted(required))}")
+    return value
 
-    Only FAULT_CONFIRMED means a controlled failure was observed *and*
-    communication was restored. All outcomes are ephemeral, nonpersistent.
+
+def _port(project: dict, node_id: object, port_id: object) -> tuple[dict, dict]:
+    if not isinstance(node_id, str) or not isinstance(port_id, str):
+        raise ProjectValidationError("troubleshoot: nodeId and portId must be strings")
+    device = next((n for n in project["nodes"] if n["id"] == node_id), None)
+    if device is None:
+        raise ProjectValidationError("troubleshoot: unknown nodeId")
+    port = next((p for p in device["ports"] if p["id"] == port_id), None)
+    if port is None:
+        raise ProjectValidationError("troubleshoot: unknown portId on selected node")
+    return device, port
+
+
+def _mutation(project: dict, fault: object) -> tuple[dict, dict, callable, callable]:
+    """Validate a single explicit change and return apply/undo operations.
+
+    The closure inputs are independent canonical document copies, not shared
+    simulator instances or persisted source documents.
+    """
+    if not isinstance(fault, dict) or not isinstance(fault.get("type"), str):
+        raise ProjectValidationError("troubleshoot: expected explicit fault type")
+    kind = fault["type"]
+    if kind == "LINK_DISABLED":
+        _exact_fault(fault, kind, {"type", "linkId"})
+        link_id = fault["linkId"]
+        if not isinstance(link_id, str):
+            raise ProjectValidationError("troubleshoot: linkId must be a declared link ID")
+        link = next((l for l in project["links"] if l["id"] == link_id), None)
+        if link is None:
+            raise ProjectValidationError("troubleshoot: unknown declared linkId")
+        if not link["enabled"]:
+            raise ProjectValidationError("troubleshoot: selected link is already disabled")
+
+        def select(doc: dict) -> dict:
+            return next(l for l in doc["links"] if l["id"] == link_id)
+
+        def inject(doc: dict) -> None:
+            select(doc)["enabled"] = False
+
+        def undo(doc: dict) -> None:
+            select(doc)["enabled"] = True
+
+        return (
+            {"type": kind, "linkId": link_id, "fromEnabled": True, "toEnabled": False},
+            {"action": "RE_ENABLE_LINK", "linkId": link_id,
+             "expectedEnabled": True, "scope": "PREVIEW_ONLY"},
+            inject, undo,
+        )
+
+    if kind not in ("PORT_DISABLED", "ACCESS_VLAN_CHANGED", "TRUNK_VLAN_BLOCKED"):
+        raise ProjectValidationError("troubleshoot: unsupported fault type")
+    required = {"type", "nodeId", "portId"}
+    if kind == "ACCESS_VLAN_CHANGED":
+        required.add("newVlan")
+    elif kind == "TRUNK_VLAN_BLOCKED":
+        required.add("blockedVlan")
+    _exact_fault(fault, kind, required)
+    node_id, port_id = fault["nodeId"], fault["portId"]
+    device, port = _port(project, node_id, port_id)
+    if not port["enabled"]:
+        raise ProjectValidationError("troubleshoot: selected port is already disabled")
+
+    def select(doc: dict) -> dict:
+        return _port(doc, node_id, port_id)[1]
+
+    if kind == "PORT_DISABLED":
+        def inject(doc: dict) -> None:
+            select(doc)["enabled"] = False
+
+        def undo(doc: dict) -> None:
+            select(doc)["enabled"] = True
+
+        return (
+            {"type": kind, "nodeId": node_id, "portId": port_id,
+             "fromEnabled": True, "toEnabled": False},
+            {"action": "RE_ENABLE_PORT", "nodeId": node_id, "portId": port_id,
+             "expectedEnabled": True, "scope": "PREVIEW_ONLY"},
+            inject, undo,
+        )
+
+    if device["kind"] != "switch":
+        raise ProjectValidationError("troubleshoot: VLAN faults require a declared switch port")
+    config = port.get("vlan")
+    expected_mode = "access" if kind == "ACCESS_VLAN_CHANGED" else "trunk"
+    if config is None or config["mode"] != expected_mode:
+        raise ProjectValidationError(
+            f"troubleshoot: selected switch port requires explicit {expected_mode} VLAN config")
+    old_config = deepcopy(config)
+    if kind == "ACCESS_VLAN_CHANGED":
+        vlan = fault["newVlan"]
+        if type(vlan) is not int or not 1 <= vlan <= 4094:
+            raise ProjectValidationError("troubleshoot: newVlan must be an integer 1..4094")
+        old = config["vlan"]
+        if vlan == old:
+            raise ProjectValidationError("troubleshoot: newVlan must differ from configured VLAN")
+        new_config = {"mode": "access", "vlan": vlan}
+        change = {"type": kind, "nodeId": node_id, "portId": port_id,
+                  "fromVlan": old, "toVlan": vlan}
+    else:
+        vlan = fault["blockedVlan"]
+        if type(vlan) is not int or not 1 <= vlan <= 4094:
+            raise ProjectValidationError("troubleshoot: blockedVlan must be an integer 1..4094")
+        allowed = config["allowedVlans"]
+        if vlan not in allowed:
+            raise ProjectValidationError("troubleshoot: blockedVlan must be explicitly allowed")
+        if len(allowed) == 1:
+            raise ProjectValidationError(
+                "troubleshoot: cannot remove last allowed trunk VLAN")
+        new_config = {"mode": "trunk",
+                      "allowedVlans": [v for v in allowed if v != vlan]}
+        change = {"type": kind, "nodeId": node_id, "portId": port_id,
+                  "blockedVlan": vlan, "remainingAllowedVlans": new_config["allowedVlans"]}
+
+    def inject(doc: dict) -> None:
+        select(doc)["vlan"] = deepcopy(new_config)
+
+    def undo(doc: dict) -> None:
+        select(doc)["vlan"] = deepcopy(old_config)
+
+    return (
+        change,
+        {"action": "RESTORE_VLAN_CONFIG", "nodeId": node_id, "portId": port_id,
+         "expectedVlan": old_config, "scope": "PREVIEW_ONLY"},
+        inject, undo,
+    )
+
+
+def compare_fault(project: dict, source_node: str, source_port: str,
+                  destination_ipv4: str, ttl: int, identifier: int,
+                  sequence: int, fault: dict) -> dict:
+    """Validate, simulate a single explicit fault, independently restore.
+
+    All three trials construct new EchoExchange instances, retaining only
+    actual observed network transmissions and never any shared ARP cache.
     """
     canonical = validate_project(project)
-    if not isinstance(link_id, str):
-        raise ProjectValidationError("troubleshoot: linkId must be a declared link ID")
-    original_link = next((l for l in canonical["links"] if l["id"] == link_id), None)
-    if original_link is None:
-        raise ProjectValidationError("troubleshoot: unknown declared linkId")
-    if not original_link["enabled"]:
-        raise ProjectValidationError("troubleshoot: selected link is already disabled")
+    failure, repair, inject, undo = _mutation(canonical, fault)
+    # The existing packet sender intentionally rejects a disabled source
+    # interface before any traffic. Do not fabricate an Echo trial when
+    # source-interface shutdown is selected as the injected fault.
+    if (failure["type"] == "PORT_DISABLED" and
+            failure["nodeId"] == source_node and failure["portId"] == source_port):
+        raise ProjectValidationError(
+            "troubleshoot: source-port shutdown cannot run an ICMP Echo trial; "
+            "select a transit or destination port")
 
     def trial(doc: dict) -> dict:
         return EchoExchange(doc).ping(
             source_node, source_port, destination_ipv4, ttl, identifier, sequence)
 
-    # Run original first: invalid source/target/TTL fails closed without
-    # constructing a misleading diagnosis. No ARP or switch learning is
-    # shared between trials.
     baseline = trial(canonical)
-    faulty_project = deepcopy(canonical)
-    next(l for l in faulty_project["links"] if l["id"] == link_id)["enabled"] = False
-    faulted = trial(faulty_project)
-    restored_project = deepcopy(faulty_project)
-    next(l for l in restored_project["links"] if l["id"] == link_id)["enabled"] = True
+    faulty = deepcopy(canonical)
+    inject(faulty)
+    faulty = validate_project(faulty)
+    faulted = trial(faulty)
+    restored_project = deepcopy(faulty)
+    undo(restored_project)
+    restored_project = validate_project(restored_project)
     if restored_project != canonical:
         raise ProjectValidationError("troubleshoot: restoration changed unrelated project facts")
     restored = trial(restored_project)
 
     if baseline["status"] != "REPLIED":
         status = "BASELINE_NOT_REPLIED"
-        explanation = ("The original ICMP Echo exchange already fails; a new "
-                       "cable fault cannot be proven as its cause.")
+        explanation = ("The original ICMP Echo exchange already fails; the "
+                       "injected change cannot be proven as its cause.")
     elif faulted["status"] == "REPLIED":
         status = "NO_OBSERVED_IMPACT"
-        explanation = ("The same bidirectional Echo exchange still succeeds with "
-                       "the selected cable disabled; it is not a proven failure.")
+        explanation = ("The same bidirectional Echo exchange still succeeds "
+                       "with the selected fault; it is not a proven failure.")
     elif restored["status"] != "REPLIED":
         status = "RESTORATION_NOT_VERIFIED"
-        explanation = ("Communication did not recover in the independent restoration "
-                       "trial; no successful repair is claimed.")
+        explanation = ("Communication did not recover in the independent "
+                       "restoration trial; no successful repair is claimed.")
     else:
         status = "FAULT_CONFIRMED"
-        explanation = ("One explicitly selected cable was disabled; a previously "
-                       "successful Echo exchange failed and succeeded again after "
-                       "restoring that exact cable in an isolated copy.")
-
+        explanation = ("One explicit configuration fault caused a previously "
+                       "successful Echo exchange to fail; restoring only "
+                       "that configuration restored communication in the model.")
     return {
         "status": status,
         "meaning": explanation,
-        "fault": {
-            "type": "LINK_DISABLED",
-            "linkId": link_id,
-            "fromEnabled": True,
-            "toEnabled": False,
-        },
-        "repair": {
-            "action": "RE_ENABLE_LINK",
-            "linkId": link_id,
-            "expectedEnabled": True,
-            "scope": "PREVIEW_ONLY",
-        },
+        "fault": failure,
+        "repair": repair,
         "baseline": baseline,
         "faulted": faulted,
         "restored": restored,
@@ -110,3 +232,12 @@ def compare_link_fault(project: dict, source_node: str, source_port: str,
         "ephemeral": True,
         "projectChanged": False,
     }
+
+
+def compare_link_fault(project: dict, source_node: str, source_port: str,
+                       destination_ipv4: str, ttl: int, identifier: int,
+                       sequence: int, link_id: str) -> dict:
+    """Backward-compatible link-only entrypoint using the same fault engine."""
+    return compare_fault(project, source_node, source_port, destination_ipv4,
+                         ttl, identifier, sequence,
+                         {"type": "LINK_DISABLED", "linkId": link_id})

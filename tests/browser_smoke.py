@@ -694,6 +694,64 @@ def run():
             page.locator('#run-troubleshoot').click()
             expect(page.locator('#trouble-result')).to_contain_text('Felsökningsjämförelse avvisad')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # PR21: the same THREE real ICMP trials on a temporarily disabled
+            # existing switch port. Builder port stays enabled throughout.
+            page.locator('#trouble-destination').fill('192.0.2.20')
+            page.locator('#trouble-ttl').fill('5')
+            page.locator('#trouble-type').select_option('PORT_DISABLED')
+            switch_port = json.dumps(['node-2','port-1'], separators=(',', ':'))
+            page.locator('#trouble-port').select_option(switch_port)
+            with page.expect_response('**/api/troubleshoot/fault') as port_fault:
+                page.locator('#run-troubleshoot').click()
+            assert port_fault.value.status == 200
+            port_data = port_fault.value.json()
+            assert port_data['status'] == 'FAULT_CONFIRMED'
+            assert port_data['fault']['type'] == 'PORT_DISABLED'
+            assert port_data['fault']['nodeId'] == 'node-2'
+            assert port_data['fault']['portId'] == 'port-1'
+            assert port_data['baseline']['status'] == 'REPLIED'
+            assert port_data['faulted']['status'] != 'REPLIED'
+            assert port_data['restored']['status'] == 'REPLIED'
+            assert port_data['repair']['action'] == 'RE_ENABLE_PORT'
+            expect(page.locator('#trouble-result')).to_contain_text('Port avstängd: REQUEST_FAILED')
+            expect(page.locator('#trouble-result')).to_contain_text('Återställd port: REPLIED')
+            page.locator('[data-item-type="node"][data-item-id="node-2"]').click()
+            expect(page.locator('#inspector input[type="checkbox"]').first).to_be_checked()
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # Moving only the second real switch port from access VLAN 10 to
+            # VLAN 20 isolates two otherwise correctly addressed endpoints.
+            page.locator('#trouble-type').select_option('ACCESS_VLAN_CHANGED')
+            vlan_port = json.dumps(['node-2','port-2'], separators=(',', ':'))
+            page.locator('#trouble-vlan-port').select_option(vlan_port)
+            page.locator('#trouble-vlan').fill('20')
+            with page.expect_response('**/api/troubleshoot/fault') as vlan_fault:
+                page.locator('#run-troubleshoot').click()
+            assert vlan_fault.value.status == 200
+            vlan_data = vlan_fault.value.json()
+            assert vlan_data['status'] == 'FAULT_CONFIRMED'
+            assert vlan_data['fault']['type'] == 'ACCESS_VLAN_CHANGED'
+            assert vlan_data['fault']['fromVlan'] == 10
+            assert vlan_data['fault']['toVlan'] == 20
+            assert vlan_data['faulted']['request']['status'] == 'ARP_FAILED'
+            assert vlan_data['restored']['status'] == 'REPLIED'
+            assert vlan_data['repair']['expectedVlan'] == {'mode':'access','vlan':10}
+            expect(page.locator('#trouble-result')).to_contain_text('VLAN-fel: REQUEST_FAILED')
+            expect(page.locator('#trouble-result')).to_contain_text('Återställt VLAN: REPLIED')
+            expect(page.locator('[data-port-vlan="port-2"]')).to_have_value('access:10')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # Strict negative: the configured VLAN cannot be "changed" to
+            # itself and then falsely counted as a network fault.
+            page.locator('#trouble-vlan').fill('10')
+            with page.expect_response('**/api/troubleshoot/fault') as invalid_vlan_fault:
+                page.locator('#run-troubleshoot').click()
+            assert invalid_vlan_fault.value.status == 422
+            expect(page.locator('#trouble-result')).to_contain_text('Felsökningsjämförelse avvisad')
+            page.locator('#trouble-type').select_option('TRUNK_VLAN_BLOCKED')
+            assert page.locator('#run-troubleshoot').is_disabled()
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')

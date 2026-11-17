@@ -146,14 +146,33 @@
         </section>
         <section class="trace-panel" aria-label="Kontrollerad felsökningsövning">
           <div class="eyebrow">FELSÖKNING · KONTROLLERAT FEL</div>
-          <h3>Jämför kabelbrott och återställning</h3>
-          <p class="muted tiny">Tre oberoende riktiga simulerade ICMP Echo-försök: referens, exakt en avstängd deklarerad kabel, och återställd kabel. Testet ändrar inte arbetsytan eller sparad fil.</p>
+          <h3>Jämför nätverksfel och återställning</h3>
+          <p class="muted tiny">Tre oberoende ICMP Echo-försök på kanoniska kopior: referens, exakt ett kontrollerat fel och fullständig återställning. Ingen ändring av arbetsytan eller sparad fil.</p>
           <label for="trouble-source">Källgränssnitt</label>
           <select id="trouble-source" class="control"></select>
           <label for="trouble-destination">Destinations-IPv4</label>
           <input id="trouble-destination" class="control" type="text" autocomplete="off" placeholder="192.0.2.20">
-          <label for="trouble-link">Kabel att stänga av tillfälligt</label>
-          <select id="trouble-link" class="control"></select>
+          <label for="trouble-type">Kontrollerat fel</label>
+          <select id="trouble-type" class="control">
+            <option value="LINK_DISABLED">Stäng av en kabel</option>
+            <option value="PORT_DISABLED">Stäng av en port</option>
+            <option value="ACCESS_VLAN_CHANGED">Byt access-VLAN</option>
+            <option value="TRUNK_VLAN_BLOCKED">Blockera VLAN på trunk</option>
+          </select>
+          <div id="trouble-link-fields">
+            <label for="trouble-link">Kabel att stänga av tillfälligt</label>
+            <select id="trouble-link" class="control"></select>
+          </div>
+          <div id="trouble-port-fields" hidden>
+            <label for="trouble-port">Port att stänga av tillfälligt</label>
+            <select id="trouble-port" class="control"></select>
+          </div>
+          <div id="trouble-vlan-fields" hidden>
+            <label for="trouble-vlan-port">Switchport med explicit VLAN-konfiguration</label>
+            <select id="trouble-vlan-port" class="control"></select>
+            <label for="trouble-vlan">Nytt access-VLAN / befintligt trunk-VLAN att blockera</label>
+            <input id="trouble-vlan" class="control" type="number" min="1" max="4094" step="1" value="20">
+          </div>
           <label for="trouble-ttl">TTL per riktning (1–255)</label>
           <input id="trouble-ttl" class="control" type="number" min="1" max="255" step="1" value="5">
           <button id="run-troubleshoot" class="btn btn-soft full" type="button">Verifiera fel och återställning</button>

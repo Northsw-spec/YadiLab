@@ -34,7 +34,7 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 | `icmp.py` | Strikt RFC 792 Echo Request/Reply typ 8/0 och typ 0/0, checksumma, ID, sekvens och payload | Andra ICMP-typer, timeoutmätning, applikationsstack |
 | `icmp_ping.py` | Riktig tur-och-retur-bunden ICMP Echo och routerursprungliga felpaket över samma `IPv4Trace` med befintlig ARP-/Ethernetmotor | Automatiska gateways, brandväggsregler, RTT, fler ICMP-felkoder |
 | `icmp_errors.py` | RFC 792 typ 11/kod 0 och typ 3/kod 0, strikta bytes, originalcitat, checksumma och skydd mot rekursiva ICMP-fel | Andra ICMP-fel, godtycklig quoted payload eller obehörig generering |
-| `troubleshooting.py` | Tre oberoende Echo-utbyten på kanoniska kopior: fungerande referens, exakt en avstängd deklarerad kabel, verifierad återställning | Ändra faktiskt arbetsdokument, automatiska reparationer, felförslag utan positiv referens, nya protokollmotorer |
+| `troubleshooting.py` | Gemensam read-only jämförelse för exakt en avstängd kabel, port, ändrat access-VLAN eller blockerat trunk-VLAN, följt av exakt återställning och tre oberoende Echo-utbyten | Ändra arbetsdokument, automatiska reparationer, orsaksanspråk utan fungerande referens eller nya protokollmotorer |
 | `ipv4.py` | Enspårig IPv4-leverans över samma ARP- och Ethernetmotor, explicit next-hop per routesteg, TTL per transitrouter och matchad mottagarport | Returtrafik orkestreras separat i `icmp_ping.py`; inga ICMP-fel, NAT, ACL eller fragmentering |
 | `web/model.js` | Explicit UI-modell, enhets- och portkommandon | Adressbaserad länkförutsägelse |
 | `web/canvas.js` | SVG-geometri och direktträff på portpunkter | Ändra noders eller länkars identitet |
