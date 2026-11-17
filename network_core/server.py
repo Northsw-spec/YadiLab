@@ -17,6 +17,7 @@ from .model import ProjectValidationError, topology_trace, validate_project
 from .csv_import import import_csv_tables
 from .arp import ArpSession
 from .simulation import SimulationRegistry
+from .routing import ConnectedRoutingTable
 from .storage import ProjectConflictError, ProjectStore
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -106,6 +107,15 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict) or set(body) != {"project", "source", "target"}:
                     raise ProjectValidationError("trace: expected project, source, target")
                 self._json(200, topology_trace(body["project"], body["source"], body["target"]))
+            elif path == "/api/routing/connected":
+                if not isinstance(body, dict) or set(body) != {"project", "nodeId", "destinationIpv4"}:
+                    raise ProjectValidationError(
+                        "routing: expected project, nodeId, destinationIpv4"
+                    )
+                # Query configured IPv4 connected prefixes ONLY. Never consult
+                # graph paths, cached MAC/ARP entries, or invent IP forwarding.
+                self._json(200, ConnectedRoutingTable(body["project"], body["nodeId"])
+                           .lookup(body["destinationIpv4"]))
             elif path == "/api/diagnostics/arp":
                 if not isinstance(body, dict) or set(body) != {"project", "sourceNode", "sourcePort", "targetIpv4"}:
                     raise ProjectValidationError("arp diagnostics: expected project, sourceNode, sourcePort, targetIpv4")
