@@ -63,6 +63,8 @@ class DhcpLabSession:
             "leaseCount": len(leases),
             "macTables": self.dhcp.fabric.learned_mac_tables(),
             "faultedLinks": self.dhcp.fabric.faulted_links(),
+            "faultedPorts": self.dhcp.fabric.faulted_ports(),
+            "faultedAccessVlans": self.dhcp.fabric.faulted_access_vlans(),
             "ephemeral": True,
         }
 
@@ -94,6 +96,25 @@ class DhcpLabSession:
         self.dhcp.fabric.set_link_fault(link_id, disabled)
         self.operation_count += 1
         return {"linkId": link_id, "disabled": disabled, **self.state()}
+
+    def set_port_fault(self, node_id: str, port_id: str, disabled: bool) -> dict:
+        if self.operation_count >= MAX_OPERATIONS:
+            raise ProjectValidationError(
+                "dhcp session: operation limit reached; reset the session")
+        self.dhcp.fabric.set_port_fault(node_id, port_id, disabled)
+        self.operation_count += 1
+        return {"nodeId": node_id, "portId": port_id,
+                "disabled": disabled, **self.state()}
+
+    def set_access_vlan_fault(self, node_id: str, port_id: str,
+                              vlan_id: int | None) -> dict:
+        if self.operation_count >= MAX_OPERATIONS:
+            raise ProjectValidationError(
+                "dhcp session: operation limit reached; reset the session")
+        self.dhcp.fabric.set_access_vlan_fault(node_id, port_id, vlan_id)
+        self.operation_count += 1
+        return {"nodeId": node_id, "portId": port_id,
+                "vlanId": vlan_id, **self.state()}
 
     def renew(self, client_node: str, client_port: str, transaction_id: int) -> dict:
         """One explicit RENEWING / REBINDING attempt at virtual T1 / T2.
@@ -189,6 +210,22 @@ class DhcpSessionRegistry:
             session.check_project(project)
             return {"sessionId": session_id, **session.set_link_fault(
                 link_id, disabled)}
+
+    def port_fault(self, session_id: object, project: object,
+                   node_id: str, port_id: str, disabled: bool) -> dict:
+        with self._lock:
+            session = self._get(session_id)
+            session.check_project(project)
+            return {"sessionId": session_id, **session.set_port_fault(
+                node_id, port_id, disabled)}
+
+    def vlan_fault(self, session_id: object, project: object,
+                   node_id: str, port_id: str, vlan_id: int | None) -> dict:
+        with self._lock:
+            session = self._get(session_id)
+            session.check_project(project)
+            return {"sessionId": session_id, **session.set_access_vlan_fault(
+                node_id, port_id, vlan_id)}
 
     def renew(self, session_id: object, project: object, client_node: str,
               client_port: str, transaction_id: int) -> dict:
