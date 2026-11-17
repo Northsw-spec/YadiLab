@@ -13,7 +13,7 @@ import ipaddress
 from .arp import ArpSession
 from .ethernet_frame import EthernetFrame
 from .ipv4_packet import IPv4Datagram, _ip, ICMP_PROTOCOL, EXPERIMENTAL_PROTOCOL
-from .icmp import ICMPEcho
+from .icmp_errors import parse_icmp_message, ICMP_TIME_EXCEEDED, ICMP_DEST_UNREACHABLE
 from .model import ProjectValidationError
 from .routing import ConnectedRoutingTable
 
@@ -56,11 +56,26 @@ class IPv4Trace:
         packet = IPv4Datagram(source_ip, dest, ttl, payload, protocol)
         # Reject malformed Echo messages before any route/ARP/packet state change.
         if protocol == ICMP_PROTOCOL:
-            ICMPEcho.parse(payload)
+            parse_icmp_message(payload)
         steps: list[dict] = []
 
+        def router_failure(icmp_type: int, received: IPv4Datagram,
+                           device_id: str, ingress_port: str) -> dict:
+            # The original header is captured at router ingress, before TTL
+            # decrement, exactly as transmitted to that router on the wire.
+            # This is evidence only; no error packet has been sent yet.
+            original = received.serialize()
+            return {
+                "router": device_id,
+                "ingressPort": ingress_port,
+                "icmpType": icmp_type,
+                "icmpCode": 0,
+                "quotedIpv4Hex": original[:28].hex(),
+            }
+
         def finish(status: str, reason: str, receiver: tuple[str, str] | None = None,
-                   received_packet: IPv4Datagram | None = None) -> dict:
+                   received_packet: IPv4Datagram | None = None,
+                   failure_context: dict | None = None) -> dict:
             return {
                 "status": status, "meaning": reason,
                 "sourceIpv4": packet.source,
@@ -70,6 +85,7 @@ class IPv4Trace:
                 "steps": steps,
                 "macTables": self.fabric.learned_mac_tables(),
                 "ephemeral": True,
+                "routerErrorCandidate": failure_context,
                 "icmpSent": protocol == ICMP_PROTOCOL and any(step["ipv4Transmissions"] for step in steps),
                 "deliveredDatagram": ({
                     "sourceIpv4": received_packet.source,
@@ -82,18 +98,25 @@ class IPv4Trace:
 
         for hop in range(MAX_FORWARDING_ROUTERS + 1):
             device_id, ingress_or_source_port = endpoint
+            received_packet = packet
             device = self.nodes[device_id]
             if hop and device["kind"] != "router":
                 return finish("NON_ROUTER", "A non-router endpoint does not forward transit IPv4 packets.")
             if hop:
                 if packet.ttl <= 1:
-                    return finish("TTL_EXPIRED", "TTL expired before transit-router forwarding; ICMP Time Exceeded is not implemented.")
+                    return finish("TTL_EXPIRED", "TTL expired before transit-router forwarding; candidate for a separately routed ICMP Time Exceeded message.",
+                                  failure_context=router_failure(ICMP_TIME_EXCEEDED, received_packet,
+                                                                device_id, ingress_or_source_port))
                 # A router decrements TTL when forwarding; the preceding sender
                 # never decrements TTL on behalf of the receiving router.
                 packet = packet.forwarded()
             route = ConnectedRoutingTable(self.project, device_id).lookup(packet.destination)
             if route["status"] == "NO_ROUTE":
-                return finish("NO_ROUTE", "The current node has no matching active configured IPv4 route.")
+                return finish("NO_ROUTE", "The current node has no matching active configured IPv4 route.",
+                              failure_context=(
+                                  router_failure(ICMP_DEST_UNREACHABLE, received_packet,
+                                                 device_id, ingress_or_source_port)
+                                  if hop else None))
             if route["status"] == "AMBIGUOUS":
                 return finish("AMBIGUOUS_ROUTE", "Equally specific routes exist; no route preference is invented.")
             chosen = route["selectedRoute"]
@@ -127,7 +150,7 @@ class IPv4Trace:
             if decoded_packet != packet:
                 raise ProjectValidationError("ipv4: serialized datagram failed byte roundtrip")
             if decoded_packet.protocol == ICMP_PROTOCOL:
-                ICMPEcho.parse(decoded_packet.payload)
+                parse_icmp_message(decoded_packet.payload)
             forwarded = self.fabric.inject_frame(device_id, out_port, frame)
             step["ipv4Transmissions"] = forwarded["transmissions"]
             step["vlanDrops"] = forwarded.get("vlanDrops", [])

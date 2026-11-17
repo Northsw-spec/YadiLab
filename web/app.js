@@ -417,6 +417,25 @@ function renderPing() {
     `Echo id=${data.identifier} seq=${data.sequence}`,
     `Echo Reply matchad: ${data.replyMatched ? 'JA' : 'NEJ'}`,
   ];
+  if (!data.icmpError) {
+    lines.push('ICMP-routerfel: inget paket genererat eller mottaget.');
+  } else {
+    const error = data.icmpError;
+    const kind = error.type === 11 ? 'Time Exceeded' : error.type === 3 ?
+      'Destination Unreachable (Network)' : 'Unsupported';
+    lines.push(`ICMP-routerfel: ${kind} · typ ${error.type}/kod ${error.code} · ${error.status}`);
+    lines.push(`  Genererande router: ${error.sourceNode}/${error.sourcePort}`);
+    lines.push(`  Citerat original-IP: ${error.quotedSourceIpv4} → ${error.quotedDestinationIpv4}`);
+    lines.push(`  Felpaketets returtransport: ${error.trace.status}`);
+    for (const [i,step] of error.trace.steps.entries()) {
+      lines.push(`    Hopp ${i+1}: ${step.node}/${step.outPort}, ${step.route.type} ${step.route.destination}`);
+      lines.push(`    ARP: ${step.arp.status} · ${step.arp.resolvedMac || 'MAC ej upplöst'}`);
+      lines.push(`    Kablar: ${step.ipv4Transmissions.map(t=>t.linkId).join(', ') || 'inga'}`);
+    }
+    if (error.status !== 'RECEIVED') {
+      lines.push('ICMP-felet nådde INTE ursprungsporten; endast felsymptom observerades.');
+    }
+  }
   for (const [label, trace] of [['Request',data.request],['Reply',data.reply]]) {
     if (!trace) {
       lines.push(`${label}: ingen faktisk datagramöverföring`);
@@ -434,7 +453,7 @@ function renderPing() {
       }
     }
   }
-  lines.push('Svarstid: ej uppmätt. Inga ICMP-felmeddelanden, TCP/UDP eller externa nät verifieras.');
+  lines.push('Svarstid: ej uppmätt. ICMP-fel visas endast när paketet faktiskt returnerat. Inga externa nät verifieras.');
   output.textContent = lines.join('\n');
 }
 

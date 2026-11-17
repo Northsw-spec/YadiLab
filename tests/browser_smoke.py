@@ -603,6 +603,52 @@ def run():
             assert invalid_ip.value.status == 422
             expect(page.locator('#ping-result')).to_contain_text('ICMP Echo avvisad')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # PR19: the previously documented nonreachable gateway is NOT
+            # a router. Explicitly reconfigure existing reached client node
+            # into a router, and point the already declared static next-hop
+            # to that real port. No new cable or address is inferred.
+            page.locator('[data-item-type="node"][data-item-id="node-3"]').click()
+            page.locator('#node-kind').select_option('router')
+            page.locator('[data-item-type="node"][data-item-id="node-1"]').click()
+            page.locator('[data-route-next-hop="route-1"]').fill('192.0.2.20')
+            with page.expect_response('**/api/validate') as edited_gateway:
+                page.locator('[data-route-next-hop="route-1"]').dispatch_event('change')
+            assert edited_gateway.value.status == 200
+            expect(page.locator('[data-route-next-hop="route-1"]')).to_have_value('192.0.2.20')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            page.locator('#ping-destination').fill('203.0.113.10')
+            page.locator('#ping-ttl').fill('1')
+            with page.expect_response('**/api/icmp/echo') as exceeded:
+                page.locator('#run-ping').click()
+            assert exceeded.value.status == 200
+            exceeded_data = exceeded.value.json()
+            assert exceeded_data['status'] == 'REQUEST_FAILED'
+            assert exceeded_data['request']['status'] == 'TTL_EXPIRED'
+            assert exceeded_data['icmpError']['type'] == 11
+            assert exceeded_data['icmpError']['status'] == 'RECEIVED'
+            assert exceeded_data['icmpError']['trace']['receiver'] == {'node':'node-1','port':'port-1'}
+            assert exceeded_data['replyMatched'] is False
+            expect(page.locator('#ping-result')).to_contain_text('ICMP-routerfel: Time Exceeded')
+            expect(page.locator('#ping-result')).to_contain_text('typ 11/kod 0 · RECEIVED')
+            expect(page.locator('#ping-result')).to_contain_text('Felpaketets returtransport: DELIVERED')
+
+            # The same real router has no route toward 203.0.113.10; this
+            # invokes distinct RFC 792 Type 3 / Code 0, not a fabricated
+            # "destination host ping" or guessed gateway.
+            page.locator('#ping-ttl').fill('4')
+            with page.expect_response('**/api/icmp/echo') as no_route:
+                page.locator('#run-ping').click()
+            assert no_route.value.status == 200
+            err_data = no_route.value.json()
+            assert err_data['status'] == 'REQUEST_FAILED'
+            assert err_data['request']['status'] == 'NO_ROUTE'
+            assert err_data['icmpError']['type'] == 3
+            assert err_data['icmpError']['code'] == 0
+            assert err_data['icmpError']['status'] == 'RECEIVED'
+            expect(page.locator('#ping-result')).to_contain_text('Destination Unreachable (Network)')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
