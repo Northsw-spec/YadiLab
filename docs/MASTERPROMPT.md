@@ -188,7 +188,7 @@ Allt arbete sker i **detta repository**, utifrån aktuell verifierad `main`. Lä
 7. Publicera i den enda utvecklingslinjen.
 8. Verifiera CI på exakt slutlig commit.
 9. Rapportera verkliga resultat och kvarvarande begränsningar.
-10. Merga **inte** utan användarens godkännande och utan att GitHubs skyddsregler uppfylls.
+10. **Merga automatiskt alltid när det är säkert och verifierat:** Användaren har lämnat stående godkännande för merge av färdiga PR:er. Kontrollera senaste `main`, exakt PR-HEAD, samtliga obligatoriska tester och CI-kontroller (PASS, inte PENDING), konfliktfri/mergebar status, eventuella blockerande granskningar och branchskydd. Genomför normalt squash-merge direkt när alla villkor är uppfyllda, utan nytt godkännande. Vid FAIL, PENDING, konflikt, oklarhet eller bristande behörighet: stoppa och rapportera, kringgå aldrig regler. Detta innebär inte att utveckling eller merge sker i bakgrunden utan en faktiskt aktiv automation.
 
 Eftersträva en konsoliderad implementationscommit per PR. Skriv aldrig över konkurrerande ändringar okontrollerat. Efter merge ska överflödiga källgrenar raderas; samla inte vilande grenar.
 
