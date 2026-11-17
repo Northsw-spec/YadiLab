@@ -101,7 +101,13 @@ Longest-prefix match omfattar nu både `CONNECTED` och `STATIC`; lika specifika 
 
 **Topologisk grafväg är inte ping, IP-routing, VLAN-medveten reachability, brandväggslogik eller ett bevis på nätverksanslutning.** Första versionens grafspårning traverserar dokumentationsgrafen, inte verkliga protokoll.
 
-Ännu inte implementerat: XLSX/ODS-import eller godtyckliga CSV-format, IP forwarding, Layer 2 bridging, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+Ännu inte implementerat: ODS-import eller godtyckliga kalkylbladsformat, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, extern nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+
+## Import av strikt XLSX-dokumentation (PR #23)
+
+Builder kan nu importera **en XLSX-arbetsbok** med namngivna blad `Devices` (obligatoriskt), `Interfaces`, `Links` och `Zones` (valfria). Varje blad har exakt motsvarande CSV-tabells kolumner; kolumnordning och bladordning får variera. Det är **inte en generell Excel-importör**. Textidentiteter måste förbli textceller; numeriska celler stöds för `x`/`y`, booleanceller för `enabled`, och vanliga `inlineStr` och delade strängar stöds. Okända blad, formler, dolda rader/blad, sammanslagna celler, makron, externa länkar och extra workbookdelar avvisas. Den första XLSX-versionen importerar enbart kanoniskt **schema 1.0**, alltså inte MAC-/VLAN-/routefält som finns i senare schema.
+
+Import görs med **Importera**, en `.xlsx` och uttryckligt projektnamn. Servern konverterar de strikta OOXML-tabellerna till den **befintliga CSV-valideringen** och returnerar ett helt validerat dokument före något beslut om att ersätta arbetsytan. Användaren får därefter bekräfta, och **Save krävs separat** för att skriva till disk. Se [XLSX-kontraktet](docs/XLSX_IMPORT.md).
 
 ## Import av explicit CSV-dokumentation
 
@@ -118,7 +124,7 @@ Det är ett **definierat CSV-utbytesformat**, inte en generell importerare för 
 
 `kind` är `host`, `switch`, `router` eller `firewall`. `x` och `y` är uttryckligen angivna presentationskoordinater. `zoneId` och `ipv4` kan lämnas tomma (motsvarar null); övriga värden krävs. `enabled` måste vara exakt `true` eller `false`. Länkar skapas **enbart** från `Links.csv` med ändpunkter som deklarerats i `Interfaces.csv`.
 
-Okända fält, odeklarerade portar, ogiltiga referenser och malformed CSV avvisas helt. Exempel finns i `examples/csv/`. XLSX/ODS och godtyckliga CSV-format stöds inte ännu.
+Okända fält, odeklarerade portar, ogiltiga referenser och malformed CSV avvisas helt. Exempel finns i `examples/csv/`. ODS och godtyckliga Excel-/CSV-format stöds inte ännu.
 
 ## Filformat
 
