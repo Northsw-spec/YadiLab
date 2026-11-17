@@ -773,7 +773,12 @@ def run():
             assert lost_t1['result']['status'] == 'REQUEST_NOT_RECEIVED'
             assert lost_t1['result']['leaseRenewed'] is False
             assert lost_t1['result']['ack']['transmissions'] == []
-            assert [t['linkId'] for t in lost_t1['result']['request']['transmissions']] == ['wire-3']
+            # Switch MAC learning was flushed by the cable transition.
+            # Unknown unicast floods to other live client ports, never to
+            # the disconnected server cable.
+            assert [t['linkId'] for t in lost_t1['result']['request']['transmissions']] == [
+                'wire-3', 'to-client', 'wire-2']
+            assert lost_t1['result']['request']['receivedAtServer'] is False
             assert lost_t1['leases'][0]['expiresAtSeconds'] == 3600
             expect(dhcp_page.locator('#dora-session-renew-result')).to_contain_text(
                 'DHCP-förnyelse: REQUEST_NOT_RECEIVED · RENEWING')
