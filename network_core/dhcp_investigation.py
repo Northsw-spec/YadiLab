@@ -214,7 +214,9 @@ class InvestigationSession:
         }
 
     def repair(self) -> dict:
-        if not self._diagnosed or self._repaired:
+        if self._repaired:
+            raise ProjectValidationError("investigation: exercise already repaired")
+        if not self._diagnosed:
             raise ProjectValidationError("investigation: correct diagnosis required before repair")
         self._inject(False)
         result = self.lab.renew(
