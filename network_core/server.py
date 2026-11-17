@@ -21,6 +21,7 @@ from .ods_import import import_ods_workbook
 from .spreadsheet_templates import template_bytes
 from .spreadsheet_export import export_workbook
 from .arp import ArpSession
+from .dhcp import discover_offer
 from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
 from .ipv4 import IPv4Trace
@@ -207,6 +208,19 @@ class Handler(BaseHTTPRequestHandler):
                 # graph paths, cached MAC/ARP entries, or invent IP forwarding.
                 self._json(200, ConnectedRoutingTable(body["project"], body["nodeId"])
                            .lookup(body["destinationIpv4"]))
+            elif path == "/api/dhcp/discover-offer":
+                required = {"project", "clientNode", "clientPort", "serverNode",
+                            "serverPort", "proposedIpv4", "transactionId", "leaseSeconds"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "dhcp: expected project, clientNode, clientPort, serverNode, "
+                        "serverPort, proposedIpv4, transactionId and leaseSeconds")
+                # DHCP bootstrap broadcast is intentionally bounded separately
+                # from regular unicast IPv4 forwarding. One real L2 fabric.
+                self._json(200, discover_offer(
+                    body["project"], body["clientNode"], body["clientPort"],
+                    body["serverNode"], body["serverPort"], body["proposedIpv4"],
+                    body["transactionId"], body["leaseSeconds"]))
             elif path == "/api/diagnostics/arp":
                 if not isinstance(body, dict) or set(body) != {"project", "sourceNode", "sourcePort", "targetIpv4"}:
                     raise ProjectValidationError("arp diagnostics: expected project, sourceNode, sourcePort, targetIpv4")
