@@ -349,7 +349,10 @@ class InvestigationSession:
             request_received = proof["request"]["receivedAtServer"]
             ack_received = proof["ack"]["receivedAtClient"]
             discover_received = proof["discover"]["receivedAtServer"]
-            offer_received = proof["offer"]["receivedAtClient"]
+            # The DORA engine proves OFFER arrival before continuing to
+            # DHCPREQUEST; its offer trace does not expose a separate boolean.
+            offer_received = proof["status"] in (
+                "REQUEST_NOT_RECEIVED", "ACK_NOT_RECEIVED", "ACK_RECEIVED")
         else:
             proof = self.lab.renew(
                 self.client_node, self.client_port,
