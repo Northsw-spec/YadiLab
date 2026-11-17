@@ -1,5 +1,7 @@
 # Explicit versioned XLSX/ODS interchange format — schema 1.3
 
+The Builder offers two real binary schema-1.3 example workbooks (XLSX and ODS) under the saved-project controls. Each is a **labelled demo**, not an observed network. Their routes are declared facts but do not imply successful reachability. Validation failures for versioned cells include the original source cell address when the row/column is unambiguous. See [template downloads and diagnostics](SPREADSHEET_TEMPLATES.md).
+
 ## Schema version selection
 
 **Unversioned** workbooks continue to have exactly the original four-sheet schema-1.0 contract. No automatic schema migration is performed. To import **schema 1.3** the workbook **must** have a sheet named `Project` whose entire content is precisely:

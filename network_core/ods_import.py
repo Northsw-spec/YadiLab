@@ -135,6 +135,14 @@ def _cell(cell: ET.Element, where: str, field: str) -> tuple[str, int]:
     _fail(where, f"unsupported value-type {kind!r}, including dates and errors")
 
 
+def _column_label(index: int) -> str:
+    letters = ""
+    while index:
+        index, digit = divmod(index - 1, 26)
+        letters = chr(65 + digit) + letters
+    return letters
+
+
 def _row(row: ET.Element, name: str, row_index: int, header: list[str] | None,
          columns: tuple[str, ...]) -> tuple[list[str], int]:
     where = f"{name} row {row_index}"
@@ -152,7 +160,7 @@ def _row(row: ET.Element, name: str, row_index: int, header: list[str] | None,
     values: list[str] = []
     for cell in row:
         field = (header[len(values)] if header is not None and len(values) < width else "header")
-        value, repeat = _cell(cell, where, field)
+        value, repeat = _cell(cell, f"{name}!{_column_label(len(values) + 1)}{row_index}", field)
         if repeat > 1 and value:
             _fail(where, "repeated nonempty cell not supported")
         if len(values) >= width:
@@ -217,7 +225,7 @@ def _sheet(sheet: ET.Element, name: str, columns: tuple[str, ...]) -> str:
     if not rows:
         _fail(where, "missing header")
     if len(set(rows[0])) != width or set(rows[0]) != set(columns):
-        _fail(where, "expected exactly the named CSV columns (any order)")
+        _fail(f"{name}!1 (header)", "expected exactly the named columns (any order)")
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
     writer.writerows(rows)

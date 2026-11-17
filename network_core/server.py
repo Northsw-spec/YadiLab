@@ -17,6 +17,7 @@ from .model import ProjectValidationError, topology_trace, validate_project
 from .csv_import import import_csv_tables
 from .xlsx_import import import_xlsx_workbook
 from .ods_import import import_ods_workbook
+from .spreadsheet_templates import template_bytes
 from .arp import ArpSession
 from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
@@ -78,6 +79,21 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/health":
                 self._json(200, {"app": config.APP_NAME, "version": __version__, "storage": "local"})
+            elif path in ("/api/templates/xlsx", "/api/templates/ods"):
+                extension = path.rsplit("/", 1)[1]
+                payload = template_bytes(extension)
+                mime = ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        if extension == "xlsx" else
+                        "application/vnd.oasis.opendocument.spreadsheet")
+                self.send_response(200)
+                self.send_header("Content-Type", mime)
+                self.send_header("Content-Disposition",
+                                 f'attachment; filename="network-schema13-demo.{extension}"')
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(payload)
             elif path == "/api/projects":
                 self._json(200, {"projects": self.server.store.list()})
             elif path.startswith("/api/projects/"):
