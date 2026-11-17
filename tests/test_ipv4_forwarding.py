@@ -151,8 +151,10 @@ class IPv4TraceTests(unittest.TestCase):
                          [["la","lr1"],["lr2","lb"]])
         self.assertEqual(data["steps"][0]["route"]["type"],"STATIC")
         self.assertEqual(data["steps"][1]["route"]["type"],"CONNECTED")
-        self.assertEqual(data["steps"][0]["ipv4Transmissions"][0]["vlanId"],10)
-        self.assertEqual(data["steps"][1]["ipv4Transmissions"][0]["vlanId"],20)
+        self.assertIsNone(data["steps"][0]["ipv4Transmissions"][0]["vlanId"])
+        self.assertEqual(data["steps"][0]["ipv4Transmissions"][1]["vlanId"],10)
+        self.assertIsNone(data["steps"][1]["ipv4Transmissions"][0]["vlanId"])
+        self.assertEqual(data["steps"][1]["ipv4Transmissions"][1]["vlanId"],20)
         self.assertEqual(p,original)
 
     def test_same_subnet_direct_wire_with_ttl_one_delivers_without_router(self):
@@ -163,8 +165,7 @@ class IPv4TraceTests(unittest.TestCase):
         # Use right-side broadcast domain only, cable physically rebuilt.
         p["links"] = [l for l in p["links"] if l["id"] not in ("la","lr1")]
         p["links"].append(link("host-cable","a","eth0","sw-left","a"))
-        getport(p,"r","wan")["ipv4"]="203.0.113.1/24"
-        # Instead, replace left-side switch->router wire with direct client b
+        # Replace left-side switch->router wire with direct client b
         # by moving destination b onto left segment.
         p["links"]=[l for l in p["links"] if l["id"] != "lb"]
         p["links"].append(link("destination","sw-left","r","b","eth0"))

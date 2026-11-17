@@ -70,8 +70,12 @@ class IPv4Trace:
             device = self.nodes[device_id]
             if hop and device["kind"] != "router":
                 return finish("NON_ROUTER", "A non-router endpoint does not forward transit IPv4 packets.")
-            if hop and packet.ttl <= 1:
-                return finish("TTL_EXPIRED", "TTL became insufficient at a transit router; ICMP Time Exceeded is not implemented.")
+            if hop:
+                if packet.ttl <= 1:
+                    return finish("TTL_EXPIRED", "TTL expired before transit-router forwarding; ICMP Time Exceeded is not implemented.")
+                # A router decrements TTL when forwarding; the preceding sender
+                # never decrements TTL on behalf of the receiving router.
+                packet = packet.forwarded()
             route = ConnectedRoutingTable(self.project, device_id).lookup(packet.destination)
             if route["status"] == "NO_ROUTE":
                 return finish("NO_ROUTE", "The current node has no matching active configured IPv4 route.")
@@ -135,9 +139,4 @@ class IPv4Trace:
                    if key[0] == endpoint[0]):
                 return finish("LOCAL_DELIVERY_UNSUPPORTED",
                               "Destination IP belongs to a different interface on the router; weak-host local delivery is not modeled.")
-            if packet.ttl <= 1:
-                return finish("TTL_EXPIRED",
-                              "TTL expired at router ingress; no ICMP Time Exceeded is generated.")
-            packet = packet.forwarded()
-
         return finish("HOP_LIMIT", "Simulation router-hop limit reached; no delivery inferred.")
