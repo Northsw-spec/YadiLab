@@ -21,7 +21,7 @@ from .troubleshooting import _mutation, _observed_wires, compare_fault
 MAX_PROBES = 48
 MAX_GUESSES = 3
 KINDS = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH", "STATIC_ROUTE_MISSING",
-         "IPV4_PREFIX_MISMATCH")
+         "IPV4_PREFIX_MISMATCH", "STATIC_NEXT_HOP_UNREACHABLE")
 PROBES = ("address", "route", "ping", "link", "port", "vlan")
 
 
@@ -41,6 +41,48 @@ def _candidates(project: dict, baseline: dict) -> list[tuple[str, dict]]:
                     "type": "STATIC_ROUTE_REMOVED",
                     "nodeId": node["id"], "routeId": route["id"],
                 }))
+    # A changed next-hop must belong to a STATIC route actually selected
+    # during the real successful request/reply exchange, not merely a
+    # documented but unused route. Choose a bounded, unassigned on-link
+    # host address to simulate a wrong gateway; it is NOT a discovered
+    # network device. Only a proven ARP failure can admit the candidate.
+    used_static_routes = {
+        (step["node"], step["route"]["routeId"])
+        for trace in (baseline["request"], baseline["reply"]) if trace is not None
+        for step in trace["steps"]
+        if step["route"]["type"] == "STATIC"
+    }
+    configured_addresses = {
+        ipaddress.IPv4Interface(port["ipv4"]).ip
+        for node in project["nodes"] for port in node["ports"]
+        if port["ipv4"] is not None
+    }
+    for node in project["nodes"]:
+        if node["kind"] == "switch":
+            continue
+        ports = {port["id"]: port for port in node["ports"]}
+        for route in node.get("staticRoutes", []):
+            if (node["id"], route["id"]) not in used_static_routes:
+                continue
+            out_port = ports[route["outPort"]]
+            if not out_port["enabled"] or out_port["ipv4"] is None:
+                continue
+            network = ipaddress.IPv4Interface(out_port["ipv4"]).network
+            start, end = int(network.network_address), int(network.broadcast_address)
+            possible = [start + i for i in range(1, 9)]
+            possible += [end - i for i in range(1, 5)]
+            alternative = next((
+                str(address) for number in possible if start < number < end
+                for address in (ipaddress.IPv4Address(number),)
+                if address not in configured_addresses
+                and str(address) != route["nextHop"]
+            ), None)
+            if alternative is not None:
+                candidates.append(("STATIC_NEXT_HOP_UNREACHABLE", {
+                    "type": "STATIC_NEXT_HOP_CHANGED", "nodeId": node["id"],
+                    "routeId": route["id"], "newNextHop": alternative,
+                }))
+
     # Disabling an enabled switchport is eligible only if its cable was
     # traversed in the real baseline. compare_fault below must still prove
     # independently that the shutdown breaks Echo and can be restored.
@@ -152,11 +194,24 @@ class IcmpInvestigation:
                     destination_ipv4, ttl, 101, 1, fault)
             except ProjectValidationError:
                 continue
-            if confirmed["status"] == "FAULT_CONFIRMED":
-                allowed.append((kind, fault))
+            if confirmed["status"] != "FAULT_CONFIRMED":
+                continue
+            if kind == "STATIC_NEXT_HOP_UNREACHABLE":
+                # The failure must be the modeled lack of an ARP reply to
+                # the injected next-hop, not an unrelated packet failure.
+                traces = (confirmed["faulted"]["request"],
+                          confirmed["faulted"]["reply"])
+                if not any(
+                    trace is not None and trace["status"] == "ARP_FAILED"
+                    and any(step["arp"]["status"] == "NO_REPLY"
+                            for step in trace["steps"])
+                    for trace in traces
+                ):
+                    continue
+            allowed.append((kind, fault))
         if not allowed:
             raise ProjectValidationError(
-                "icmp investigation: no verified reversible link/port/VLAN/route/prefix fault")
+                "icmp investigation: no verified reversible link/port/VLAN/route/prefix/next-hop fault")
         if _test_kind is None:
             choice = allowed[secrets.randbelow(len(allowed))]
         else:
@@ -275,6 +330,10 @@ class IcmpInvestigation:
                     "icmp investigation: route target must be source or destination IPv4")
             result = {
                 **ConnectedRoutingTable(self._faulted, node).lookup(address),
+                "documentedStaticRoutes": deepcopy(next(
+                    n.get("staticRoutes", []) for n in self.project["nodes"]
+                    if n["id"] == node
+                )),
                 "source": "SIMULATED_CONFIG",
             }
         elif kind == "link":

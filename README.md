@@ -177,7 +177,7 @@ API: `POST /api/dhcp/investigation/start` accepterar nu ett **valfritt** uttryck
 
 Varken den kanoniska modellen, riktiga klient-NIC:ar, virtuellt okontrollerat bakgrundsarbete eller sparade projektbytes påverkas. Avancerad nivå inför inte DHCP-relay, riktiga konkurrerande DHCP-servrar, ICMP/routing-felsökning eller automatisk DHCP-retry; detta är fortsatt ett **avgränsat** praktiskt DHCPv4-labb.
 
-## Dolt routing- och Layer 2-felsökningslabb (PR #40)
+## Dolt routing- och Layer 2-felsökningslabb
 
 Builder har en ny **Process of Elimination**-övning för en redan fungerande, uttryckligen dokumenterad tvåvägs-IPv4-kommunikation. Välj klientgränssnitt med dokumenterad IPv4, mål-IP och TTL. Start kräver att den riktiga befintliga `EchoExchange` faktiskt levererar **ICMP Echo Request och korrekt matchad Echo Reply**, genom den existerande IPv4-routing-, ARP-, Ethernet- och VLAN-motorn. Enbart grafväg, adresslikhet eller route lookup räcker aldrig. Om baslinjen redan är trasig avvisas övningen.
 
@@ -188,8 +188,9 @@ Motorn väljer därefter **ett enda dolt fel som redan har bevisats orsaka ett m
 - **Layer 2: fel access-VLAN** på en använd switchport, och bara till ett annat VLAN-ID som redan finns dokumenterat i nätet.
 - **Layer 3: borttagen statisk route** som faktiskt bryter framåt- eller returkommunikationen.
 - **Layer 3: fel IPv4-prefix/nätmask** på ett dokumenterat, aktivt gränssnitt i en observerad paketväg. En snävare mask är tillåten bara efter korrekt kontroll av next-hop och verifierad påverkan på ICMP tur och retur.
+- **Layer 3: fel statisk next-hop** på en route som faktiskt användes i den fungerande ICMP-baslinjen. Ett annat, on-link, odokumenterat gränssnittsvärde injiceras avsiktligt; det godkänns som fel först när motorn visar `ARP_FAILED`/`NO_REPLY` och verkligt simulerad återhämtning efter återställning. Adressen är inte påstådd riktig utrustning.
 
-Användaren får **inte** veta feltyp, nod, port eller route vid start. I Builder finns explicita mätningar: dokumenterad IPv4 och DHCP-bevisläge; enhetsbaserad routingtabell med longest-prefix match (inklusive val av returväg); verklig ICMP Echo med sändningsstatus, ARP-status och faktiskt använda kablar/VLAN-droppar; original mot aktuellt simulerat kabeltillstånd; dokumenterad kontra simulerad administrativ portstatus och IPv4/CIDR; original mot aktuellt simulerat VLAN. Inga råa muterbara projektobjekt eller dolda sessionsfel lämnas via start eller mätning. Observationer är markerade **SIMULATED** eller **SIMULATED_CONFIG**, inte verklig hårdvarutelemetri.
+Användaren får **inte** veta feltyp, nod, port eller route vid start. I Builder finns explicita mätningar: dokumenterad IPv4 och DHCP-bevisläge; enhetsbaserad routingtabell med longest-prefix match och dokumenterad/simulerad statisk next-hop (inklusive val av returväg); verklig ICMP Echo med sändningsstatus, ARP-status och faktiskt använda kablar/VLAN-droppar; original mot aktuellt simulerat kabeltillstånd; dokumenterad kontra simulerad administrativ portstatus och IPv4/CIDR; original mot aktuellt simulerat VLAN. Inga råa muterbara projektobjekt eller dolda sessionsfel lämnas via start eller mätning. Observationer är markerade **SIMULATED** eller **SIMULATED_CONFIG**, inte verklig hårdvarutelemetri.
 
 **Viktig kunskapsgräns:** Nuvarande kanoniska modell dokumenterar en IPv4/CIDR men **inte adressens tilldelningsursprung**. En konfigurerad adress kan alltså inte påstås vara *statisk* eller *från DHCP* enbart utifrån värdet. IP-kontrollen rapporterar därför `dhcpAddressOrigin=UNKNOWN` och `dhcpCheck=NOT_VERIFIED`. Detta routing- och Layer 2-labb är inte ett sammanvävt DHCP-felcase; använd det separata riktiga DHCP-labbet för att testa DHCP-lease och DORA. Inga felaktiga uteslutningar eller falska success-svar förekommer.
 
