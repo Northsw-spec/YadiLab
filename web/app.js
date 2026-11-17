@@ -50,6 +50,9 @@ let traceResult = null;
 let highlightedLinks = [];
 let arpDiagnostic = null;
 let arpHighlightedLinks = [];
+let dhcpDiagnostic = null;
+let dhcpGeneration = 0;
+let dhcpBusy = false;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -82,8 +85,10 @@ const canvas = new TopologyCanvas($('topology'), {
       ipv4Diagnostic = null;
       pingDiagnostic = null;
       troubleDiagnostic = null;
+      invalidateDhcpDiagnostics();
       invalidateSimulationSession();
       renderSessionDiagnostics();
+      renderDhcpDiagnostics();
       canvas.setData(project, selection, pendingPort, highlightedLinks);
       updateSaveIndicator();
     }
@@ -126,8 +131,13 @@ function updateSaveIndicator() {
     : !savedName && !isDirty() ? 'Nytt projekt · ej sparat' : 'Osparade ändringar';
   span.classList.toggle('saved', Boolean(savedName) && !isDirty());
 }
+function invalidateDhcpDiagnostics() {
+  dhcpGeneration += 1;
+  dhcpDiagnostic = null;
+}
 function changed({keepTrace = false} = {}) {
   editRevision += 1;
+  invalidateDhcpDiagnostics();
   if (!keepTrace) {traceResult = null; highlightedLinks = [];}
   routeLookup = null;
   ipv4Diagnostic = null;
@@ -282,6 +292,79 @@ function renderArpDiagnostics() {
     'Inlärda switch-MAC-tabeller:\n' + (tables.length ? tables.join('\n') : '  Inga inlärda poster'),
     'ARP-cache på avsändarporten:\n' + (cache.length ? cache.join('\n') : '  Tom'),
     'Endast denna tillfälliga simulering. Inte ping, IP-routing eller verklig NIC-acceptans.',
+  ].join('\n\n');
+}
+
+function renderDhcpDiagnostics() {
+  const choices = role => project.nodes
+    .filter(n => role === 'client' ? n.kind === 'host' :
+      (n.kind === 'host' || n.kind === 'router'))
+    .flatMap(n => n.ports
+      .filter(p => role === 'client' ? p.ipv4 === null : p.ipv4 !== null)
+      .map(p => ({
+        value: JSON.stringify([n.id, p.id]),
+        label: `${n.label} / ${p.name} (${n.id}/${p.id})`
+          + (p.mac ? '' : ' · MAC saknas'),
+      })));
+  const clientOptions = choices('client');
+  const serverOptions = choices('server');
+  for (const [id, options, empty] of [
+    ['dhcp-client', clientOptions, 'Ingen hostport utan IPv4'],
+    ['dhcp-server', serverOptions, 'Ingen host/routerport med IPv4'],
+  ]) {
+    const selector = $(id);
+    const previous = selector.value;
+    selector.replaceChildren(
+      ...(options.length ? options.map(item => el('option', {value: item.value}, item.label))
+        : [el('option', {value: ''}, empty)]));
+    if (options.some(item => item.value === previous)) selector.value = previous;
+  }
+  $('run-dhcp').disabled = dhcpBusy || !clientOptions.length || !serverOptions.length;
+  const output = $('dhcp-result');
+  output.classList.remove('ok', 'fail');
+  if (dhcpBusy && !dhcpDiagnostic) {
+    output.textContent = 'Simulerar DHCPDISCOVER och eventuell DHCPOFFER över deklarerat Layer 2…';
+    return;
+  }
+  if (!dhcpDiagnostic) {
+    output.textContent = 'Ingen aktuell DHCP-diagnostik. Välj klient, server och föreslagen IPv4; inget tilldelas eller sparas.';
+    return;
+  }
+  if (dhcpDiagnostic.error) {
+    output.classList.add('fail');
+    output.textContent = `DHCP-diagnostik avvisad: ${dhcpDiagnostic.error}\nIngen DHCP-adress har tilldelats.`;
+    return;
+  }
+  const data = dhcpDiagnostic;
+  output.classList.add(data.status === 'OFFER_RECEIVED' ? 'ok' : 'fail');
+  const transmissions = items => items.length
+    ? items.map(t =>
+      `  ${t.linkId}: ${t.from.node}/${t.from.port} → ${t.to.node}/${t.to.port}`
+      + (t.vlanId == null ? ' · otaggad' : ` · VLAN ${t.vlanId}`)
+      + (t.tagged ? ' (802.1Q)' : '')).join('\n')
+    : '  Inga';
+  const vlanDrops = items => items.length
+    ? items.map(d => `  ${d.switch}/${d.port}: ${d.reason} · VLAN ${d.vlanId ?? 'okänt'}`).join('\n')
+    : '  Inga observerade';
+  const learned = data.macTables.flatMap(t => [
+    `  ${t.switchId}${t.vlanId == null ? ' (otaggad)' : ` VLAN ${t.vlanId}`}:`,
+    ...Object.entries(t.entries).map(([mac, port]) => `    ${mac} → ${port}`),
+  ]);
+  output.textContent = [
+    `DHCP-status: ${data.status} · transaktions-ID ${data.transactionId}`,
+    data.meaning,
+    `DISCOVER (klient → broadcast): ${data.discover.transmissions.length} fysisk(a) överföring(ar)\n`
+      + transmissions(data.discover.transmissions),
+    `Vald serverport nåddes: ${data.discover.receivedAtServer ? 'ja' : 'nej'}`,
+    `OFFER (server → broadcast): ${data.offer.transmissions.length} fysisk(a) överföring(ar)\n`
+      + transmissions(data.offer.transmissions),
+    `VLAN-drop, Discover:\n${vlanDrops(data.discover.vlanDrops)}`,
+    `VLAN-drop, Offer:\n${vlanDrops(data.offer.vlanDrops)}`,
+    `Tillfälligt inlärda MAC-tabeller:\n${learned.join('\n') || '  Inga'}`,
+    data.status === 'OFFER_RECEIVED'
+      ? `Föreslagen IP: ${data.offeredIpv4} · mask ${data.subnetMask} · server ${data.serverIdentifier}`
+      : 'Inget erbjudande bekräftat på klientporten.',
+    'Lease skapad: NEJ. Ingen DHCPREQUEST/ACK. Ingen adress konfigureras, och ledighet i verkligt nät är inte verifierad.',
   ].join('\n\n');
 }
 
@@ -923,6 +1006,7 @@ function render() {
   renderInspector();
   updateTraceSelectors();
   renderArpDiagnostics();
+  renderDhcpDiagnostics();
   renderSessionDiagnostics();
   renderRouteLookup();
   renderIPv4Trace();
@@ -1053,6 +1137,7 @@ async function openProject() {
     savedSnapshot = JSON.stringify(project);
     selection = null; pendingPort = null; traceResult = null; highlightedLinks = [];
     arpDiagnostic = null; arpHighlightedLinks = [];
+    invalidateDhcpDiagnostics();
     render(); canvas.fit();
     notify(`Öppnade verklig projektfil: ${loaded.filename}.yadilab · SHA-256 ${loaded.sha256.slice(0,14)}…`);
   } catch (error) { notify(`Kunde inte öppna: ${error.message}`,true); }
@@ -1145,6 +1230,52 @@ async function exportProject() {
     notify('Export/nedladdning initierad. Webbläsarens faktiska skrivning till disk är inte verifierad.');
   } catch (error) { notify(`Export avvisad: ${error.message}`,true); }
 }
+async function runDhcp() {
+  if (dhcpBusy) return;
+  const currentInputs = () => [
+    $('dhcp-client').value, $('dhcp-server').value,
+    $('dhcp-offered-ip').value.trim(), $('dhcp-transaction-id').value.trim(),
+    $('dhcp-lease-seconds').value.trim(),
+  ];
+  const inputs = currentInputs();
+  const [client, server, proposedIpv4, rawTransaction, rawLease] = inputs;
+  const parseInteger = value => /^[0-9]+$/.test(value) ? Number(value) : NaN;
+  const transactionId = parseInteger(rawTransaction);
+  const leaseSeconds = parseInteger(rawLease);
+  if (!client || !server || !proposedIpv4 ||
+      !Number.isSafeInteger(transactionId) || transactionId < 1 || transactionId > 4294967295 ||
+      !Number.isSafeInteger(leaseSeconds) || leaseSeconds < 60 || leaseSeconds > 604800) {
+    invalidateDhcpDiagnostics();
+    dhcpDiagnostic = {error: 'Välj klient och server, ange föreslagen IPv4, transaktions-ID 1–4294967295 och leasetid 60–604800.'};
+    renderDhcpDiagnostics();
+    return;
+  }
+  const [clientNode, clientPort] = JSON.parse(client);
+  const [serverNode, serverPort] = JSON.parse(server);
+  const snapshot = JSON.stringify(project);
+  const snapshotWorkspace = workspaceRevision;
+  const snapshotEdit = editRevision;
+  const generation = ++dhcpGeneration;
+  dhcpDiagnostic = null;
+  dhcpBusy = true;
+  renderDhcpDiagnostics();
+  const stillCurrent = () => generation === dhcpGeneration &&
+    workspaceRevision === snapshotWorkspace && editRevision === snapshotEdit &&
+    JSON.stringify(project) === snapshot && JSON.stringify(currentInputs()) === JSON.stringify(inputs);
+  try {
+    const response = await api('/api/dhcp/discover-offer', {
+      project: JSON.parse(snapshot), clientNode, clientPort, serverNode, serverPort,
+      proposedIpv4, transactionId, leaseSeconds,
+    });
+    if (stillCurrent()) dhcpDiagnostic = response;
+  } catch (error) {
+    if (stillCurrent()) dhcpDiagnostic = {error: error.message};
+  } finally {
+    dhcpBusy = false;
+    renderDhcpDiagnostics();
+  }
+}
+
 async function runArp() {
   const selected = $('arp-source').value;
   const targetIpv4 = $('arp-target-ip').value.trim();
@@ -1490,6 +1621,14 @@ $('route-destination-ip').addEventListener('input', () => {
   routeLookup = null; renderRouteLookup();
 });
 $('run-arp').addEventListener('click', runArp);
+$('run-dhcp').addEventListener('click', runDhcp);
+for (const id of ['dhcp-client', 'dhcp-server', 'dhcp-offered-ip',
+                  'dhcp-transaction-id', 'dhcp-lease-seconds']) {
+  $(id).addEventListener(id === 'dhcp-client' || id === 'dhcp-server' ? 'change' : 'input', () => {
+    invalidateDhcpDiagnostics();
+    renderDhcpDiagnostics();
+  });
+}
 $('session-start').addEventListener('click', startSimulationSession);
 $('session-arp').addEventListener('click', () => runSimulationOperation('arp'));
 $('session-ethernet').addEventListener('click', () => runSimulationOperation('ethernet'));
