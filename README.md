@@ -1,6 +1,6 @@
 # Ren nätverkslabb-app — kanonisk topologi
 
-**Självständig nyimplementation.** Repositoryt heter `YadiLab-a`, men det är **inte appens namn**. Ändra endast `APP_NAME` i `network_core/config.py` för att byta appens visningsnamn. Ingen kod har kopierats från det äldre projektet.
+**Självständig nyimplementation.** Repositoryts tekniska namn är inte produktens namn. Ändra endast `APP_NAME` i `network_core/config.py` för att byta appens visningsnamn. Alla användarsynliga namn hämtas från den deklarationen. Ingen äldre produktkod har kopierats in.
 
 Version 0.1 är en körbar lokal desktop/webb-hybrid för att dokumentera enheter, portar, zoner och **uttryckligen deklarerade** fysiska länkar. Grafspårningen är avsiktligt begränsad. Projekt lagras på riktigt i `.yadilab`-filer. Programmet fungerar helt lokalt utan npm-installation, moln eller tredjepartsbibliotek i runtime.
 
@@ -54,7 +54,7 @@ Okända fält, odeklarerade portar, ogiltiga referenser och malformed CSV avvisa
 
 ## Filformat
 
-UTF-8 JSON, `.yadilab`:
+UTF-8 JSON, `.yadilab` (befintlig dokumentfiländelse, inte ett produktnamn):
 
 ```json
 {

@@ -431,7 +431,7 @@ async function importProjects(files) {
         sources.push({name: file.name, text: await decodeUtf8(file)});
       }
       result = await api('/api/import/csv', {projectName, files: sources});
-    } else if (files.length === 1 && /\.(?:json|yadilab)$/i.test(files[0].name)) {
+    } else if (files.length === 1 && ['.json', '.yadilab'].some(extension => files[0].name.toLowerCase().endsWith(extension))) {
       if (files[0].size > 8 * 1024 * 1024) throw new Error('Filen är större än 8 MiB.');
       result = await api('/api/validate', JSON.parse(await decodeUtf8(files[0])));
     } else {

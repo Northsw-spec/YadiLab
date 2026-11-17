@@ -38,4 +38,4 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 
 ## Nästa steg (inte implementerade)
 
-Inför verklig IP-simulering först när routingtabell, L2-beteende, nätmask, TTL och avvisningsvillkor definierats och verifierats separat. Integrera inte äldre YadiLab-n-motorkod per automatik. Det definierade fyrtabells-CSV-formatet har en separat strikt importör. XLSX/ODS och godtyckliga CSV-scheman kräver egna kontrakt och verifierbara avvisningsfall.
+Inför verklig IP-simulering först när routingtabell, L2-beteende, nätmask, TTL och avvisningsvillkor definierats och verifierats separat. Integrera inte äldre projekts motorkod per automatik. Det definierade fyrtabells-CSV-formatet har en separat strikt importör. XLSX/ODS och godtyckliga CSV-scheman kräver egna kontrakt och verifierbara avvisningsfall.
