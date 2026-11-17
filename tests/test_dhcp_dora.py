@@ -93,7 +93,7 @@ class DORACodecTests(unittest.TestCase):
             (0, 2),       # request must be BOOTREQUEST, not reply
             (16, 5),      # requesting client has no yiaddr
             (241, 4),     # message type altered to DECLINE
-            (246, 49),    # 50 option is required, not 49
+            (243, 49),    # 50 option is required, not 49
         ):
             raw = bytearray(request.serialize())
             raw[offset] = replacement
