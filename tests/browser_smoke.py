@@ -33,6 +33,7 @@ from network_core.ods_import import import_ods_workbook
 from test_dhcp import topology as dhcp_topology
 from test_dhcp_registry import clients as dhcp_multi_clients
 from test_dhcp_port_vlan_fault import vlan_clients as dhcp_vlan_clients
+from test_icmp_echo import routed_reply_lab as icmp_routed_lab
 
 
 def port():
@@ -1222,6 +1223,172 @@ def run():
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
             assert not errors, errors
             vlan_page.close()
+
+            # PR40: separate routed two-way Echo investigation. An opaque
+            # cause is chosen ONLY among real failed/recovered ARP/IP/L2 trials.
+            # The student must not infer DHCP from a documented IPv4.
+            icmp_page = context.new_page()
+            icmp_page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+            assert browser_open(icmp_page, base) == network_mode
+            icmp_page.once('dialog', lambda dialog: dialog.accept())
+            with icmp_page.expect_response('**/api/validate') as routed_import:
+                icmp_page.locator('#import-file').set_input_files({
+                    'name': 'routed-echo-investigation.json',
+                    'mimeType': 'application/json',
+                    'buffer': json.dumps(icmp_routed_lab()).encode('utf-8'),
+                })
+            assert routed_import.value.status == 200
+            expect(icmp_page.locator('[data-node-id="a"]')).to_have_count(1)
+            expect(icmp_page.locator('[data-node-id="r"]')).to_have_count(1)
+            icmp_page.locator('#icmp-investigation-source').select_option(
+                json.dumps(['a', 'eth0'], separators=(',', ':')))
+            icmp_page.locator('#icmp-investigation-destination').fill('203.0.113.20')
+            icmp_page.locator('#icmp-investigation-ttl').fill('5')
+            with icmp_page.expect_response('**/api/icmp/investigation/start') as icmp_started:
+                icmp_page.locator('#icmp-investigation-start').click()
+            started = icmp_started.value.json()
+            assert icmp_started.value.status == 200, started
+            assert started['sourceIpv4'] == '192.0.2.10'
+            assert started['destinationIpv4'] == '203.0.113.20'
+            assert started['dhcpAddressOrigin'] == 'UNKNOWN'
+            assert started['dhcpCheck'] == 'NOT_VERIFIED'
+            assert 'fault' not in json.dumps(started)
+            assert not any(name in json.dumps(started) for name in (
+                'CABLE_DOWN', 'VLAN_MISMATCH', 'STATIC_ROUTE_MISSING'))
+            expect(icmp_page.locator('#icmp-investigation-status')).to_contain_text(
+                'Aktiv dold övning')
+            expect(icmp_page.locator('#icmp-investigation-diagnose')).to_be_disabled()
+            with icmp_page.expect_response('**/api/icmp/investigation/probe') as icmp_ip:
+                icmp_page.locator('#icmp-investigation-measure').click()
+            ip_observation = icmp_ip.value.json()['observation']
+            assert ip_observation['dhcpStatus'] == 'NOT_VERIFIED'
+            assert ip_observation['origin'] == 'UNKNOWN'
+            expect(icmp_page.locator('#icmp-investigation-observations')).to_contain_text(
+                'DHCP-ursprung: UNKNOWN · kontroll: NOT_VERIFIED')
+            icmp_page.locator('#icmp-investigation-probe').select_option('ping')
+            with icmp_page.expect_response('**/api/icmp/investigation/probe') as icmp_ping:
+                icmp_page.locator('#icmp-investigation-measure').click()
+            echo = icmp_ping.value.json()['observation']
+            assert echo['status'] != 'REPLIED'
+            assert echo['replyMatched'] is False
+            assert echo['source'] == 'SIMULATED'
+            assert echo['requestStatus']
+            expect(icmp_page.locator('#icmp-investigation-observations')).to_contain_text(
+                'ICMP:')
+            icmp_page.locator('#icmp-investigation-probe').select_option('route')
+            icmp_page.locator('#icmp-investigation-route-node').select_option('a')
+            with icmp_page.expect_response('**/api/icmp/investigation/probe') as icmp_forward:
+                icmp_page.locator('#icmp-investigation-measure').click()
+            forward = icmp_forward.value.json()['observation']
+            assert forward['destinationIpv4'] == '203.0.113.20'
+            assert forward['status'] in ('MATCH', 'NO_ROUTE')
+            icmp_page.locator('#icmp-investigation-route-node').select_option('b')
+            icmp_page.locator('#icmp-investigation-route-destination').select_option('source')
+            with icmp_page.expect_response('**/api/icmp/investigation/probe') as icmp_reverse:
+                icmp_page.locator('#icmp-investigation-measure').click()
+            reverse = icmp_reverse.value.json()['observation']
+            assert reverse['destinationIpv4'] == '192.0.2.10'
+            assert reverse['status'] in ('MATCH', 'NO_ROUTE')
+            icmp_page.locator('#icmp-investigation-probe').select_option('link')
+            disconnected = []
+            for link_id in ('la', 'lr1', 'lr2', 'lb'):
+                icmp_page.locator('#icmp-investigation-link').select_option(link_id)
+                with icmp_page.expect_response('**/api/icmp/investigation/probe') as link_check:
+                    icmp_page.locator('#icmp-investigation-measure').click()
+                link_observation = link_check.value.json()['observation']
+                assert link_observation['documentedEnabled'] is True
+                if link_observation['observedEnabled'] is False:
+                    disconnected.append(link_id)
+            icmp_page.locator('#icmp-investigation-probe').select_option('vlan')
+            mismatched = []
+            for nid, pid in (('sw-left', 'a'), ('sw-left', 'r'),
+                             ('sw-right', 'r'), ('sw-right', 'b')):
+                icmp_page.locator('#icmp-investigation-vlan').select_option(
+                    json.dumps([nid, pid], separators=(',', ':')))
+                with icmp_page.expect_response('**/api/icmp/investigation/probe') as vlan_check:
+                    icmp_page.locator('#icmp-investigation-measure').click()
+                vlan_observation = vlan_check.value.json()['observation']
+                if vlan_observation['documentedVlan'] != vlan_observation['observedVlan']:
+                    mismatched.append((nid, pid))
+            if disconnected:
+                assert len(disconnected) == 1
+                inferred = 'CABLE_DOWN'
+            elif mismatched:
+                assert len(mismatched) == 1
+                inferred = 'VLAN_MISMATCH'
+            else:
+                assert forward['status'] == 'NO_ROUTE' or reverse['status'] == 'NO_ROUTE'
+                inferred = 'STATIC_ROUTE_MISSING'
+            expect(icmp_page.locator('#icmp-investigation-diagnose')).to_be_enabled()
+            wrong = next(x for x in ('CABLE_DOWN', 'VLAN_MISMATCH', 'STATIC_ROUTE_MISSING')
+                         if x != inferred)
+            icmp_page.locator('#icmp-investigation-diagnosis').select_option(wrong)
+            with icmp_page.expect_response('**/api/icmp/investigation/diagnose') as false_guess:
+                icmp_page.locator('#icmp-investigation-diagnose').click()
+            guess = false_guess.value.json()
+            assert false_guess.value.status == 200
+            assert guess['correct'] is False
+            assert inferred not in json.dumps(guess)
+            expect(icmp_page.locator('#icmp-investigation-repair')).to_be_disabled()
+            icmp_page.locator('#icmp-investigation-diagnosis').select_option(inferred)
+            with icmp_page.expect_response('**/api/icmp/investigation/diagnose') as correct_guess:
+                icmp_page.locator('#icmp-investigation-diagnose').click()
+            assert correct_guess.value.json()['correct'] is True
+            expect(icmp_page.locator('#icmp-investigation-verdict')).to_contain_text(
+                'DIAGNOS BEKRÄFTAD')
+            expect(icmp_page.locator('#icmp-investigation-repair')).to_be_enabled()
+            with icmp_page.expect_response('**/api/icmp/investigation/repair') as repair_action:
+                icmp_page.locator('#icmp-investigation-repair').click()
+            fixed = repair_action.value.json()
+            assert repair_action.value.status == 200
+            assert fixed['status'] == 'RECOVERED'
+            assert fixed['failedEchoStatus'] != 'REPLIED'
+            assert fixed['restoredEchoStatus'] == 'REPLIED'
+            assert fixed['replyMatched'] is True
+            assert fixed['faultCategory'] == inferred
+            assert fixed['repair']['scope'] == 'PREVIEW_ONLY'
+            expect(icmp_page.locator('#icmp-investigation-recovery')).to_contain_text(
+                'RESULTAT: RECOVERED')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert sorted(x.name for x in store.glob('*.yadilab')) == ['lab.yadilab']
+            with icmp_page.expect_response('**/api/icmp/investigation/stop') as icmp_stop:
+                icmp_page.locator('#icmp-investigation-stop').click()
+            assert icmp_stop.value.status == 200
+            expect(icmp_page.locator('#icmp-investigation-status')).to_contain_text(
+                'Ingen routing-/Layer 2-övning')
+
+            # Delayed measurement after project edit must not resurrect the
+            # old hidden session, replace the graph or modify saved bytes.
+            with icmp_page.expect_response('**/api/icmp/investigation/start') as stale_icmp:
+                icmp_page.locator('#icmp-investigation-start').click()
+            assert stale_icmp.value.status == 200
+            icmp_page.evaluate("""() => {
+              window.__icmpRealFetch = window.fetch;
+              window.__finishIcmpProbe = null;
+              window.fetch = async (...args) => {
+                const response = await window.__icmpRealFetch(...args);
+                if (args[0] === '/api/icmp/investigation/probe') {
+                  return new Promise(resolve => {
+                    window.__finishIcmpProbe = () => resolve(response);
+                  });
+                }
+                return response;
+              };
+            }""")
+            icmp_page.locator('#icmp-investigation-probe').select_option('address')
+            icmp_page.locator('#icmp-investigation-measure').click()
+            icmp_page.wait_for_function("typeof window.__finishIcmpProbe === 'function'")
+            icmp_page.locator('[data-item-type="link"][data-item-id="la"]').click()
+            icmp_page.locator('#inspector input[type="checkbox"]').uncheck()
+            expect(icmp_page.locator('#icmp-investigation-status')).to_contain_text(
+                'Ingen routing-/Layer 2-övning')
+            icmp_page.evaluate('window.__finishIcmpProbe()')
+            expect(icmp_page.locator('#icmp-investigation-observations')).to_contain_text(
+                'Börja med IP-uppgifter')
+            icmp_page.evaluate('window.fetch = window.__icmpRealFetch')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert not errors, errors
+            icmp_page.close()
 
             # A different saved project must not be silently overwritten.
             page.locator('#new-project').click()
