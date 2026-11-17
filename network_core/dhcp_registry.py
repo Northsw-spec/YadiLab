@@ -2,7 +2,8 @@
 
 Sessions are fixed to one canonical project snapshot, server port and address
 pool. They share leases and MAC learning among explicitly selected clients
-but never write a canonical interface, a project file or a timer-based lease.
+but never write a canonical interface or project file. Only explicit user
+advancement of a deterministic virtual clock expires its in-memory leases.
 """
 from __future__ import annotations
 
@@ -12,6 +13,9 @@ from threading import RLock
 from .dhcp import DhcpSession, validate_dora_pool
 from .model import ProjectValidationError
 from .simulation import MAX_OPERATIONS, MAX_SESSIONS, _signature
+
+MAX_ADVANCE_SECONDS = 604800
+MAX_VIRTUAL_SECONDS = 315360000
 
 
 class DhcpLabSession:
@@ -30,6 +34,7 @@ class DhcpLabSession:
         self.pool_start = pool_start
         self.pool_end = pool_end
         self.operation_count = 0
+        self.clock_seconds = 0
 
     def check_project(self, project: object) -> None:
         if _signature(project) != self.signature:
@@ -37,13 +42,18 @@ class DhcpLabSession:
                 "dhcp session: project changed since session start; start a new session")
 
     def state(self) -> dict:
-        leases = self.dhcp.leases()
+        leases = [
+            {**lease,
+             "remainingSeconds": lease["expiresAtSeconds"] - self.clock_seconds}
+            for lease in self.dhcp.leases()
+        ]
         return {
             "serverNode": self.server_node,
             "serverPort": self.server_port,
             "poolStart": self.pool_start,
             "poolEnd": self.pool_end,
             "operationCount": self.operation_count,
+            "clockSeconds": self.clock_seconds,
             "maxOperations": MAX_OPERATIONS,
             "leases": leases,
             "leaseCount": len(leases),
@@ -62,11 +72,33 @@ class DhcpLabSession:
         # Even unsuccessful network deliveries are deliberate operations,
         # but malformed requests rejected before completion are not.
         self.operation_count += 1
+        if result["leaseCommitted"]:
+            # Existing DORA engine proved ACK reception at original client.
+            result["lease"] = self.dhcp.timestamp_lease(
+                result["lease"]["ipv4"], self.clock_seconds)
+            result["lease"]["remainingSeconds"] = result["lease"]["leaseSeconds"]
         return {"result": result, **self.state()}
+
+    def advance(self, seconds: int) -> dict:
+        """Advance explicitly; no real time, sleeps, timers or implicit renewals."""
+        if type(seconds) is not int or not 1 <= seconds <= MAX_ADVANCE_SECONDS:
+            raise ProjectValidationError(
+                "dhcp session: advance seconds must be an integer 1..604800")
+        if self.operation_count >= MAX_OPERATIONS:
+            raise ProjectValidationError(
+                "dhcp session: operation limit reached; reset the session")
+        if self.clock_seconds + seconds > MAX_VIRTUAL_SECONDS:
+            raise ProjectValidationError(
+                "dhcp session: virtual clock limit reached; reset the session")
+        self.clock_seconds += seconds
+        expired = self.dhcp.expire_leases(self.clock_seconds)
+        self.operation_count += 1
+        return {"advancedSeconds": seconds, "expiredLeases": expired, **self.state()}
 
     def reset(self) -> dict:
         self.dhcp = DhcpSession(self.project)
         self.operation_count = 0
+        self.clock_seconds = 0
         return self.state()
 
 
@@ -102,6 +134,12 @@ class DhcpSessionRegistry:
             session.check_project(project)
             return {"sessionId": session_id, **session.run(
                 client_node, client_port, transaction_id, lease_seconds)}
+
+    def advance(self, session_id: object, project: object, seconds: int) -> dict:
+        with self._lock:
+            session = self._get(session_id)
+            session.check_project(project)
+            return {"sessionId": session_id, **session.advance(seconds)}
 
     def reset(self, session_id: object, project: object) -> dict:
         with self._lock:
