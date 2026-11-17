@@ -227,6 +227,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, self.server.dhcp_sessions.run(
                     body["sessionId"], body["project"], body["clientNode"],
                     body["clientPort"], body["transactionId"], body["leaseSeconds"]))
+            elif path == "/api/dhcp/session/link-fault":
+                required = {"sessionId", "project", "linkId", "disabled"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "dhcp session link-fault: expected sessionId, project, linkId, disabled")
+                self._json(200, self.server.dhcp_sessions.link_fault(
+                    body["sessionId"], body["project"],
+                    body["linkId"], body["disabled"]))
             elif path == "/api/dhcp/session/renew":
                 required = {"sessionId", "project", "clientNode", "clientPort", "transactionId"}
                 if not isinstance(body, dict) or set(body) != required:

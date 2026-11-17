@@ -63,6 +63,7 @@ let doraSessionState = null;
 let doraSessionTrace = null;
 let doraClockEvent = null;
 let doraRenewalTrace = null;
+let doraFaultEvent = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -161,6 +162,7 @@ function invalidateDoraSession() {
   doraSessionTrace = null;
   doraClockEvent = null;
   doraRenewalTrace = null;
+  doraFaultEvent = null;
   if (previous) {
     // Best-effort release; backend also refuses any changed project snapshot.
     void api('/api/dhcp/session/stop', {sessionId: previous}).catch(() => {});
@@ -485,6 +487,55 @@ function renderDoraSession() {
   const clients = dhcpPortChoices('client');
   const servers = dhcpPortChoices('server');
   const busy = doraSessionBusy || doraBusy;
+  const faultSelector = $('dora-session-fault-link');
+  const previousLink = faultSelector.value;
+  const originallyActive = project.links.filter(link => {
+    if (!link.enabled) return false;
+    const a = project.nodes.find(n => n.id === link.a.node);
+    const b = project.nodes.find(n => n.id === link.b.node);
+    return a && b && a.ports.find(p => p.id === link.a.port && p.enabled)
+      && b.ports.find(p => p.id === link.b.port && p.enabled);
+  });
+  const faultOptions = originallyActive.map(link => ({
+    value: link.id,
+    label: link.id + ': ' + link.a.node + '/' + link.a.port
+      + ' ↔ ' + link.b.node + '/' + link.b.port,
+  }));
+  faultSelector.replaceChildren(...(faultOptions.length
+    ? faultOptions.map(item => el('option', {value: item.value}, item.label))
+    : [el('option', {value: ''}, 'Inga aktiva dokumenterade kablar')]));
+  if (faultOptions.some(item => item.value === previousLink)) {
+    faultSelector.value = previousLink;
+  }
+  const selectedFaultLink = faultSelector.value;
+  const faultedLinks = active ? doraSessionState.faultedLinks : [];
+  faultSelector.disabled = !active || busy || !faultOptions.length;
+  $('dora-session-fault-break').disabled = !active || busy || !selectedFaultLink
+    || faultedLinks.includes(selectedFaultLink);
+  $('dora-session-fault-restore').disabled = !active || busy || !selectedFaultLink
+    || !faultedLinks.includes(selectedFaultLink);
+  const faultOutput = $('dora-session-fault-result');
+  faultOutput.classList.remove('ok', 'fail');
+  const faultSummary = faultedLinks.length
+    ? 'Tillfälligt frånkopplade kablar: ' + faultedLinks.join(', ')
+    : 'Inga tillfälliga kabelavbrott.';
+  if (!active) {
+    faultOutput.textContent = 'Ingen aktiv session. ' + faultSummary;
+  } else if (doraFaultEvent?.error) {
+    faultOutput.classList.add('fail');
+    faultOutput.textContent = 'Kabelåtgärd avvisad: ' + doraFaultEvent.error
+      + '\n' + faultSummary;
+  } else if (doraFaultEvent) {
+    faultOutput.textContent = (doraFaultEvent.disabled
+      ? 'Frånkopplad endast i sessionen: '
+      : 'Återansluten endast i sessionen: ')
+      + doraFaultEvent.linkId
+      + '. Switcharnas inlärda MAC-tabeller har tömts.\n'
+      + faultSummary + '\nProjektets dokumenterade länkstatus är oförändrad.';
+  } else {
+    faultOutput.textContent = faultSummary
+      + '\nKabelavbrott simuleras endast i denna DHCP-session.';
+  }
   $('dora-session-start').disabled = active || busy || !clients.length || !servers.length;
   $('dora-session-run').disabled = !active || busy || !clients.length;
   $('dora-session-reset').disabled = !active || busy;
@@ -1513,6 +1564,7 @@ async function startDoraSession() {
   if (doraSessionBusy || doraSessionId !== null || doraBusy) return;
   doraClockEvent = null;
   doraRenewalTrace = null;
+  doraFaultEvent = null;
   const inputs = doraSessionInput();
   const [client, server, poolStart, poolEnd] = inputs;
   if (!client || !server || !poolStart || !poolEnd) {
@@ -1596,6 +1648,47 @@ async function runDoraSession() {
     }
   }
 }
+async function setDoraLinkFault(disabled) {
+  if (!doraSessionId || doraSessionBusy || doraBusy) return;
+  const linkId = $('dora-session-fault-link').value;
+  if (!linkId || typeof disabled !== 'boolean') {
+    doraFaultEvent = {error: 'Välj en uttryckligt dokumenterad aktiv kabel.'};
+    renderDoraSession();
+    return;
+  }
+  const id = doraSessionId;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  doraFaultEvent = null;
+  renderDoraSession();
+  try {
+    const state = await api('/api/dhcp/session/link-fault', {
+      sessionId: id, project: JSON.parse(snapshot), linkId, disabled,
+    });
+    if (generation === doraSessionGeneration && doraSessionId === id
+        && edit === editRevision && workspace === workspaceRevision
+        && JSON.stringify(project) === snapshot
+        && $('dora-session-fault-link').value === linkId) {
+      doraSessionState = state;
+      doraFaultEvent = {linkId, disabled};
+      doraSessionTrace = null;
+      doraRenewalTrace = null;
+      doraClockEvent = null;
+    }
+  } catch (error) {
+    if (generation === doraSessionGeneration && doraSessionId === id) {
+      doraFaultEvent = {error: error.message};
+    }
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraSession();
+    }
+  }
+}
+
 async function renewDoraSession() {
   if (!doraSessionId || doraSessionBusy) return;
   const inputs = doraSessionInput();
@@ -1697,6 +1790,7 @@ async function resetDoraSession() {
       doraSessionTrace = null;
       doraClockEvent = null;
       doraRenewalTrace = null;
+      doraFaultEvent = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration && doraSessionId === id) {
@@ -1722,6 +1816,7 @@ async function stopDoraSession() {
       doraSessionTrace = null;
       doraClockEvent = null;
       doraRenewalTrace = null;
+      doraFaultEvent = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration) {
@@ -2180,6 +2275,12 @@ $('run-dora').addEventListener('click', runDora);
 $('dora-session-start').addEventListener('click', startDoraSession);
 $('dora-session-run').addEventListener('click', runDoraSession);
 $('dora-session-renew').addEventListener('click', renewDoraSession);
+$('dora-session-fault-break').addEventListener('click', () => setDoraLinkFault(true));
+$('dora-session-fault-restore').addEventListener('click', () => setDoraLinkFault(false));
+$('dora-session-fault-link').addEventListener('change', () => {
+  doraFaultEvent = null;
+  renderDoraSession();
+});
 $('dora-session-advance').addEventListener('click', advanceDoraSession);
 $('dora-session-reset').addEventListener('click', resetDoraSession);
 $('dora-session-stop').addEventListener('click', stopDoraSession);

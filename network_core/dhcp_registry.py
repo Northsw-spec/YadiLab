@@ -62,6 +62,7 @@ class DhcpLabSession:
             "leases": leases,
             "leaseCount": len(leases),
             "macTables": self.dhcp.fabric.learned_mac_tables(),
+            "faultedLinks": self.dhcp.fabric.faulted_links(),
             "ephemeral": True,
         }
 
@@ -82,6 +83,17 @@ class DhcpLabSession:
                 result["lease"]["ipv4"], self.clock_seconds)
             result["lease"]["remainingSeconds"] = result["lease"]["leaseSeconds"]
         return {"result": result, **self.state()}
+
+    def set_link_fault(self, link_id: str, disabled: bool) -> dict:
+        """Explicit reversible link fault inside this DHCP session only."""
+        if self.operation_count >= MAX_OPERATIONS:
+            raise ProjectValidationError(
+                "dhcp session: operation limit reached; reset the session")
+        # Validation is completed before any change and must not consume an
+        # operation on invalid, duplicate or not-originally-active links.
+        self.dhcp.fabric.set_link_fault(link_id, disabled)
+        self.operation_count += 1
+        return {"linkId": link_id, "disabled": disabled, **self.state()}
 
     def renew(self, client_node: str, client_port: str, transaction_id: int) -> dict:
         """One explicit RENEWING / REBINDING attempt at virtual T1 / T2.
@@ -169,6 +181,14 @@ class DhcpSessionRegistry:
             session.check_project(project)
             return {"sessionId": session_id, **session.run(
                 client_node, client_port, transaction_id, lease_seconds)}
+
+    def link_fault(self, session_id: object, project: object,
+                   link_id: str, disabled: bool) -> dict:
+        with self._lock:
+            session = self._get(session_id)
+            session.check_project(project)
+            return {"sessionId": session_id, **session.set_link_fault(
+                link_id, disabled)}
 
     def renew(self, session_id: object, project: object, client_node: str,
               client_port: str, transaction_id: int) -> dict:

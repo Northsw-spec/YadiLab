@@ -144,6 +144,15 @@
           <button id="dora-session-advance" type="button" class="btn btn-outline full" disabled>Flytta fram DHCP-klockan</button>
           <div id="dora-session-status" class="small-muted" role="status">Ingen aktiv DHCP-session.</div>
           <div id="dora-session-clock-result" class="trace-result" aria-live="polite">Ingen simuleringstid har flyttats fram.</div>
+          <div class="eyebrow">FELINJICERING · BARA AKTIV SIMULERINGSSESSION</div>
+          <p class="muted tiny">Välj en dokumenterad aktiv kabel. Koppla bort den endast i den pågående DHCP-sessionens Ethernet-motor; återställ den när du vill testa återhämtning. Leases och simulerad tid behålls. Varken Builder-topologin eller projektfilen ändras.</p>
+          <label for="dora-session-fault-link">Fysiskt dokumenterad kabel</label>
+          <select id="dora-session-fault-link" class="control"></select>
+          <div class="session-actions">
+            <button id="dora-session-fault-break" type="button" class="btn btn-outline" disabled>Bryt kabel i sessionen</button>
+            <button id="dora-session-fault-restore" type="button" class="btn btn-soft" disabled>Återställ kabel i sessionen</button>
+          </div>
+          <div id="dora-session-fault-result" class="trace-result" aria-live="polite">Inga tillfälliga kabelavbrott.</div>
           <div id="dora-session-result" class="trace-result" aria-live="polite">Inga sessionoperationer har körts.</div>
           <div id="dora-session-renew-result" class="trace-result" aria-live="polite">Ingen DHCP-förnyelse har begärts.</div>
           <div class="eyebrow">SIMULERADE LEASES (ENDAST MINNE)</div>
