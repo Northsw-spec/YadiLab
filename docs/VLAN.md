@@ -2,7 +2,7 @@
 
 ## Scope
 
-`EthernetFabric(project, vlan_ports=...)` creates one VLAN-aware session using the same declared project topology and switch-forwarding queue as the original Ethernet model. Sessions without a `vlan_ports` argument retain their legacy unsegmented behavior. VLANs are never inferred from IP, MAC, port names, physical position or device type.
+`EthernetFabric(project, vlan_ports=...)` creates one VLAN-aware session using the same declared project topology and switch-forwarding queue as the original Ethernet model. Sessions without a `vlan_ports` argument retain their legacy unsegmented behavior. VLANs are never inferred from IP, MAC, port names, physical position or device type. Since schema 1.2, explicitly saved switch-port VLANs also enable the same forwarding engine; incomplete active-port configurations fail closed.
 
 Each **active, wired switch port** requires an explicit entry:
 - Access: `("sw", "p1"): {"mode": "access", "vlan": 10}`.
@@ -24,6 +24,6 @@ Only untagged terminal NIC injection is accepted by `EthernetFabric.inject_frame
 
 ## Non-persistence and limitations
 
-`.yadilab` remains schema 1.1. **VLAN port configuration is session-only**, with no Builder/UI controls or Save/Open serialization. `ArpSession(project, vlan_ports=...)` now reuses this same VLAN-aware fabric for its ARP request and reply, using only untagged terminal frames; the trunk tagging is still represented as wire metadata, not separately serialized ARP bytes per hop. Omitting `vlan_ports` retains legacy unsegmented ARP. `requestVlanDrops` and `replyVlanDrops` report observed trunk admission failures when configured. ARP cache only updates after the reply actually reaches the requester. There is no IP routing, ICMP/ping, DHCP, DNS, STP, multicast, native VLAN, QinQ, per-hop raw frame serialization, FCS or realistic timing. Learned MAC tables do not persist.
+`.yadilab` remains schema 1.1. **Explicit VLAN port configuration is persisted in schema 1.2** when entered in Builder and saved deliberately. The original `vlan_ports` session argument remains available and can fill missing configurations; contradictory session values for saved switchports are rejected. See [VLAN_PERSISTENCE.md](VLAN_PERSISTENCE.md). `ArpSession(project, vlan_ports=...)` now reuses this same VLAN-aware fabric for its ARP request and reply, using only untagged terminal frames; the trunk tagging is still represented as wire metadata, not separately serialized ARP bytes per hop. Omitting `vlan_ports` retains legacy unsegmented ARP. `requestVlanDrops` and `replyVlanDrops` report observed trunk admission failures when configured. ARP cache only updates after the reply actually reaches the requester. There is no IP routing, ICMP/ping, DHCP, DNS, STP, multicast, native VLAN, QinQ, per-hop raw frame serialization, FCS or realistic timing. Learned MAC tables do not persist.
 
 `tests/test_vlan_arp.py` covers VLAN-isolated ARP requests/replies and negative failure cases. `tests/test_vlan.py` checks exact wire headers, access VLAN isolation, learned unicast, trunk tagging, blocked VLANs, invalid settings, failure cases and legacy regression. CI must validate these plus the existing Chromium and durable Save/Open tests.

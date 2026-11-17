@@ -1,6 +1,6 @@
 // Canonical browser state. Only explicitly declared source facts are represented.
 export const KINDS = Object.freeze(['host', 'switch', 'router', 'firewall']);
-export const blank = () => ({schemaVersion: '1.1', name: 'Nytt nätverkslabb', zones: [], nodes: [], links: []});
+export const blank = () => ({schemaVersion: '1.2', name: 'Nytt nätverkslabb', zones: [], nodes: [], links: []});
 export const copy = value => structuredClone(value);
 export function nextId(prefix, records) {
   const taken = new Set(records.map(record => record.id));
@@ -45,7 +45,7 @@ export function connect(project, a, b) {
 export function exampleProject() {
   // Deliberately labeled example: declared nodes and cables, not discovered data.
   return {
-    schemaVersion: '1.1', name: 'DEMO – två klienter och en switch',
+    schemaVersion: '1.2', name: 'DEMO – två klienter och en switch',
     zones: [{id: 'zone-lab', label: 'Exempelzon'}],
     nodes: [
       {id: 'pc-1', label: 'Klient A', kind: 'host', x: 90, y: 235, zoneId: 'zone-lab', ports: [{id: 'eth0', name: 'eth0', enabled: true, ipv4: '192.0.2.10/24'}]},

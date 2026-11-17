@@ -225,6 +225,10 @@ function renderInspector() {
         notify('Ta bort konfigurerade MAC-adresser innan enheten ändras till switch.', true);
         renderInspector(); return;
       }
+      if (next !== 'switch' && value.ports.some(port => port.vlan != null)) {
+        notify('Ta bort VLAN-inställningarna innan switchen ändras till en annan typ.', true);
+        renderInspector(); return;
+      }
       value.kind = next; changed();
     }, {id:'node-kind'})));
     box.append(field('Dokumenterad zon', dropdown([{value:'',label:'Ingen zon'}, ...project.zones.map(z => ({value:z.id,label:z.label}))], value.zoneId || '', next => {
@@ -257,8 +261,8 @@ function renderInspector() {
         }, {dataset:{portIpv4:port.id},placeholder:'192.0.2.1/24'})),
         value.kind === 'switch' ? null : field('MAC-adress (valfri, explicit)', input(port.mac || '', async next => {
           const attempt = copy(project);
-          // A legacy 1.0 file is upgraded in memory only after deliberate editing.
-          attempt.schemaVersion = '1.1';
+          // Legacy documents upgrade in memory on deliberate edit, never on Open.
+          attempt.schemaVersion = '1.2';
           const portCopy = attempt.nodes.find(n => n.id === value.id).ports.find(p => p.id === port.id);
           portCopy.mac = next.trim() || null;
           try {
@@ -267,6 +271,33 @@ function renderInspector() {
             changed();
           } catch (error) { notify(error.message, true); renderInspector(); }
         }, {dataset:{portMac:port.id},placeholder:'02:00:00:00:00:0A'})),
+        value.kind !== 'switch' ? null : field('VLAN (access:10 eller trunk:10,20)', input(
+          port.vlan?.mode === 'access' ? `access:${port.vlan.vlan}` :
+            port.vlan?.mode === 'trunk' ? `trunk:${port.vlan.allowedVlans.join(',')}` : '',
+          async next => {
+            const attempt = copy(project);
+            const portCopy = attempt.nodes.find(n => n.id === value.id).ports.find(p => p.id === port.id);
+            const supplied = next.trim();
+            if (supplied) {
+              const access = /^access:([0-9]+)$/.exec(supplied);
+              const trunk = /^trunk:([0-9]+(?:,[0-9]+)*)$/.exec(supplied);
+              if (!access && !trunk) {
+                notify('VLAN-format: access:10 eller trunk:10,20. Inget VLAN antas.', true);
+                renderInspector(); return;
+              }
+              portCopy.vlan = access ?
+                {mode:'access',vlan:Number(access[1])} :
+                {mode:'trunk',allowedVlans:trunk[1].split(',').map(Number)};
+            } else {
+              delete portCopy.vlan;
+            }
+            attempt.schemaVersion = '1.2';
+            try {
+              const normalized = await api('/api/validate', attempt);
+              project = normalized.project;
+              changed();
+            } catch (error) { notify(error.message, true); renderInspector(); }
+          }, {dataset:{portVlan:port.id},placeholder:'access:10 eller trunk:10,20'})),
         check('Port aktiverad', port.enabled, enabled => { port.enabled = enabled; changed(); }),
         button('Ta bort port', () => {
           if (occupied && !confirm('Porten har en ansluten länk. Ta bort BÅDE porten och den uttryckligen valda länken?')) return;

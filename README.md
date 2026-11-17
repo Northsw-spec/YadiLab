@@ -51,7 +51,7 @@ Den separata modulen `network_core/arp.py` modellerar ARP-meddelanden enligt Eth
 
 ## Explicit VLAN-forwarding (endast Python-API)
 
-`EthernetFabric(project, vlan_ports=...)` kan nu forwarda mellan uttryckligen konfigurerade access- och trunkportar med **isolerade MAC-tabeller per VLAN**, begränsade allowlists och korrekt 802.1Q-tagging på trunkar. `EthernetFrame` kan serialisera och tolka en C-tagg. Detta är **endast simuleringssessionsdata** och finns ännu inte i Builder eller .yadilab-formatet. Den separata ARP-sessionen kan nu återanvända samma VLAN-forwarding för request och reply, men har ingen automatisk eller sparad VLAN-konfiguration. Se [VLAN-kontraktet](docs/VLAN.md).
+`EthernetFabric(project, vlan_ports=...)` kan nu forwarda mellan uttryckligen konfigurerade access- och trunkportar med **isolerade MAC-tabeller per VLAN**, begränsade allowlists och korrekt 802.1Q-tagging på trunkar. `EthernetFrame` kan serialisera och tolka en C-tagg. Explicit VLAN-portkonfiguration kan nu lagras i `.yadilab` schema **1.2**, redigeras i Builder och läsas direkt av `EthernetFabric` och `ArpSession`. Inlärda MAC-tabeller och ARP-cache är fortfarande endast sessionsdata. Den separata ARP-sessionen kan nu återanvända samma VLAN-forwarding för request och reply, men har ingen automatisk eller sparad VLAN-konfiguration. Se [VLAN-kontraktet](docs/VLAN.md).
 
 ## Avsiktligt INTE implementerat
 
@@ -93,7 +93,7 @@ UTF-8 JSON, `.yadilab` (befintlig dokumentfiländelse, inte ett produktnamn):
 }
 ```
 
-Schema **1.0** kan fortfarande läsas, valideras och sparas utan tyst migrering. Version **1.1** tillåter ett valfritt portfält `"mac"` (null eller sex kolonseparerade hexoktetter för icke-switchportar). En explicit MAC-redigering i Builder uppgraderar ett öppet 1.0-projekt i minnet; filen skrivs endast vid **Spara**. MAC kräver icke-noll unicast, är unik inom projektet och normaliseras till versaler. Ingen MAC tilldelas automatiskt. Se [versions- och lagringskontrakt](docs/MAC_CONFIG.md).
+Schema **1.0** och **1.1** kan fortfarande läsas, valideras och sparas utan tyst migrering. Version **1.1** tillåter ett valfritt portfält `"mac"` (null eller sex kolonseparerade hexoktetter för icke-switchportar). En explicit MAC-redigering i Builder uppgraderar ett öppet 1.0-projekt i minnet; filen skrivs endast vid **Spara**. MAC kräver icke-noll unicast, är unik inom projektet och normaliseras till versaler. Ingen MAC tilldelas automatiskt. Schema **1.2** tillåter dessutom `vlan: {"mode":"access","vlan":10}` eller `vlan: {"mode":"trunk","allowedVlans":[10,20]}` på **switchportar**. Inställningarna kan redigeras som `access:10` respektive `trunk:10,20` i Builder. En explicit redigering uppgraderar äldre schema till 1.2 **i minnet**, och sparar inte förrän användaren väljer Spara. Avsaknad av VLAN-konfiguration betyder **inte** VLAN 1. För simulering måste varje aktiv ansluten switchport vara konfigurerad när VLAN har aktiverats. Se [VLAN-lagringskontrakt](docs/VLAN_PERSISTENCE.md) och [MAC-kontraktet](docs/MAC_CONFIG.md).
 
 Inga anslutningar härleds från adresser, nodnamn, närhet eller zoner. En port kan ha högst en fysisk länk i schema v1. Okända formatversioner avvisas, i stället för att data tappas.
 

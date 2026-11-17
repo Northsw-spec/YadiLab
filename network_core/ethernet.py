@@ -22,6 +22,7 @@ class EthernetFabric:
     """One isolated, explicitly configured simulation session.
 
     Learned MAC tables live only in this object, never in the project.
+    Explicit switch VLAN configuration can be read from a 1.2 project.
     Create a new session after changes to ports, links or topology. Networks
     with active switch-to-switch loops are rejected rather than pretending STP.
     """
@@ -46,9 +47,24 @@ class EthernetFabric:
             self.wires[(a["node"], a["port"])] = (b["node"], b["port"], link["id"])
             self.wires[(b["node"], b["port"])] = (a["node"], a["port"], link["id"])
         self._reject_switch_loops()
-        # An explicit VLAN session has no implicit access VLAN 1 or native VLAN.
-        # All active wired switch ports must have a declared access/trunk mode.
-        # This configuration is NEVER persisted to the project by the engine.
+        # Explicit VLAN configuration may be persisted on switch ports in
+        # schema 1.2, or added to one session without overwriting source data.
+        persisted_vlans = {
+            (node["id"], port["id"]): port["vlan"]
+            for node in self.project["nodes"] if node["kind"] == "switch"
+            for port in node["ports"] if port.get("vlan") is not None
+        }
+        if vlan_ports is None:
+            vlan_ports = persisted_vlans if persisted_vlans else None
+        elif isinstance(vlan_ports, Mapping):
+            merged = dict(persisted_vlans)
+            for endpoint, configuration in vlan_ports.items():
+                if endpoint in persisted_vlans and configuration != persisted_vlans[endpoint]:
+                    raise ProjectValidationError("vlan: session VLAN conflicts with persisted switch port")
+                merged[endpoint] = configuration
+            vlan_ports = merged
+        # No implicit access VLAN 1/native VLAN. Every active wired switch
+        # port must be configured once VLAN forwarding is enabled.
         self._vlan_enabled = vlan_ports is not None
         self._vlan_ports: dict[tuple[str, str], tuple[str, int | frozenset[int]]] = {}
         if vlan_ports is not None:
