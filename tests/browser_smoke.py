@@ -739,6 +739,81 @@ def run():
             with dhcp_page.expect_response('**/api/dhcp/session/run') as multi_after_reset:
                 dhcp_page.locator('#dora-session-run').click()
             assert multi_after_reset.value.json()['result']['lease']['ipv4'] == '192.0.2.70'
+
+            # PR36: break an EXISTING physically documented server cable
+            # after ACK, without changing graph/link flags or Save bytes.
+            dhcp_page.locator('#dora-session-fault-link').select_option('to-server')
+            expect(dhcp_page.locator('#dora-session-fault-break')).to_be_enabled()
+            expect(dhcp_page.locator('#dora-session-fault-restore')).to_be_disabled()
+            with dhcp_page.expect_response('**/api/dhcp/session/link-fault') as link_down:
+                dhcp_page.locator('#dora-session-fault-break').click()
+            down = link_down.value.json()
+            assert link_down.value.status == 200
+            assert down['faultedLinks'] == ['to-server']
+            assert down['leaseCount'] == 1
+            assert down['clockSeconds'] == 0
+            assert down['macTables'] == []
+            expect(dhcp_page.locator('#dora-session-fault-result')).to_contain_text(
+                'Frånkopplad endast i sessionen: to-server')
+            expect(dhcp_page.locator('#dora-session-fault-break')).to_be_disabled()
+            expect(dhcp_page.locator('#dora-session-fault-restore')).to_be_enabled()
+            dhcp_page.locator('[data-item-type="link"][data-item-id="to-server"]').click()
+            expect(dhcp_page.locator('#inspector input[type="checkbox"]')).to_be_checked()
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            dhcp_page.locator('#dora-session-advance-seconds').fill('1800')
+            with dhcp_page.expect_response('**/api/dhcp/session/advance') as fault_t1_clock:
+                dhcp_page.locator('#dora-session-advance').click()
+            assert fault_t1_clock.value.json()['leases'][0]['renewalPhase'] == 'RENEWING'
+            dhcp_page.locator('#dora-transaction-id').fill('106')
+            with dhcp_page.expect_response('**/api/dhcp/session/renew') as fault_t1_renew:
+                dhcp_page.locator('#dora-session-renew').click()
+            lost_t1 = fault_t1_renew.value.json()
+            assert lost_t1['result']['phase'] == 'RENEWING'
+            assert lost_t1['result']['status'] == 'REQUEST_NOT_RECEIVED'
+            assert lost_t1['result']['leaseRenewed'] is False
+            assert lost_t1['result']['ack']['transmissions'] == []
+            assert [t['linkId'] for t in lost_t1['result']['request']['transmissions']] == ['wire-3']
+            assert lost_t1['leases'][0]['expiresAtSeconds'] == 3600
+            expect(dhcp_page.locator('#dora-session-renew-result')).to_contain_text(
+                'DHCP-förnyelse: REQUEST_NOT_RECEIVED · RENEWING')
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('slut vid 3600 s')
+
+            dhcp_page.locator('#dora-session-advance-seconds').fill('1350')
+            with dhcp_page.expect_response('**/api/dhcp/session/advance') as fault_t2_clock:
+                dhcp_page.locator('#dora-session-advance').click()
+            assert fault_t2_clock.value.json()['clockSeconds'] == 3150
+            assert fault_t2_clock.value.json()['leases'][0]['renewalPhase'] == 'REBINDING'
+            dhcp_page.locator('#dora-transaction-id').fill('107')
+            with dhcp_page.expect_response('**/api/dhcp/session/renew') as fault_t2_renew:
+                dhcp_page.locator('#dora-session-renew').click()
+            lost_t2 = fault_t2_renew.value.json()
+            assert lost_t2['result']['phase'] == 'REBINDING'
+            assert lost_t2['result']['status'] == 'REQUEST_NOT_RECEIVED'
+            assert lost_t2['result']['request']['ipDestination'] == '255.255.255.255'
+            assert lost_t2['leases'][0]['expiresAtSeconds'] == 3600
+            assert lost_t2['faultedLinks'] == ['to-server']
+
+            dhcp_page.locator('#dora-session-advance-seconds').fill('450')
+            with dhcp_page.expect_response('**/api/dhcp/session/advance') as fault_expire:
+                dhcp_page.locator('#dora-session-advance').click()
+            assert fault_expire.value.json()['clockSeconds'] == 3600
+            assert fault_expire.value.json()['leaseCount'] == 0
+            assert fault_expire.value.json()['expiredLeases'][0]['ipv4'] == '192.0.2.70'
+            expect(dhcp_page.locator('#dora-session-clock-result')).to_contain_text('EXPIRED:')
+            with dhcp_page.expect_response('**/api/dhcp/session/link-fault') as link_up:
+                dhcp_page.locator('#dora-session-fault-restore').click()
+            assert link_up.value.status == 200
+            assert link_up.value.json()['faultedLinks'] == []
+            expect(dhcp_page.locator('#dora-session-fault-result')).to_contain_text(
+                'Återansluten endast i sessionen: to-server')
+            dhcp_page.locator('#dora-transaction-id').fill('108')
+            with dhcp_page.expect_response('**/api/dhcp/session/run') as after_link_restore:
+                dhcp_page.locator('#dora-session-run').click()
+            assert after_link_restore.value.json()['result']['status'] == 'ACK_RECEIVED'
+            assert after_link_restore.value.json()['result']['lease']['ipv4'] == '192.0.2.70'
+            expect(dhcp_page.locator('#inspector input[type="checkbox"]')).to_be_checked()
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
             with dhcp_page.expect_response('**/api/dhcp/session/stop') as multi_stop:
                 dhcp_page.locator('#dora-session-stop').click()
             assert multi_stop.value.status == 200
