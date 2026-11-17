@@ -1069,6 +1069,127 @@ def run():
             expect(vlan_page.locator('#investigation-status')).to_contain_text(
                 'Ingen felsökningsövning')
 
+            # PR39: explicit advanced T1 -> T2 -> expiration with a
+            # second opaque fault and *actual* fresh DORA after loss of lease.
+            vlan_page.locator('#investigation-difficulty').select_option('EXPIRY_RECOVERY')
+            with vlan_page.expect_response('**/api/dhcp/investigation/start') as advanced_start:
+                vlan_page.locator('#investigation-start').click()
+            advanced = advanced_start.value.json()
+            assert advanced_start.value.status == 200
+            assert advanced['difficulty'] == 'EXPIRY_RECOVERY'
+            assert advanced['clockSeconds'] == 30
+            assert advanced['phase'] == 'RENEWING'
+            assert advanced['t2AtSeconds'] == 53
+            assert advanced['expiresAtSeconds'] == 60
+            assert not advanced['canAdvance']
+            assert 'faulted' not in json.dumps(advanced)
+            expect(vlan_page.locator('#investigation-advance')).to_be_disabled()
+            vlan_page.locator('#investigation-probe').select_option('lease')
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as advanced_lease:
+                vlan_page.locator('#investigation-run-probe').click()
+            assert advanced_lease.value.json()['observation']['status'] == 'BOUND'
+            vlan_page.locator('#investigation-probe').select_option('renew')
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as advanced_t1:
+                vlan_page.locator('#investigation-run-probe').click()
+            a_t1 = advanced_t1.value.json()
+            assert a_t1['observation']['phase'] == 'RENEWING'
+            assert a_t1['observation']['status'] == 'REQUEST_NOT_RECEIVED'
+            assert a_t1['expiresAtSeconds'] == 60
+            expect(vlan_page.locator('#investigation-advance')).to_be_enabled()
+            with vlan_page.expect_response('**/api/dhcp/investigation/advance') as advanced_to_t2:
+                vlan_page.locator('#investigation-advance').click()
+            a_t2_time = advanced_to_t2.value.json()
+            assert advanced_to_t2.value.status == 200
+            assert a_t2_time['advancedSeconds'] == 23
+            assert a_t2_time['clockSeconds'] == 53
+            assert a_t2_time['phase'] == 'REBINDING'
+            assert a_t2_time['expiresAtSeconds'] == 60
+            assert not a_t2_time['canAdvance']
+            expect(vlan_page.locator('#investigation-advance')).to_be_disabled()
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as advanced_t2:
+                vlan_page.locator('#investigation-run-probe').click()
+            a_t2 = advanced_t2.value.json()
+            assert a_t2['observation']['phase'] == 'REBINDING'
+            assert a_t2['observation']['status'] == 'REQUEST_NOT_RECEIVED'
+            assert a_t2['observation']['requestReachedServer'] is False
+            assert a_t2['expiresAtSeconds'] == 60
+            expect(vlan_page.locator('#investigation-advance')).to_be_enabled()
+            with vlan_page.expect_response('**/api/dhcp/investigation/advance') as advanced_to_expiry:
+                vlan_page.locator('#investigation-advance').click()
+            a_expired = advanced_to_expiry.value.json()
+            assert advanced_to_expiry.value.status == 200
+            assert a_expired['advancedSeconds'] == 7
+            assert a_expired['clockSeconds'] == 60
+            assert a_expired['phase'] == 'EXPIRED'
+            assert a_expired['leaseActive'] is False
+            assert a_expired['remainingSeconds'] == 0
+            assert a_expired['requiredRecovery'] == 'NEW_DORA'
+            assert a_expired['expiredLeases'] == [{
+                'ipv4': '192.0.2.70', 'state': 'EXPIRED', 'expiresAtSeconds': 60,
+            }]
+            expect(vlan_page.locator('#investigation-status')).to_contain_text(
+                'lease har upphört, ny DORA krävs')
+            expect(vlan_page.locator('#investigation-run-probe')).to_be_disabled()
+            expect(vlan_page.locator('#investigation-advance')).to_be_disabled()
+            vlan_page.locator('#investigation-probe').select_option('lease')
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as expired_lease_probe:
+                vlan_page.locator('#investigation-run-probe').click()
+            assert expired_lease_probe.value.json()['observation']['status'] == 'EXPIRED'
+            vlan_page.locator('#investigation-probe').select_option('link')
+            vlan_page.locator('#investigation-link').select_option('to-server')
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as advanced_link:
+                vlan_page.locator('#investigation-run-probe').click()
+            observed_link = advanced_link.value.json()['observation']
+            vlan_page.locator('#investigation-probe').select_option('port')
+            vlan_page.locator('#investigation-port').select_option(
+                json.dumps(['sw', 's'], separators=(',', ':')))
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as advanced_port:
+                vlan_page.locator('#investigation-run-probe').click()
+            observed_port = advanced_port.value.json()['observation']
+            vlan_page.locator('#investigation-probe').select_option('vlan')
+            vlan_page.locator('#investigation-port').select_option(
+                json.dumps(['sw', 'c'], separators=(',', ':')))
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as advanced_vlan:
+                vlan_page.locator('#investigation-run-probe').click()
+            observed_vlan = advanced_vlan.value.json()['observation']
+            if observed_link['observedCarrier'] == 'DOWN':
+                advanced_cause = ('PORT_SHUTDOWN'
+                                  if observed_port['observedAdmin'] == 'DOWN'
+                                  else 'CABLE_DOWN')
+            else:
+                assert observed_link['observedCarrier'] == 'UP'
+                assert observed_vlan['observedVlan'] == 20
+                advanced_cause = 'VLAN_MISMATCH'
+            expect(vlan_page.locator('#investigation-submit')).to_be_enabled()
+            vlan_page.locator('#investigation-diagnosis').select_option(advanced_cause)
+            with vlan_page.expect_response('**/api/dhcp/investigation/diagnose') as advanced_diagnose:
+                vlan_page.locator('#investigation-submit').click()
+            assert advanced_diagnose.value.status == 200
+            assert advanced_diagnose.value.json()['correct'] is True
+            expect(vlan_page.locator('#investigation-repair')).to_be_enabled()
+            expect(vlan_page.locator('#investigation-repair')).to_contain_text('ny DHCP DORA')
+            with vlan_page.expect_response('**/api/dhcp/investigation/repair') as advanced_repair:
+                vlan_page.locator('#investigation-repair').click()
+            a_recovered = advanced_repair.value.json()
+            assert advanced_repair.value.status == 200
+            assert a_recovered['status'] == 'RECOVERED'
+            assert a_recovered['verifiedProtocol'] == 'NEW_DORA'
+            assert a_recovered['discoverReachedServer'] is True
+            assert a_recovered['offerReachedClient'] is True
+            assert a_recovered['requestReachedServer'] is True
+            assert a_recovered['ackReachedClient'] is True
+            assert a_recovered['leaseActive'] is True
+            assert a_recovered['phase'] == 'BOUND'
+            assert a_recovered['expiresAtSeconds'] == 120
+            expect(vlan_page.locator('#investigation-recovery')).to_contain_text(
+                'Verifierad metod: NEW_DORA')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert sorted(x.name for x in store.glob('*.yadilab')) == ['lab.yadilab']
+            with vlan_page.expect_response('**/api/dhcp/investigation/stop') as advanced_stop:
+                vlan_page.locator('#investigation-stop').click()
+            assert advanced_stop.value.status == 200
+            vlan_page.locator('#investigation-difficulty').select_option('T1_ONLY')
+
             # Late probe responses must not resurrect an exercise after a
             # canonical topology edit; saved bytes are never overwritten.
             with vlan_page.expect_response('**/api/dhcp/investigation/start') as stale_start:
