@@ -211,7 +211,7 @@ def run():
             digest=hashlib.sha256(saved_data).hexdigest()
             parsed=json.loads(saved_data)
             assert len(parsed['nodes']) == 2 and len(parsed['links']) == 1
-            assert parsed['schemaVersion'] == '1.2'
+            assert parsed['schemaVersion'] == '1.3'
             assert parsed['nodes'][0]['ports'][0]['mac'] == '02:00:00:00:00:0A'
             assert parsed['nodes'][1]['ports'][0]['vlan'] == {'mode':'access','vlan':10}
             assert parsed['nodes'][1]['ports'][1]['vlan'] == {'mode':'trunk','allowedVlans':[10,20]}
@@ -456,6 +456,83 @@ def run():
             page.locator('#run-route-lookup').click()
             expect(page.locator('#route-result')).to_contain_text('Routingstatus: NO_ROUTE')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # Schema 1.3 static route: reject off-link gateway, accept explicit
+            # next-hop and output interface, inspect the real route lookup.
+            page.locator('#inspector input[type="checkbox"]').check()
+            page.locator('#new-route-destination').fill('203.0.113.0/24')
+            page.locator('#new-route-next-hop').fill('172.16.0.1')
+            page.locator('#new-route-out-port').select_option('port-1')
+            with page.expect_response('**/api/validate') as rejected:
+                page.locator('#add-static-route').click()
+            assert rejected.value.status == 422
+            expect(page.locator('[data-route-card]')).to_have_count(0)
+            page.locator('#new-route-next-hop').fill('192.0.2.1')
+            with page.expect_response('**/api/validate') as accepted:
+                page.locator('#add-static-route').click()
+            assert accepted.value.status == 200
+            expect(page.locator('[data-route-card="route-1"]')).to_have_count(1)
+            expect(page.locator('[data-route-destination="route-1"]')).to_have_value('203.0.113.0/24')
+            expect(page.locator('[data-route-next-hop="route-1"]')).to_have_value('192.0.2.1')
+            expect(page.locator('[data-route-out-port="route-1"]')).to_have_value('port-1')
+            page.locator('[data-route-next-hop="route-1"]').fill('198.51.100.1')
+            with page.expect_response('**/api/validate') as bad_edit:
+                page.locator('[data-route-next-hop="route-1"]').dispatch_event('change')
+            assert bad_edit.value.status == 422
+            expect(page.locator('[data-route-next-hop="route-1"]')).to_have_value('192.0.2.1')
+
+            page.locator('#route-destination-ip').fill('203.0.113.10')
+            with page.expect_response('**/api/routing/connected') as lookup:
+                page.locator('#run-route-lookup').click()
+            assert lookup.value.status == 200
+            expect(page.locator('#route-result')).to_contain_text('Routingstatus: MATCH')
+            expect(page.locator('#route-result')).to_contain_text('STATIC')
+            expect(page.locator('#route-result')).to_contain_text('192.0.2.1')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # Administratively disabled out-port suppresses the static route,
+            # while its declaration remains available for re-enablement.
+            page.locator('#inspector input[type="checkbox"]').uncheck()
+            page.locator('#run-route-lookup').click()
+            expect(page.locator('#route-result')).to_contain_text('Routingstatus: NO_ROUTE')
+            expect(page.locator('[data-route-card="route-1"]')).to_have_count(1)
+            page.locator('#inspector input[type="checkbox"]').check()
+
+            # Actual Save, full server process restart, NEW Chromium process,
+            # Open and verify identical declared route identity and SHA-256.
+            page.locator('#save-project').click()
+            expect(page.locator('#save-indicator')).to_contain_text('Sparat · lab.yadilab',timeout=12000)
+            routes_raw=saved_file.read_bytes()
+            routes_sha=hashlib.sha256(routes_raw).hexdigest()
+            assert routes_sha != digest
+            routes_doc=json.loads(routes_raw)
+            assert routes_doc['schemaVersion'] == '1.3'
+            assert routes_doc['nodes'][0]['staticRoutes'] == [{
+                'id':'route-1','destination':'203.0.113.0/24',
+                'nextHop':'192.0.2.1','outPort':'port-1'}]
+            page.close()
+            context.close(); browser.close()
+            stop_server(proc)
+
+            proc=spawn_server(server_port,store)
+            browser=playwright.chromium.launch(headless=True, executable_path=executable,
+                                               args=['--no-sandbox'] if executable else [])
+            context=browser.new_context(viewport={'width':1440,'height':900},accept_downloads=True)
+            page=context.new_page()
+            page.on('pageerror',lambda error: errors.append(getattr(error,'stack',str(error))))
+            network_mode=browser_open(page,base)
+            page.locator('#saved-projects').select_option('lab')
+            page.locator('#open-project').click()
+            expect(page.locator('#save-indicator')).to_contain_text('Sparat · lab.yadilab',timeout=12000)
+            page.locator('[data-item-type="node"][data-item-id="node-1"]').click()
+            expect(page.locator('[data-route-card="route-1"]')).to_have_count(1)
+            expect(page.locator('[data-route-next-hop="route-1"]')).to_have_value('192.0.2.1')
+            page.locator('#route-source').select_option('node-1')
+            page.locator('#route-destination-ip').fill('203.0.113.10')
+            page.locator('#run-route-lookup').click()
+            expect(page.locator('#route-result')).to_contain_text('Routingstatus: MATCH')
+            expect(page.locator('#route-result')).to_contain_text('STATIC')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')

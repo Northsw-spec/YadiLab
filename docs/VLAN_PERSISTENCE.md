@@ -2,7 +2,7 @@
 
 ## Source format and migration
 
-The canonical project schema now supports versions **1.0, 1.1 and 1.2**. Reading, validating, saving and exporting existing 1.0 or 1.1 documents **never upgrades them implicitly**. Version 1.0 excludes MAC and VLAN keys; version 1.1 permits the existing optional non-switch `mac` key. Version 1.2 permits both existing `mac` semantics and an additional optional `vlan` on **switch ports only**.
+The canonical project schema supports versions **1.0, 1.1, 1.2 and 1.3**; this document describes the VLAN extension introduced in 1.2. Reading, validating, saving and exporting existing 1.0 or 1.1 documents **never upgrades them implicitly**. Version 1.0 excludes MAC and VLAN keys; version 1.1 permits the existing optional non-switch `mac` key. Version 1.2 permits both existing `mac` semantics and an additional optional `vlan` on **switch ports only**.
 
 Supported switch-port configurations:
 
@@ -17,7 +17,7 @@ The `vlan` key may also be absent or `null` on switch ports. Both mean **no decl
 
 ## Builder and storage behavior
 
-For each switch port, the inspector accepts an **explicit** string `access:10` or `trunk:10,20`; an empty value removes the VLAN key. Input is translated to the precise JSON schema, validated by the actual Python `/api/validate` endpoint and committed to browser memory only on success. Invalid data leaves the previous model intact. Modifying a legacy 1.0/1.1 project explicitly upgrades its **in-memory** version to 1.2; only the user's Save writes a file. Switching a configured switch to another device type is refused until its VLAN configuration is cleared.
+For each switch port, the inspector accepts an **explicit** string `access:10` or `trunk:10,20`; an empty value removes the VLAN key. Input is translated to the precise JSON schema, validated by the actual Python `/api/validate` endpoint and committed to browser memory only on success. Invalid data leaves the previous model intact. Modifying a legacy project via the current Builder upgrades its **in-memory** version to 1.3; only the user's Save writes a file. Switching a configured switch to another device type is refused until its VLAN configuration is cleared.
 
 Existing `ProjectStore` storage, optimistic SHA-256 concurrency, atomic writes, explicit Export and Open behavior are reused unchanged. A real Chromium acceptance test enters both types of VLAN configurations, saves genuine files, verifies SHA-256, restarts the entire server and Chromium process, reopens and verifies the same VLAN facts, and checks exported JSON.
 

@@ -29,7 +29,7 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 | `ethernet.py` | Flyktig MAC-inlärning, explicit v1.1-port-MAC samt VLAN-forwarding på deklarerade kablar med 1.2-konfiguration eller sessionstillägg | ARP-protokoll, ping, IP, STP, NIC-acceptans eller lagring av inlärda tabeller |
 | `server.py` | Lokal UI, API, validering, engångs-ARP, sessioner och read-only connected-routingfrågor | Tolka källdata som topologi, spara diagnostik eller simulera IP-paket |
 | `simulation.py` | Begränsat processlokalt sessionsregister som återanvänder en `ArpSession`/`EthernetFabric` mellan ARP- och Ethernetoperationer och validerar oförändrat projekt | Beständig session, IP-routing, ICMP eller delad projektmodell |
-| `routing.py` | Read-only connected-route-tabell per nod över deklarerade, aktiverade IPv4-gränssnitt; deterministisk longest-prefix match | Statiska routes, gateway, next-hop, paketforwarding, ICMP eller fysisk reachability |
+| `routing.py` | Read-only IPv4-tabell per nod med connected och explicit statiska routes, on-link next-hop och deterministisk longest-prefix match | Next-hop-ARP, paketforwarding, metric, ICMP eller fysisk reachability |
 | `web/model.js` | Explicit UI-modell, enhets- och portkommandon | Adressbaserad länkförutsägelse |
 | `web/canvas.js` | SVG-geometri och direktträff på portpunkter | Ändra noders eller länkars identitet |
 | `web/app.js` | Användarinteraktion, read-only routingtabell/lookup, fel, Save/Open | Egen implementation av Layer 2/Layer 3-protokoll |

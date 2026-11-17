@@ -34,9 +34,9 @@ def get_port(project, node_id, port_id):
 
 
 class PersistentVlanTests(unittest.TestCase):
-    def test_new_defaults_to_v1_2_without_inventing_vlans(self):
+    def test_new_defaults_to_v1_3_without_inventing_vlans_or_routes(self):
         p = blank_project("No implicit memberships")
-        self.assertEqual(p["schemaVersion"], "1.2")
+        self.assertEqual(p["schemaVersion"], "1.3")
         self.assertEqual(p["nodes"], [])
         self.assertEqual(validate_project(p), p)
 

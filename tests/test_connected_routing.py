@@ -156,7 +156,7 @@ class ConnectedRoutingTests(unittest.TestCase):
 
     def test_legacy_versions_unchanged_and_round_trip(self):
         p = example()
-        for version in ("1.0","1.1","1.2"):
+        for version in ("1.0","1.1","1.2","1.3"):
             with self.subTest(version=version):
                 p["schemaVersion"] = version
                 original = copy.deepcopy(p)

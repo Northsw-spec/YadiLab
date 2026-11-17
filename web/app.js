@@ -1,4 +1,4 @@
-import {blank, copy, newNode, newZone, addPort, connect, used, exampleProject, KINDS} from './model.js';
+import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';
 import {TopologyCanvas} from './canvas.js';
 
 const $ = id => document.getElementById(id);
@@ -370,7 +370,7 @@ function renderRouteLookup() {
     `Routingstatus: ${status}`,
     `Enhet: ${sourceNode} · Destination: ${destinationIpv4}`,
     meaning,
-    'Konfigurerade connected routes:\n' + (routes.length ? routes.map(describe).join('\n') : '  Inga'),
+    'Konfigurerade connected och statiska routes:\n' + (routes.length ? routes.map(describe).join('\n') : '  Inga'),
     status === 'MATCH' ?
       'Vald längsta prefixmatchning:\n' + describe(selectedRoute) :
       status === 'AMBIGUOUS' ?
@@ -414,6 +414,11 @@ function renderInspector() {
         notify('Ta bort konfigurerade MAC-adresser innan enheten ändras till switch.', true);
         renderInspector(); return;
       }
+      if (next === 'switch' && value.staticRoutes?.length) {
+        notify('Ta bort statiska routes innan enheten ändras till Layer 2-switch.', true);
+        renderInspector(); return;
+      }
+      if (next === 'switch') delete value.staticRoutes;
       if (next !== 'switch' && value.ports.some(port => port.vlan != null)) {
         notify('Ta bort VLAN-inställningarna innan switchen ändras till en annan typ.', true);
         renderInspector(); return;
@@ -451,7 +456,7 @@ function renderInspector() {
         value.kind === 'switch' ? null : field('MAC-adress (valfri, explicit)', input(port.mac || '', async next => {
           const attempt = copy(project);
           // Legacy documents upgrade in memory on deliberate edit, never on Open.
-          attempt.schemaVersion = '1.2';
+          attempt.schemaVersion = '1.3';
           const portCopy = attempt.nodes.find(n => n.id === value.id).ports.find(p => p.id === port.id);
           portCopy.mac = next.trim() || null;
           try {
@@ -480,7 +485,7 @@ function renderInspector() {
             } else {
               delete portCopy.vlan;
             }
-            attempt.schemaVersion = '1.2';
+            attempt.schemaVersion = '1.3';
             try {
               const normalized = await api('/api/validate', attempt);
               project = normalized.project;
@@ -489,6 +494,10 @@ function renderInspector() {
           }, {dataset:{portVlan:port.id},placeholder:'access:10 eller trunk:10,20'})),
         check('Port aktiverad', port.enabled, enabled => { port.enabled = enabled; changed(); }),
         button('Ta bort port', () => {
+          if (value.staticRoutes?.some(route => route.outPort === port.id)) {
+            notify('Ta bort statiska routes som använder porten innan porten tas bort.', true);
+            return;
+          }
           if (occupied && !confirm('Porten har en ansluten länk. Ta bort BÅDE porten och den uttryckligen valda länken?')) return;
           project.links = project.links.filter(l => !(l.a.node === value.id && l.a.port === port.id) && !(l.b.node === value.id && l.b.port === port.id));
           value.ports = value.ports.filter(p => p.id !== port.id);
@@ -504,6 +513,75 @@ function renderInspector() {
     }, 'btn-soft', {id:'submit-port'});
     box.append(el('div', {className:'field'}, el('label',{htmlFor:'new-port-name'},'Ny port'),portName,add));
     box.append(el('div', {className:'muted-panel'}, 'Koppla två lediga portar genom att klicka på deras cirklar i nätverksvyn. Inga anslutningar skapas utifrån närhet.'));
+    if (value.kind !== 'switch') {
+      const staticRoutes = value.staticRoutes || [];
+      const choices = [{value:'',label:'Välj utgående port'}].concat(
+        value.ports.map(p => ({value:p.id, label:`${p.name} (${p.id})${p.enabled ? '' : ' · inaktiv'}`})));
+      box.append(heading(`Statiska IPv4-routes (${staticRoutes.length})`));
+      box.append(small('Endast explicit next-hop i eget utgående IPv4-subnät. Routingtabell innebär inte paketleverans.'));
+      const commitRouteChange = async (routeId, fieldName, newValue) => {
+        const attempt = copy(project);
+        attempt.schemaVersion = '1.3';
+        const route = attempt.nodes.find(n => n.id === value.id)
+          .staticRoutes.find(r => r.id === routeId);
+        route[fieldName] = newValue;
+        try {
+          const normalized = await api('/api/validate', attempt);
+          project = normalized.project; changed();
+        } catch (error) { notify(error.message, true); renderInspector(); }
+      };
+      for (const route of staticRoutes) {
+        box.append(el('div', {className:'port-card', dataset:{routeCard:route.id}},
+          el('strong', {}, `Statisk route ${route.id}`),
+          field('Destinationsprefix', input(route.destination,
+            next => commitRouteChange(route.id,'destination',next.trim()),
+            {dataset:{routeDestination:route.id},placeholder:'203.0.113.0/24'})),
+          field('Next-hop IPv4', input(route.nextHop,
+            next => commitRouteChange(route.id,'nextHop',next.trim()),
+            {dataset:{routeNextHop:route.id},placeholder:'192.0.2.1'})),
+          field('Utgående port', dropdown(choices, route.outPort,
+            next => commitRouteChange(route.id,'outPort',next),
+            {dataset:{routeOutPort:route.id}})),
+          button('Ta bort statisk route', async () => {
+            const attempt = copy(project);
+            attempt.schemaVersion = '1.3';
+            const node = attempt.nodes.find(n => n.id === value.id);
+            node.staticRoutes = node.staticRoutes.filter(r => r.id !== route.id);
+            try {
+              const normalized = await api('/api/validate', attempt);
+              project = normalized.project; changed();
+            } catch (error) { notify(error.message, true); renderInspector(); }
+          }, 'btn-outline danger', {dataset:{deleteRoute:route.id}})));
+      }
+      const destination = el('input', {className:'control',id:'new-route-destination',
+        placeholder:'203.0.113.0/24',autocomplete:'off'});
+      const nextHop = el('input', {className:'control',id:'new-route-next-hop',
+        placeholder:'192.0.2.1',autocomplete:'off'});
+      const outPort = dropdown(choices, '', () => {}, {id:'new-route-out-port'});
+      const addRoute = button('+ Lägg till statisk route', async () => {
+        if (!destination.value.trim() || !nextHop.value.trim() || !outPort.value) {
+          notify('Ange destinationsprefix, next-hop och välj utgående port uttryckligen.', true);
+          return;
+        }
+        const attempt = copy(project);
+        attempt.schemaVersion = '1.3';
+        const node = attempt.nodes.find(n => n.id === value.id);
+        node.staticRoutes ||= [];
+        node.staticRoutes.push({
+          id: nextId('route', node.staticRoutes),
+          destination: destination.value.trim(),
+          nextHop: nextHop.value.trim(),
+          outPort: outPort.value,
+        });
+        try {
+          const normalized = await api('/api/validate', attempt);
+          project = normalized.project; changed();
+        } catch (error) { notify(error.message, true); }
+      }, 'btn-soft', {id:'add-static-route'});
+      box.append(field('Nytt destinationsprefix', destination),
+        field('Next-hop', nextHop),
+        field('Utgående port', outPort), addRoute);
+    }
     box.append(button('Ta bort enhet', () => {
       const associated = project.links.filter(l => l.a.node === value.id || l.b.node === value.id);
       if (!confirm(`Ta bort ${value.label} samt dess ${associated.length} deklarerade länkar?`)) return;
