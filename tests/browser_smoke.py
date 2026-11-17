@@ -752,6 +752,72 @@ def run():
             page.locator('#trouble-type').select_option('TRUNK_VLAN_BLOCKED')
             assert page.locator('#run-troubleshoot').is_disabled()
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # PR22: changing only the destination's configured IPv4 mask to
+            # /28 prevents its Reply route back to source 192.0.2.10.
+            # Real ICMP request delivery remains intact; rollback restores Echo.
+            page.locator('#trouble-type').select_option('IPV4_PREFIX_CHANGED')
+            page.locator('#trouble-destination').fill('192.0.2.20')
+            page.locator('#trouble-prefix').fill('28')
+            page.locator('#trouble-ipv4-port').select_option(
+                json.dumps(['node-3','port-1'],separators=(',',':')))
+            with page.expect_response('**/api/troubleshoot/fault') as mask_fault:
+                page.locator('#run-troubleshoot').click()
+            assert mask_fault.value.status == 200
+            mask = mask_fault.value.json()
+            assert mask['status'] == 'FAULT_CONFIRMED'
+            assert mask['fault']['fromIpv4'] == '192.0.2.20/24'
+            assert mask['fault']['toIpv4'] == '192.0.2.20/28'
+            assert mask['baseline']['status'] == 'REPLIED'
+            assert mask['faulted']['request']['status'] == 'DELIVERED'
+            assert mask['faulted']['status'] == 'REPLY_FAILED'
+            assert mask['faulted']['reply']['status'] == 'NO_ROUTE'
+            assert mask['restored']['status'] == 'REPLIED'
+            assert mask['repair']['expectedIpv4'] == '192.0.2.20/24'
+            expect(page.locator('#trouble-result')).to_contain_text('IPv4-prefix fel: REPLY_FAILED')
+            expect(page.locator('#trouble-result')).to_contain_text('Återställt IPv4-prefix: REPLIED')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+            page.locator('[data-item-type="node"][data-item-id="node-3"]').click()
+            expect(page.locator('[data-port-ipv4="port-1"]')).to_have_value('192.0.2.20/24')
+
+            # Reusing a route that already fails in baseline may not yield
+            # FAULT_CONFIRMED, even if deleting it changes the error reason.
+            page.locator('#trouble-destination').fill('203.0.113.10')
+            page.locator('#trouble-type').select_option('STATIC_ROUTE_REMOVED')
+            page.locator('#trouble-route').select_option(
+                json.dumps(['node-1','route-1'],separators=(',',':')))
+            with page.expect_response('**/api/troubleshoot/fault') as route_fault:
+                page.locator('#run-troubleshoot').click()
+            assert route_fault.value.status == 200
+            removed = route_fault.value.json()
+            assert removed['status'] == 'BASELINE_NOT_REPLIED'
+            assert removed['fault']['type'] == 'STATIC_ROUTE_REMOVED'
+            assert removed['fault']['removedRoute']['id'] == 'route-1'
+            assert removed['verifiedFault'] is False
+            expect(page.locator('#trouble-result')).to_contain_text('Statisk route borttagen')
+            expect(page.locator('#trouble-result')).to_contain_text('BASELINE_NOT_REPLIED')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # Off-link next-hop is rejected, never silently inferred or saved.
+            page.locator('#trouble-type').select_option('STATIC_NEXT_HOP_CHANGED')
+            page.locator('#trouble-route').select_option(
+                json.dumps(['node-1','route-1'],separators=(',',':')))
+            page.locator('#trouble-next-hop').fill('198.51.100.1')
+            with page.expect_response('**/api/troubleshoot/fault') as bad_hop:
+                page.locator('#run-troubleshoot').click()
+            assert bad_hop.value.status == 422
+            expect(page.locator('#trouble-result')).to_contain_text('Felsökningsjämförelse avvisad')
+            page.locator('#trouble-next-hop').fill('192.0.2.254')
+            with page.expect_response('**/api/troubleshoot/fault') as wrong_hop:
+                page.locator('#run-troubleshoot').click()
+            assert wrong_hop.value.status == 200
+            wrong = wrong_hop.value.json()
+            assert wrong['fault']['fromNextHop'] == '192.0.2.20'
+            assert wrong['fault']['toNextHop'] == '192.0.2.254'
+            assert wrong['status'] == 'BASELINE_NOT_REPLIED'
+            assert wrong['repair']['action'] == 'RESTORE_NEXT_HOP'
+            assert wrong['verifiedFault'] is False
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')

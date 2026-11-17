@@ -6,6 +6,7 @@ No speculative causal diagnosis, automatic repair, or file/working-state writes.
 from __future__ import annotations
 
 from copy import deepcopy
+import ipaddress
 
 from .icmp_ping import EchoExchange
 from .model import ProjectValidationError, validate_project
@@ -81,6 +82,106 @@ def _mutation(project: dict, fault: object) -> tuple[dict, dict, callable, calla
             {"type": kind, "linkId": link_id, "fromEnabled": True, "toEnabled": False},
             {"action": "RE_ENABLE_LINK", "linkId": link_id,
              "expectedEnabled": True, "scope": "PREVIEW_ONLY"},
+            inject, undo,
+        )
+
+    if kind in ("IPV4_PREFIX_CHANGED", "STATIC_ROUTE_REMOVED", "STATIC_NEXT_HOP_CHANGED"):
+        if kind == "IPV4_PREFIX_CHANGED":
+            _exact_fault(fault, kind, {"type", "nodeId", "portId", "newPrefix"})
+            node_id, port_id = fault["nodeId"], fault["portId"]
+            device, port = _port(project, node_id, port_id)
+            if device["kind"] == "switch" or not port["enabled"] or port["ipv4"] is None:
+                raise ProjectValidationError(
+                    "troubleshoot: IPv4 prefix fault requires an enabled non-switch port with explicit IPv4/CIDR")
+            new_prefix = fault["newPrefix"]
+            if type(new_prefix) is not int or not 1 <= new_prefix <= 32:
+                raise ProjectValidationError("troubleshoot: newPrefix must be an integer 1..32")
+            current = ipaddress.IPv4Interface(port["ipv4"])
+            if new_prefix == current.network.prefixlen:
+                raise ProjectValidationError("troubleshoot: newPrefix must differ from configured prefix")
+            original = port["ipv4"]
+            changed = str(ipaddress.IPv4Interface(
+                f"{current.ip}/{new_prefix}"))
+
+            def select(doc: dict) -> dict:
+                return _port(doc, node_id, port_id)[1]
+
+            def inject(doc: dict) -> None:
+                select(doc)["ipv4"] = changed
+
+            def undo(doc: dict) -> None:
+                select(doc)["ipv4"] = original
+
+            return (
+                {"type": kind, "nodeId": node_id, "portId": port_id,
+                 "fromIpv4": original, "toIpv4": changed},
+                {"action": "RESTORE_IPV4", "nodeId": node_id, "portId": port_id,
+                 "expectedIpv4": original, "scope": "PREVIEW_ONLY"},
+                inject, undo,
+            )
+
+        required = {"type", "nodeId", "routeId"}
+        if kind == "STATIC_NEXT_HOP_CHANGED":
+            required.add("newNextHop")
+        _exact_fault(fault, kind, required)
+        node_id, route_id = fault["nodeId"], fault["routeId"]
+        if not isinstance(node_id, str) or not isinstance(route_id, str):
+            raise ProjectValidationError("troubleshoot: nodeId and routeId must be strings")
+        node = next((n for n in project["nodes"] if n["id"] == node_id), None)
+        if node is None or node["kind"] == "switch":
+            raise ProjectValidationError("troubleshoot: static route fault requires a declared non-switch node")
+        routes = node.get("staticRoutes")
+        if routes is None:
+            raise ProjectValidationError("troubleshoot: node has no schema 1.3 static routes")
+        index = next((i for i, r in enumerate(routes) if r["id"] == route_id), None)
+        if index is None:
+            raise ProjectValidationError("troubleshoot: unknown static routeId")
+        original_route = deepcopy(routes[index])
+
+        def route_list(doc: dict) -> list[dict]:
+            device = next(n for n in doc["nodes"] if n["id"] == node_id)
+            return device["staticRoutes"]
+
+        if kind == "STATIC_ROUTE_REMOVED":
+            def inject(doc: dict) -> None:
+                route_list(doc).pop(index)
+
+            def undo(doc: dict) -> None:
+                route_list(doc).insert(index, deepcopy(original_route))
+
+            return (
+                {"type": kind, "nodeId": node_id, "routeId": route_id,
+                 "removedRoute": original_route},
+                {"action": "RESTORE_STATIC_ROUTE", "nodeId": node_id,
+                 "routeId": route_id, "expectedRoute": original_route,
+                 "scope": "PREVIEW_ONLY"},
+                inject, undo,
+            )
+
+        next_hop = fault["newNextHop"]
+        if not isinstance(next_hop, str):
+            raise ProjectValidationError("troubleshoot: newNextHop must be a canonical IPv4 address")
+        try:
+            ip = ipaddress.IPv4Address(next_hop)
+        except ipaddress.AddressValueError:
+            raise ProjectValidationError(
+                "troubleshoot: newNextHop must be a canonical IPv4 address") from None
+        if str(ip) != next_hop or next_hop == original_route["nextHop"]:
+            raise ProjectValidationError("troubleshoot: newNextHop must differ and be canonical")
+        # Validation of on-link, non-reserved and non-self IPv4 gateway is
+        # performed by the ONE canonical validate_project on the fault copy.
+        def inject(doc: dict) -> None:
+            route_list(doc)[index]["nextHop"] = next_hop
+
+        def undo(doc: dict) -> None:
+            route_list(doc)[index]["nextHop"] = original_route["nextHop"]
+
+        return (
+            {"type": kind, "nodeId": node_id, "routeId": route_id,
+             "fromNextHop": original_route["nextHop"], "toNextHop": next_hop},
+            {"action": "RESTORE_NEXT_HOP", "nodeId": node_id,
+             "routeId": route_id, "expectedNextHop": original_route["nextHop"],
+             "scope": "PREVIEW_ONLY"},
             inject, undo,
         )
 
