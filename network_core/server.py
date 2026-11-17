@@ -227,6 +227,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, self.server.dhcp_sessions.run(
                     body["sessionId"], body["project"], body["clientNode"],
                     body["clientPort"], body["transactionId"], body["leaseSeconds"]))
+            elif path == "/api/dhcp/session/port-fault":
+                required = {"sessionId", "project", "nodeId", "portId", "disabled"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "dhcp session port-fault: expected sessionId, project, nodeId, portId, disabled")
+                self._json(200, self.server.dhcp_sessions.port_fault(
+                    body["sessionId"], body["project"], body["nodeId"],
+                    body["portId"], body["disabled"]))
+            elif path == "/api/dhcp/session/vlan-fault":
+                required = {"sessionId", "project", "nodeId", "portId", "vlanId"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "dhcp session vlan-fault: expected sessionId, project, nodeId, portId, vlanId")
+                self._json(200, self.server.dhcp_sessions.vlan_fault(
+                    body["sessionId"], body["project"], body["nodeId"],
+                    body["portId"], body["vlanId"]))
             elif path == "/api/dhcp/session/link-fault":
                 required = {"sessionId", "project", "linkId", "disabled"}
                 if not isinstance(body, dict) or set(body) != required:

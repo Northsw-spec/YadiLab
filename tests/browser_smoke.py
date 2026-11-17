@@ -32,6 +32,7 @@ from network_core.xlsx_import import import_xlsx_workbook
 from network_core.ods_import import import_ods_workbook
 from test_dhcp import topology as dhcp_topology
 from test_dhcp_registry import clients as dhcp_multi_clients
+from test_dhcp_port_vlan_fault import vlan_clients as dhcp_vlan_clients
 
 
 def port():
@@ -859,6 +860,121 @@ def run():
             expect(dhcp_page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
             assert not errors, errors
             dhcp_page.close()
+
+            # PR37: independent real Chromium VLAN lab. All hosts and
+            # switch access VLANs are explicitly supplied by the imported
+            # canonical project. Faults must never edit that source document.
+            vlan_page = context.new_page()
+            vlan_page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+            assert browser_open(vlan_page, base) == network_mode
+            vlan_page.once('dialog', lambda dialog: dialog.accept())
+            with vlan_page.expect_response('**/api/validate') as vlan_import:
+                vlan_page.locator('#import-file').set_input_files({
+                    'name': 'declared-vlan-dhcp.json',
+                    'mimeType': 'application/json',
+                    'buffer': json.dumps(dhcp_vlan_clients()).encode('utf-8'),
+                })
+            assert vlan_import.value.status == 200
+            expect(vlan_page.locator('[data-node-id="sw"]')).to_have_count(1)
+            vlan_page.locator('#dora-client').select_option(
+                json.dumps(['client', 'eth0'], separators=(',', ':')))
+            vlan_page.locator('#dora-server').select_option(
+                json.dumps(['server', 'eth0'], separators=(',', ':')))
+            vlan_page.locator('#dora-pool-start').fill('192.0.2.70')
+            vlan_page.locator('#dora-pool-end').fill('192.0.2.71')
+            vlan_page.locator('#dora-transaction-id').fill('301')
+            vlan_page.locator('#dora-lease-seconds').fill('60')
+            with vlan_page.expect_response('**/api/dhcp/session/start') as vlan_start:
+                vlan_page.locator('#dora-session-start').click()
+            assert vlan_start.value.status == 200
+            with vlan_page.expect_response('**/api/dhcp/session/run') as vlan_bound:
+                vlan_page.locator('#dora-session-run').click()
+            bound = vlan_bound.value.json()
+            assert bound['result']['status'] == 'ACK_RECEIVED'
+            assert bound['leases'][0]['expiresAtSeconds'] == 60
+            expect(vlan_page.locator('#dora-session-vlan-port')).to_be_enabled()
+            vlan_page.locator('#dora-session-port-fault').select_option(
+                json.dumps(['sw', 's'], separators=(',', ':')))
+            expect(vlan_page.locator('#dora-session-port-down')).to_be_enabled()
+            with vlan_page.expect_response('**/api/dhcp/session/port-fault') as browser_port_down:
+                vlan_page.locator('#dora-session-port-down').click()
+            port_down = browser_port_down.value.json()
+            assert browser_port_down.value.status == 200
+            assert port_down['faultedPorts'] == [{'nodeId': 'sw', 'portId': 's'}]
+            assert port_down['macTables'] == []
+            expect(vlan_page.locator('#dora-session-port-result')).to_contain_text(
+                'Avstängda switchportar i sessionen: sw/s')
+            vlan_page.locator('[data-item-type="node"][data-item-id="sw"]').click()
+            expect(vlan_page.locator('[data-port-vlan="s"]')).to_have_value('access:10')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            vlan_page.locator('#dora-session-advance-seconds').fill('30')
+            with vlan_page.expect_response('**/api/dhcp/session/advance') as vlan_t1_time:
+                vlan_page.locator('#dora-session-advance').click()
+            assert vlan_t1_time.value.json()['leases'][0]['renewalPhase'] == 'RENEWING'
+            vlan_page.locator('#dora-transaction-id').fill('302')
+            with vlan_page.expect_response('**/api/dhcp/session/renew') as vlan_t1_attempt:
+                vlan_page.locator('#dora-session-renew').click()
+            t1_fault = vlan_t1_attempt.value.json()
+            assert t1_fault['result']['status'] == 'REQUEST_NOT_RECEIVED'
+            assert t1_fault['result']['request']['receivedAtServer'] is False
+            assert t1_fault['leases'][0]['expiresAtSeconds'] == 60
+            with vlan_page.expect_response('**/api/dhcp/session/port-fault') as browser_port_up:
+                vlan_page.locator('#dora-session-port-up').click()
+            assert browser_port_up.value.json()['faultedPorts'] == []
+            expect(vlan_page.locator('#dora-session-port-down')).to_be_enabled()
+            vlan_page.locator('#dora-session-vlan-port').select_option(
+                json.dumps(['sw', 'c'], separators=(',', ':')))
+            vlan_page.locator('#dora-session-vlan-target').select_option('20')
+            expect(vlan_page.locator('#dora-session-vlan-set')).to_be_enabled()
+            with vlan_page.expect_response('**/api/dhcp/session/vlan-fault') as browser_vlan_bad:
+                vlan_page.locator('#dora-session-vlan-set').click()
+            bad_vlan = browser_vlan_bad.value.json()
+            assert browser_vlan_bad.value.status == 200
+            assert bad_vlan['faultedAccessVlans'] == [{
+                'nodeId': 'sw', 'portId': 'c', 'originalVlan': 10, 'faultVlan': 20,
+            }]
+            assert bad_vlan['macTables'] == []
+            expect(vlan_page.locator('#dora-session-vlan-result')).to_contain_text(
+                'sw/c VLAN 10 → 20')
+            expect(vlan_page.locator('[data-port-vlan="c"]')).to_have_value('access:10')
+            vlan_page.locator('#dora-session-advance-seconds').fill('23')
+            with vlan_page.expect_response('**/api/dhcp/session/advance') as vlan_t2_time:
+                vlan_page.locator('#dora-session-advance').click()
+            assert vlan_t2_time.value.json()['leases'][0]['renewalPhase'] == 'REBINDING'
+            vlan_page.locator('#dora-transaction-id').fill('303')
+            with vlan_page.expect_response('**/api/dhcp/session/renew') as vlan_t2_attempt:
+                vlan_page.locator('#dora-session-renew').click()
+            t2_fault = vlan_t2_attempt.value.json()
+            assert t2_fault['result']['phase'] == 'REBINDING'
+            assert t2_fault['result']['status'] == 'REQUEST_NOT_RECEIVED'
+            assert t2_fault['result']['request']['ipDestination'] == '255.255.255.255'
+            assert t2_fault['leases'][0]['expiresAtSeconds'] == 60
+            with vlan_page.expect_response('**/api/dhcp/session/vlan-fault') as browser_vlan_restore:
+                vlan_page.locator('#dora-session-vlan-restore').click()
+            assert browser_vlan_restore.value.json()['faultedAccessVlans'] == []
+            vlan_page.locator('#dora-transaction-id').fill('304')
+            with vlan_page.expect_response('**/api/dhcp/session/renew') as vlan_recovered:
+                vlan_page.locator('#dora-session-renew').click()
+            restored_lease = vlan_recovered.value.json()
+            assert restored_lease['result']['status'] == 'ACK_RECEIVED'
+            assert restored_lease['result']['ack']['receivedAtClient'] is True
+            assert restored_lease['leases'][0]['expiresAtSeconds'] == 113
+            assert restored_lease['leases'][0]['renewalCount'] == 1
+            expect(vlan_page.locator('#dora-session-port-result')).to_contain_text(
+                'Inga simulerade avstängda switchportar')
+            expect(vlan_page.locator('#dora-session-vlan-result')).to_contain_text(
+                'Inga simulerade VLAN-ändringar')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert sorted(x.name for x in store.glob('*.yadilab')) == ['lab.yadilab']
+            expect(vlan_page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+            with vlan_page.expect_response('**/api/dhcp/session/reset') as vlan_reset:
+                vlan_page.locator('#dora-session-reset').click()
+            assert vlan_reset.value.json()['clockSeconds'] == 0
+            assert vlan_reset.value.json()['faultedPorts'] == []
+            assert vlan_reset.value.json()['faultedAccessVlans'] == []
+            assert vlan_reset.value.json()['leases'] == []
+            assert not errors, errors
+            vlan_page.close()
 
             # A different saved project must not be silently overwritten.
             page.locator('#new-project').click()

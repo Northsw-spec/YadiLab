@@ -308,6 +308,72 @@ filbytes eller verkliga nätverksenheter påverkas.
 automatisk felinjicering, portflap-historik och verklig
 hårdvarubaserad länkövervakning ingår inte.
 
+## Separata switchport- och access-VLAN-fel i DHCP-session (PR #37)
+
+Utöver kabelbaserad `link-fault` stöds två **sessionlokala**, explicit
+anropade API-operationer. Båda är bundna till ursprungligt validerat
+projekt (`project`), kräver sessions-ID, serialiseras under samma
+registreringslås och ändrar aldrig den kanoniska dokumentationen.
+
+**Administrativ switchportavstängning:**
+
+```json
+{"sessionId":"<opaque ID>","project":{},"nodeId":"sw","portId":"s","disabled":true}
+```
+
+`POST /api/dhcp/session/port-fault` accepterar exakt dessa nycklar.
+`nodeId/portId` måste identifiera en **switchport som hade en aktiv
+dokumenterad länk när sessionen startades**; en hostport, okänd,
+från början avstängd eller oanvänd port avvisas. `disabled` är
+endast JSON `true/false`, inte tal eller sträng. Flera avbrott
+kan förekomma samtidigt. Avstängning tar bort båda kabelriktningarna
+i arbetsminnet; återställning med `false` lägger bara tillbaka dem
+om ingen separat kabel-/portfel-injektion fortfarande blockerar.
+Sessionens `wires` beräknas gemensamt från ursprunglig fysisk
+kabelmängd och samtliga aktiva kabel-/portfel. På ändring töms
+inlärd MAC-tabell, men aldrig aktiv BOUND-lease eller virtuell tid.
+
+**Tillfälligt VLAN-isolerad hostansluten switchport:**
+
+```json
+{"sessionId":"<opaque ID>","project":{},"nodeId":"sw","portId":"c","vlanId":20}
+```
+
+`POST /api/dhcp/session/vlan-fault` kräver exakt nycklarna
+ovan. Endast en **ursprungligen aktiv, dokumenterad switch-accessport
+som ansluter en icke-switchändpunkt** kan ändras; trunkport,
+switch-till-switch-accesslänk, port utan VLAN och port som saknar kabel
+avvisas. `vlanId` måste vara ett äkta heltal som **redan förekommer
+i ursprungliga switcharnas explicita access- eller trunk-VLAN**,
+skilt från ursprungligt och aktuellt fel-VLAN. JSON `null`
+återställer explicit ursprungligt access-VLAN, men avvisas
+om ingen override är aktiv. Ingen implicit VLAN 1 skapas.
+
+Byte av access-VLAN påverkar switchens in- och utgående
+VLAN-medlemskap för verkligt spårade Ethernetramar. Det
+skapar ingen kabel, MAC, router eller DHCP-relay.
+MAC-tabeller töms på varje giltigt byte så att gammal inlärning
+inte ger falsk unicast. En befintlig BOUND-lease förlängs
+**endast** om en framtida korrekt T1/T2-REQUEST når serverporten
+och ACK sedan når ursprunglig klientport. Om servern är isolerad
+misslyckas förnyelsen; exakt expiration gäller fortsatt.
+Efter VLAN-återställning kan ny DORA eller förnyelse före
+expiration åter fungera.
+
+**Säkerhet och observerbarhet:** Varje godkänd förändring
+förbrukar en av sessionens 256 operationer, och svaret samt
+framtida sessionssvar anger `faultedPorts` (lista med
+`nodeId/portId`) och `faultedAccessVlans` (original och
+tillfälligt VLAN-ID), tillsammans med tidigare `faultedLinks`,
+MAC-tabeller, leases och klocka. Ogiltiga/dubblerade tillstånd,
+ändrad projektsnapshot och operationer över gränsen ger HTTP 422
+utan mutation. `reset` bygger om ursprunglig EthernetFabric
+och rensar **alla** sessionfel, MAC-inlärning, leases och tid;
+`stop` kastar hela sessionen. Andra sessioner, engångs-DORA
+och sparade projektfiler påverkas inte. Simulatorn modellerar
+inte verklig hårdvarustatus, STP, automatisk reparation eller
+routad DHCP.
+
 ## Avsiktliga begränsningar
 
 - Den simulerade leasen existerar endast i minnet. **Klientportens

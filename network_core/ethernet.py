@@ -51,6 +51,7 @@ class EthernetFabric:
         # injection affects only THIS fabric and is always fully reversible.
         self._original_wires = dict(self.wires)
         self._faulted_links: set[str] = set()
+        self._faulted_ports: set[tuple[str, str]] = set()
         # Explicit VLAN configuration may be persisted on switch ports in
         # schema 1.2, or added to one session without overwriting source data.
         persisted_vlans = {
@@ -148,6 +149,12 @@ class EthernetFabric:
             node_id: {} for node_id, node in self.nodes.items()
             if node["kind"] == "switch"
         }
+        self._original_vlan_ports = dict(self._vlan_ports)
+        self._faulted_access_vlans: dict[tuple[str, str], int] = {}
+        self._documented_vlan_ids: frozenset[int] = frozenset(
+            number for mode, member in self._original_vlan_ports.values()
+            for number in (member if mode == "trunk" else (member,))
+        )
 
     def faulted_links(self) -> list[str]:
         """Detached session-only faults; never changes canonical link flags."""
@@ -179,13 +186,94 @@ class EthernetFabric:
             raise ProjectValidationError(
                 "ethernet fault: requested link state is already active")
         if disabled:
-            self.wires.pop(left)
-            self.wires.pop(right)
             self._faulted_links.add(link_id)
         else:
-            self.wires[left] = self._original_wires[left]
-            self.wires[right] = self._original_wires[right]
             self._faulted_links.remove(link_id)
+        self._rebuild_active_wires()
+
+    def faulted_ports(self) -> list[dict]:
+        """Declared switch ports temporarily disabled by this fabric only."""
+        return [
+            {"nodeId": nid, "portId": pid}
+            for nid, pid in sorted(self._faulted_ports)
+        ]
+
+    def faulted_access_vlans(self) -> list[dict]:
+        """Current vs original VLAN for strictly documented access interfaces."""
+        return [
+            {"nodeId": nid, "portId": pid,
+             "originalVlan": self._original_vlan_ports[(nid, pid)][1],
+             "faultVlan": vlan}
+            for (nid, pid), vlan in sorted(self._faulted_access_vlans.items())
+        ]
+
+    def _active_switch_endpoint(self, node_id: str, port_id: str) -> tuple[str, str]:
+        if (not isinstance(node_id, str) or not isinstance(port_id, str)
+                or not node_id or not port_id or
+                self.nodes.get(node_id, {}).get("kind") != "switch"
+                or (node_id, port_id) not in self._original_wires):
+            raise ProjectValidationError(
+                "ethernet fault: requires an originally active documented switch port")
+        return node_id, port_id
+
+    def _rebuild_active_wires(self) -> None:
+        """Combine link and port faults without resurrecting the other fault."""
+        self.wires = {
+            endpoint: connection
+            for endpoint, connection in self._original_wires.items()
+            if connection[2] not in self._faulted_links
+            and endpoint not in self._faulted_ports
+            and (connection[0], connection[1]) not in self._faulted_ports
+        }
+        for table in self._tables.values():
+            table.clear()
+
+    def set_port_fault(self, node_id: str, port_id: str, disabled: bool) -> None:
+        """Administrative shutdown of an originally active switch port only."""
+        endpoint = self._active_switch_endpoint(node_id, port_id)
+        if type(disabled) is not bool:
+            raise ProjectValidationError("ethernet fault: disabled must be a boolean")
+        if disabled == (endpoint in self._faulted_ports):
+            raise ProjectValidationError("ethernet fault: requested port state is already active")
+        if disabled:
+            self._faulted_ports.add(endpoint)
+        else:
+            self._faulted_ports.remove(endpoint)
+        self._rebuild_active_wires()
+
+    def set_access_vlan_fault(self, node_id: str, port_id: str,
+                              vlan_id: int | None) -> None:
+        """Temporary access VLAN override, limited to existing documented VLANs.
+
+        An override may only isolate a host-facing access port. Never
+        synthesize VLAN 1, a trunk member, or a VLAN not in the project.
+        Restoring requires JSON null (Python None).
+        """
+        endpoint = self._active_switch_endpoint(node_id, port_id)
+        original = self._original_vlan_ports.get(endpoint)
+        if not self._vlan_enabled or original is None or original[0] != "access":
+            raise ProjectValidationError(
+                "ethernet fault: VLAN override requires documented switch access port")
+        neighbor, peer_port, _ = self._original_wires[endpoint]
+        if self.nodes[neighbor]["kind"] == "switch":
+            raise ProjectValidationError(
+                "ethernet fault: VLAN override only supports host-facing access port")
+        current_override = self._faulted_access_vlans.get(endpoint)
+        if vlan_id is None:
+            if current_override is None:
+                raise ProjectValidationError("ethernet fault: no session VLAN override to restore")
+            del self._faulted_access_vlans[endpoint]
+            self._vlan_ports[endpoint] = original
+        else:
+            if type(vlan_id) is not int or vlan_id not in self._documented_vlan_ids:
+                raise ProjectValidationError(
+                    "ethernet fault: VLAN must be explicitly documented elsewhere in project")
+            if vlan_id == original[1] or vlan_id == current_override:
+                raise ProjectValidationError(
+                    "ethernet fault: VLAN override must differ from current and original")
+            self._faulted_access_vlans[endpoint] = vlan_id
+            self._vlan_ports[endpoint] = ("access", vlan_id)
+        # Learn again only from packets arriving under the new membership.
         for table in self._tables.values():
             table.clear()
 

@@ -64,6 +64,8 @@ let doraSessionTrace = null;
 let doraClockEvent = null;
 let doraRenewalTrace = null;
 let doraFaultEvent = null;
+let doraPortFaultEvent = null;
+let doraVlanFaultEvent = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -163,6 +165,8 @@ function invalidateDoraSession() {
   doraClockEvent = null;
   doraRenewalTrace = null;
   doraFaultEvent = null;
+  doraPortFaultEvent = null;
+  doraVlanFaultEvent = null;
   if (previous) {
     // Best-effort release; backend also refuses any changed project snapshot.
     void api('/api/dhcp/session/stop', {sessionId: previous}).catch(() => {});
@@ -536,6 +540,103 @@ function renderDoraSession() {
     faultOutput.textContent = faultSummary
       + '\nKabelavbrott simuleras endast i denna DHCP-session.';
   }
+  const activeSwitchPorts = project.nodes.filter(n => n.kind === 'switch').flatMap(n =>
+    n.ports.filter(port => port.enabled && originallyActive.some(link =>
+      (link.a.node === n.id && link.a.port === port.id)
+      || (link.b.node === n.id && link.b.port === port.id))).map(port => ({
+      nodeId: n.id, portId: port.id, port,
+    })));
+  const portSelector = $('dora-session-port-fault');
+  const previousPort = portSelector.value;
+  const portOptions = activeSwitchPorts.map(item => ({
+    value: JSON.stringify([item.nodeId, item.portId]),
+    label: item.nodeId + '/' + item.portId,
+  }));
+  portSelector.replaceChildren(...(portOptions.length
+    ? portOptions.map(item => el('option', {value: item.value}, item.label))
+    : [el('option', {value: ''}, 'Inga aktiva dokumenterade switchportar')]));
+  if (portOptions.some(x => x.value === previousPort)) portSelector.value = previousPort;
+  const selectedPort = portSelector.value;
+  const faultedPorts = active ? doraSessionState.faultedPorts : [];
+  const portIsDown = selectedPort && faultedPorts.some(p =>
+    JSON.stringify([p.nodeId, p.portId]) === selectedPort);
+  portSelector.disabled = !active || busy || !portOptions.length;
+  $('dora-session-port-down').disabled = !active || busy || !selectedPort || portIsDown;
+  $('dora-session-port-up').disabled = !active || busy || !selectedPort || !portIsDown;
+  const portSummary = faultedPorts.length
+    ? 'Avstängda switchportar i sessionen: '
+      + faultedPorts.map(p => p.nodeId + '/' + p.portId).join(', ')
+    : 'Inga simulerade avstängda switchportar.';
+  const portResult = $('dora-session-port-result');
+  portResult.classList.remove('ok', 'fail');
+  if (doraPortFaultEvent?.error) {
+    portResult.classList.add('fail');
+    portResult.textContent = 'Portfel avvisat: ' + doraPortFaultEvent.error + '\n' + portSummary;
+  } else {
+    portResult.textContent = portSummary
+      + '\nSwitchportens operativa status ändras bara i sessionen; källprojektets port är oförändrad.';
+  }
+
+  // Never synthesize a VLAN. Only original explicitly documented IDs are selectable.
+  const documentedVlans = [...new Set(project.nodes.filter(n => n.kind === 'switch')
+    .flatMap(n => n.ports.flatMap(port => port.vlan?.mode === 'access'
+      ? [port.vlan.vlan]
+      : port.vlan?.mode === 'trunk' ? port.vlan.allowedVlans : [])))].sort((a, b) => a - b);
+  const vlanPorts = activeSwitchPorts.filter(item =>
+    item.port.vlan?.mode === 'access'
+    && originallyActive.some(link => {
+      const neighbor = link.a.node === item.nodeId && link.a.port === item.portId
+        ? project.nodes.find(n => n.id === link.b.node)
+        : link.b.node === item.nodeId && link.b.port === item.portId
+          ? project.nodes.find(n => n.id === link.a.node) : null;
+      return neighbor && neighbor.kind !== 'switch';
+    }));
+  const vlanSelector = $('dora-session-vlan-port');
+  const previousVlanPort = vlanSelector.value;
+  const vlanOptions = vlanPorts.map(item => ({
+    value: JSON.stringify([item.nodeId, item.portId]),
+    label: item.nodeId + '/' + item.portId + ' · ursprungligt VLAN ' + item.port.vlan.vlan,
+    original: item.port.vlan.vlan,
+  }));
+  vlanSelector.replaceChildren(...(vlanOptions.length
+    ? vlanOptions.map(item => el('option', {value: item.value}, item.label))
+    : [el('option', {value: ''}, 'Saknar dokumenterad accessport')]));
+  if (vlanOptions.some(item => item.value === previousVlanPort)) {
+    vlanSelector.value = previousVlanPort;
+  }
+  const chosenVlanPort = vlanSelector.value;
+  const chosenInfo = vlanOptions.find(item => item.value === chosenVlanPort);
+  const currentOverride = active ? doraSessionState.faultedAccessVlans.find(v =>
+    JSON.stringify([v.nodeId, v.portId]) === chosenVlanPort) : null;
+  const vlanTarget = $('dora-session-vlan-target');
+  const previousVlanTarget = vlanTarget.value;
+  const targetOptions = documentedVlans.filter(v => v !== chosenInfo?.original).map(v => ({
+    value: String(v), label: 'VLAN ' + v,
+  }));
+  vlanTarget.replaceChildren(...(targetOptions.length
+    ? targetOptions.map(item => el('option', {value: item.value}, item.label))
+    : [el('option', {value: ''}, 'Inget annat dokumenterat VLAN')]));
+  if (targetOptions.some(v => v.value === previousVlanTarget)) vlanTarget.value = previousVlanTarget;
+  vlanSelector.disabled = !active || busy || !vlanOptions.length;
+  vlanTarget.disabled = !active || busy || !targetOptions.length;
+  $('dora-session-vlan-set').disabled = !active || busy || !chosenVlanPort
+    || !vlanTarget.value || Number(vlanTarget.value) === currentOverride?.faultVlan;
+  $('dora-session-vlan-restore').disabled = !active || busy || !currentOverride;
+  const vlanFaults = active ? doraSessionState.faultedAccessVlans : [];
+  const vlanSummary = vlanFaults.length
+    ? 'Tillfälliga access-VLAN-fel: ' + vlanFaults.map(v => v.nodeId + '/' + v.portId
+      + ' VLAN ' + v.originalVlan + ' → ' + v.faultVlan).join(', ')
+    : 'Inga simulerade VLAN-ändringar.';
+  const vlanResult = $('dora-session-vlan-result');
+  vlanResult.classList.remove('ok', 'fail');
+  if (doraVlanFaultEvent?.error) {
+    vlanResult.classList.add('fail');
+    vlanResult.textContent = 'VLAN-fel avvisat: ' + doraVlanFaultEvent.error + '\n' + vlanSummary;
+  } else {
+    vlanResult.textContent = vlanSummary
+      + '\nBara uttryckligen dokumenterade VLAN och accessportar tillåts; MAC-inlärning töms vid ändring.';
+  }
+
   $('dora-session-start').disabled = active || busy || !clients.length || !servers.length;
   $('dora-session-run').disabled = !active || busy || !clients.length;
   $('dora-session-reset').disabled = !active || busy;
@@ -1565,6 +1666,8 @@ async function startDoraSession() {
   doraClockEvent = null;
   doraRenewalTrace = null;
   doraFaultEvent = null;
+  doraPortFaultEvent = null;
+  doraVlanFaultEvent = null;
   const inputs = doraSessionInput();
   const [client, server, poolStart, poolEnd] = inputs;
   if (!client || !server || !poolStart || !poolEnd) {
@@ -1648,6 +1751,55 @@ async function runDoraSession() {
     }
   }
 }
+async function setDoraSwitchFault(kind, restore) {
+  if (!doraSessionId || doraSessionBusy || doraBusy) return;
+  if (kind !== 'port' && kind !== 'vlan') return;
+  const selectorId = kind === 'port' ? 'dora-session-port-fault' : 'dora-session-vlan-port';
+  const selected = $(selectorId).value;
+  if (!selected) return;
+  const [nodeId, portId] = JSON.parse(selected);
+  const target = kind === 'vlan' ? $('dora-session-vlan-target').value : null;
+  if (kind === 'vlan' && !restore && !target) return;
+  const parameter = kind === 'port'
+    ? {disabled: !restore}
+    : {vlanId: restore ? null : Number(target)};
+  const id = doraSessionId;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  if (kind === 'port') doraPortFaultEvent = null;
+  else doraVlanFaultEvent = null;
+  renderDoraSession();
+  try {
+    const state = await api('/api/dhcp/session/' + (kind === 'port' ? 'port-fault' : 'vlan-fault'), {
+      sessionId: id, project: JSON.parse(snapshot), nodeId, portId, ...parameter,
+    });
+    if (generation === doraSessionGeneration && doraSessionId === id
+        && edit === editRevision && workspace === workspaceRevision
+        && JSON.stringify(project) === snapshot
+        && $(selectorId).value === selected) {
+      doraSessionState = state;
+      if (kind === 'port') doraPortFaultEvent = {nodeId, portId, ...parameter};
+      else doraVlanFaultEvent = {nodeId, portId, ...parameter};
+      doraSessionTrace = null;
+      doraRenewalTrace = null;
+      doraClockEvent = null;
+      doraFaultEvent = null;
+    }
+  } catch (error) {
+    if (generation === doraSessionGeneration && doraSessionId === id) {
+      if (kind === 'port') doraPortFaultEvent = {error: error.message};
+      else doraVlanFaultEvent = {error: error.message};
+    }
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraSession();
+    }
+  }
+}
+
 async function setDoraLinkFault(disabled) {
   if (!doraSessionId || doraSessionBusy || doraBusy) return;
   const linkId = $('dora-session-fault-link').value;
@@ -1791,6 +1943,8 @@ async function resetDoraSession() {
       doraClockEvent = null;
       doraRenewalTrace = null;
       doraFaultEvent = null;
+      doraPortFaultEvent = null;
+      doraVlanFaultEvent = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration && doraSessionId === id) {
@@ -1817,6 +1971,8 @@ async function stopDoraSession() {
       doraClockEvent = null;
       doraRenewalTrace = null;
       doraFaultEvent = null;
+      doraPortFaultEvent = null;
+      doraVlanFaultEvent = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration) {
@@ -2277,6 +2433,18 @@ $('dora-session-run').addEventListener('click', runDoraSession);
 $('dora-session-renew').addEventListener('click', renewDoraSession);
 $('dora-session-fault-break').addEventListener('click', () => setDoraLinkFault(true));
 $('dora-session-fault-restore').addEventListener('click', () => setDoraLinkFault(false));
+$('dora-session-port-down').addEventListener('click', () => setDoraSwitchFault('port', false));
+$('dora-session-port-up').addEventListener('click', () => setDoraSwitchFault('port', true));
+$('dora-session-vlan-set').addEventListener('click', () => setDoraSwitchFault('vlan', false));
+$('dora-session-vlan-restore').addEventListener('click', () => setDoraSwitchFault('vlan', true));
+for (const id of ['dora-session-port-fault', 'dora-session-vlan-port',
+                  'dora-session-vlan-target']) {
+  $(id).addEventListener('change', () => {
+    doraPortFaultEvent = null;
+    doraVlanFaultEvent = null;
+    renderDoraSession();
+  });
+}
 $('dora-session-fault-link').addEventListener('change', () => {
   doraFaultEvent = null;
   renderDoraSession();
