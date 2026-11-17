@@ -151,11 +151,14 @@ class ClockModelTests(unittest.TestCase):
         again = reg.advance(sid, p, 60)
         self.assertEqual(len(again["expiredLeases"]), 1)
 
-    def test_concurrent_allocation_and_advance_are_serialized(self):
+    def test_concurrent_advance_and_run_are_serializable(self):
         p = clients()
         reg = DhcpSessionRegistry()
         sid = start(reg, p)["sessionId"]
         reg.run(sid, p, "client", "eth0", 100, 60)
+        # Either locked ordering is legitimate: Run then Advance makes
+        # both leases expire at t=60; Advance then Run reuses .70 at t=60.
+        # A fabricated fixed ordering would make the test flaky.
         with ThreadPoolExecutor(max_workers=2) as pool:
             a = pool.submit(reg.advance, sid, p, 60)
             b = pool.submit(reg.run, sid, p, "client-2", "eth0", 101, 60)
@@ -163,8 +166,16 @@ class ClockModelTests(unittest.TestCase):
             assigned = b.result()
         self.assertEqual(advance["clockSeconds"], 60)
         self.assertEqual(assigned["result"]["status"], "ACK_RECEIVED")
-        self.assertEqual(assigned["result"]["lease"]["ipv4"], "192.0.2.70")
-        self.assertEqual(reg._get(sid).state()["leaseCount"], 1)
+        self.assertEqual(reg._get(sid).state()["clockSeconds"], 60)
+        assigned_ip = assigned["result"]["lease"]["ipv4"]
+        if assigned_ip == "192.0.2.70":
+            self.assertEqual(assigned["result"]["lease"]["startedAtSeconds"], 60)
+            self.assertEqual(reg._get(sid).state()["leaseCount"], 1)
+        else:
+            self.assertEqual(assigned_ip, "192.0.2.71")
+            self.assertEqual(assigned["result"]["lease"]["startedAtSeconds"], 0)
+            self.assertEqual(reg._get(sid).state()["leaseCount"], 0)
+        self.assertEqual(reg._get(sid).state()["operationCount"], 3)
 
     def test_standalone_dora_untimed_lease_is_not_expired_implicitly(self):
         p = clients()
