@@ -63,6 +63,7 @@ let doraSessionState = null;
 let doraSessionTrace = null;
 let doraClockEvent = null;
 let doraRenewalTrace = null;
+let doraFaultEvent = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -161,6 +162,7 @@ function invalidateDoraSession() {
   doraSessionTrace = null;
   doraClockEvent = null;
   doraRenewalTrace = null;
+  doraFaultEvent = null;
   if (previous) {
     // Best-effort release; backend also refuses any changed project snapshot.
     void api('/api/dhcp/session/stop', {sessionId: previous}).catch(() => {});
@@ -485,6 +487,55 @@ function renderDoraSession() {
   const clients = dhcpPortChoices('client');
   const servers = dhcpPortChoices('server');
   const busy = doraSessionBusy || doraBusy;
+  const faultSelector = $('dora-session-fault-link');
+  const previousLink = faultSelector.value;
+  const originallyActive = project.links.filter(link => {
+    if (!link.enabled) return false;
+    const a = project.nodes.find(n => n.id === link.a.node);
+    const b = project.nodes.find(n => n.id === link.b.node);
+    return a && b && a.ports.find(p => p.id === link.a.port && p.enabled)
+      && b.ports.find(p => p.id === link.b.port && p.enabled);
+  });
+  const faultOptions = originallyActive.map(link => ({
+    value: link.id,
+    label: link.id + ': ' + link.a.node + '/' + link.a.port
+      + ' ↔ ' + link.b.node + '/' + link.b.port,
+  }));
+  faultSelector.replaceChildren(...(faultOptions.length
+    ? faultOptions.map(item => el('option', {value: item.value}, item.label))
+    : [el('option', {value: ''}, 'Inga aktiva dokumenterade kablar')]));
+  if (faultOptions.some(item => item.value === previousLink)) {
+    faultSelector.value = previousLink;
+  }
+  const selectedFaultLink = faultSelector.value;
+  const faultedLinks = active ? doraSessionState.faultedLinks : [];
+  faultSelector.disabled = !active || busy || !faultOptions.length;
+  $('dora-session-fault-break').disabled = !active || busy || !selectedFaultLink
+    || faultedLinks.includes(selectedFaultLink);
+  $('dora-session-fault-restore').disabled = !active || busy || !selectedFaultLink
+    || !faultedLinks.includes(selectedFaultLink);
+  const faultOutput = $('dora-session-fault-result');
+  faultOutput.classList.remove('ok', 'fail');
+  const faultSummary = faultedLinks.length
+    ? 'Tillfälligt frånkopplade kablar: ' + faultedLinks.join(', ')
+    : 'Inga tillfälliga kabelavbrott.';
+  if (!active) {
+    faultOutput.textContent = 'Ingen aktiv session. ' + faultSummary;
+  } else if (doraFaultEvent?.error) {
+    faultOutput.classList.add('fail');
+    faultOutput.textContent = 'Kabelåtgärd avvisad: ' + doraFaultEvent.error
+      + '\n' + faultSummary;
+  } else if (doraFaultEvent) {
+    faultOutput.textContent = (doraFaultEvent.disabled
+      ? 'Frånkopplad endast i sessionen: '
+      : 'Återansluten endast i sessionen: ')
+      + doraFaultEvent.linkId
+      + '. Switcharnas inlärda MAC-tabeller har tömts.\n'
+      + faultSummary + '\nProjektets dokumenterade länkstatus är oförändrad.';
+  } else {
+    faultOutput.textContent = faultSummary
+      + '\nKabelavbrott simuleras endast i denna DHCP-session.';
+  }
   $('dora-session-start').disabled = active || busy || !clients.length || !servers.length;
   $('dora-session-run').disabled = !active || busy || !clients.length;
   $('dora-session-reset').disabled = !active || busy;
