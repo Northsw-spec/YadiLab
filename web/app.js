@@ -64,6 +64,9 @@ let filename = 'lab';
 let savedName = null;
 let savedSha = null;
 let savedSnapshot = JSON.stringify(project);
+let editRevision = 0;
+let workspaceRevision = 0;
+let savePending = false;
 let toastTimer;
 const canvas = new TopologyCanvas($('topology'), {
   onSelect: selected => { selection = selected; render(); },
@@ -73,6 +76,7 @@ const canvas = new TopologyCanvas($('topology'), {
     if (node) {
       node.x = Math.max(-100000, Math.min(100000, x));
       node.y = Math.max(-100000, Math.min(100000, y));
+      editRevision += 1;
       traceResult = null; highlightedLinks = [];
       routeLookup = null;
       ipv4Diagnostic = null;
@@ -123,6 +127,7 @@ function updateSaveIndicator() {
   span.classList.toggle('saved', Boolean(savedName) && !isDirty());
 }
 function changed({keepTrace = false} = {}) {
+  editRevision += 1;
   if (!keepTrace) {traceResult = null; highlightedLinks = [];}
   routeLookup = null;
   ipv4Diagnostic = null;
@@ -946,6 +951,7 @@ function confirmDiscard() {
   return !isDirty() || confirm('Det finns osparade ändringar. Lämna projektet utan att spara?');
 }
 function resetProject(value = blank(), pristineBlank = false) {
+  workspaceRevision += 1;
   project = value;
   delete $('trace-target').dataset.userSelected;
   arpDiagnostic = null; arpHighlightedLinks = [];
@@ -956,25 +962,58 @@ function resetProject(value = blank(), pristineBlank = false) {
   changed(); canvas.fit();
 }
 async function saveProject() {
+  // A server response describes the snapshot actually submitted, not any
+  // edits made while the request was in flight. Never replace newer work.
+  if (savePending) return;
+  savePending = true;
+  $('save-project').disabled = true;
+  const requestedFilename = filename;
+  const requestedWorkspace = workspaceRevision;
+  const requestedSnapshot = JSON.stringify(project);
+  const requestedProject = JSON.parse(requestedSnapshot);
   try {
-    let expectedSha256 = savedName === filename ? savedSha : null;
+    let expectedSha256 = savedName === requestedFilename ? savedSha : null;
     let result;
-    try { result = await api('/api/save', {filename, project, expectedSha256}); }
-    catch (error) {
-      if (error.code !== 'CONFLICT' || !confirm(`Filen ${filename}.yadilab har annat innehåll eller finns redan. Skriv över den AKTUELLA versionen på disk?`)) throw error;
+    try {
+      result = await api('/api/save', {filename: requestedFilename, project: requestedProject, expectedSha256});
+    } catch (error) {
+      if (error.code !== 'CONFLICT') throw error;
+      // Never approve an overwrite using a document/filename that changed
+      // after the original Save click, even if the server reports a conflict.
+      if (workspaceRevision !== requestedWorkspace || filename !== requestedFilename ||
+          JSON.stringify(project) !== requestedSnapshot) {
+        throw new Error('Arbetsytan ändrades under sparning. Spara igen för att välja aktuell version.');
+      }
+      if (!confirm(`Filen ${requestedFilename}.yadilab har annat innehåll eller finns redan. Skriv över den AKTUELLA versionen på disk?`)) throw error;
       expectedSha256 = error.currentSha256 || null;
       if (expectedSha256 === null) throw new Error('Filen ändrades eller försvann. Försök spara igen.');
-      result = await api('/api/save', {filename, project, expectedSha256});
+      result = await api('/api/save', {filename: requestedFilename, project: requestedProject, expectedSha256});
     }
-    project = result.project;
+    if (workspaceRevision !== requestedWorkspace || filename !== requestedFilename) {
+      // Disk Save may have succeeded, but the user has changed documents;
+      // never attach the old file's SHA or data to the new workspace.
+      notify(`Den tidigare versionen sparades som ${result.filename}.yadilab. Aktuell arbetsyta ändrades inte.`);
+      await refreshSavedProjects();
+      return;
+    }
+    if (JSON.stringify(project) === requestedSnapshot) {
+      project = result.project;
+    }
     savedName = result.filename;
     savedSha = result.sha256;
-    savedSnapshot = JSON.stringify(project);
+    savedSnapshot = JSON.stringify(result.project);
     render();
     await refreshSavedProjects();
-    notify(`Sparat till lokal fil: ${savedName}.yadilab · ${result.bytes} byte · SHA-256 ${savedSha.slice(0,14)}…`);
+    if (isDirty()) {
+      notify(`Sparade tidigare version i ${savedName}.yadilab. Nyare ändringar är fortfarande osparade.`);
+    } else {
+      notify(`Sparat till lokal fil: ${savedName}.yadilab · ${result.bytes} byte · SHA-256 ${savedSha.slice(0,14)}…`);
+    }
   } catch (error) {
     notify(`Kunde inte spara: ${error.message}`, true);
+  } finally {
+    savePending = false;
+    $('save-project').disabled = false;
   }
 }
 async function refreshSavedProjects() {
@@ -991,8 +1030,17 @@ async function openProject() {
   const slug = $('saved-projects').value;
   if (!slug) return notify('Välj en sparad projektfil först.',true);
   if (!confirmDiscard()) return;
+  const requestedWorkspace = workspaceRevision;
+  const requestedEdit = editRevision;
   try {
     const loaded = await api(`/api/projects/${encodeURIComponent(slug)}`);
+    if (workspaceRevision !== requestedWorkspace || editRevision !== requestedEdit ||
+        $('saved-projects').value !== slug) {
+      notify('Öppningen avbröts: arbetsytan eller projektvalet ändrades under inläsningen.');
+      return;
+    }
+    workspaceRevision += 1;
+    editRevision += 1;
     invalidateSimulationSession();
     routeLookup = null;
     ipv4Diagnostic = null;
