@@ -62,6 +62,7 @@ let doraSessionBusy = false;
 let doraSessionState = null;
 let doraSessionTrace = null;
 let doraClockEvent = null;
+let doraRenewalTrace = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -159,6 +160,7 @@ function invalidateDoraSession() {
   doraSessionState = null;
   doraSessionTrace = null;
   doraClockEvent = null;
+  doraRenewalTrace = null;
   if (previous) {
     // Best-effort release; backend also refuses any changed project snapshot.
     void api('/api/dhcp/session/stop', {sessionId: previous}).catch(() => {});
@@ -495,6 +497,12 @@ function renderDoraSession() {
   for (const id of ['dora-client', 'dora-transaction-id', 'dora-lease-seconds']) {
     $(id).disabled = busy;
   }
+  const selectedClient = $('dora-client').value;
+  const chosen = active && selectedClient ? JSON.parse(selectedClient) : [];
+  const selectedLease = active ? doraSessionState.leases.find(l =>
+    l.clientNode === chosen[0] && l.clientPort === chosen[1]) : null;
+  $('dora-session-renew').disabled = !active || busy || !selectedLease
+    || selectedLease.renewalPhase === 'BOUND';
   const count = doraSessionState?.leaseCount ?? 0;
   const operations = doraSessionState?.operationCount ?? 0;
   const clock = doraSessionState?.clockSeconds ?? 0;
@@ -516,6 +524,8 @@ function renderDoraSession() {
       ? leases.map(l => l.clientNode + '/' + l.clientPort + ' · '
           + l.clientMac + ' → ' + l.ipv4 + ' · ' + l.state
           + ' · kvar ' + l.remainingSeconds + ' s'
+          + ' · T1 ' + l.t1AtSeconds + ' s · T2 ' + l.t2AtSeconds + ' s'
+          + ' · fas ' + l.renewalPhase + ' · förnyelser ' + l.renewalCount
           + ' · slut vid ' + l.expiresAtSeconds + ' s').join('\n')
       : 'Inga BOUND-leases. Endast mottaget DHCPACK kan skapa en post.';
     if (leases.length) leaseOutput.classList.add('ok');
@@ -537,6 +547,47 @@ function renderDoraSession() {
         ? expired.map(l => 'EXPIRED: ' + l.clientNode + '/' + l.clientPort
           + ' · ' + l.ipv4 + ' · frigjord ur simulerad pool').join('\n')
         : 'Inga leases har gått ut i detta tidssteg.');
+  }
+  const renewalOutput = $('dora-session-renew-result');
+  renewalOutput.classList.remove('ok', 'fail');
+  if (!active || !doraRenewalTrace) {
+    renewalOutput.textContent = active
+      ? selectedLease
+        ? 'Vald lease ' + selectedLease.ipv4 + ' · fas ' + selectedLease.renewalPhase
+          + ' · T1 ' + selectedLease.t1AtSeconds + ' s · T2 '
+          + selectedLease.t2AtSeconds + ' s. Förnyelse sker endast efter knapptryckning.'
+        : 'Välj en klient med aktiv BOUND-lease för T1/T2-förnyelse.'
+      : 'Ingen DHCP-förnyelse har begärts.';
+  } else if (doraRenewalTrace.error) {
+    renewalOutput.classList.add('fail');
+    renewalOutput.textContent = 'DHCP-förnyelse avvisad: ' + doraRenewalTrace.error
+      + '\nIngen lease förlängdes.';
+  } else {
+    const renewal = doraRenewalTrace;
+    const approved = renewal.leaseRenewed === true && renewal.status === 'ACK_RECEIVED';
+    renewalOutput.classList.add(approved ? 'ok' : 'fail');
+    const wires = name => {
+      const phase = renewal[name];
+      return name.toUpperCase() + ': ' + phase.transmissions.length + ' överföringar\n'
+        + phase.transmissions.map(t => '  ' + t.linkId + ': '
+            + t.from.node + '/' + t.from.port + ' → ' + t.to.node + '/' + t.to.port
+            + (t.vlanId == null ? '' : ' · VLAN ' + t.vlanId)).join('\n')
+        + phase.vlanDrops.map(d => '\n  VLAN-drop: ' + d.reason).join('');
+    };
+    renewalOutput.textContent = [
+      'DHCP-förnyelse: ' + renewal.status + ' · ' + renewal.phase,
+      renewal.meaning,
+      'DHCPREQUEST destination: ' + renewal.request.ipDestination
+        + ' · MAC: ' + renewal.request.ethernetDestination,
+      wires('request'),
+      'REQUEST nådde server: ' + (renewal.request.receivedAtServer ? 'ja' : 'nej'),
+      wires('ack'),
+      'ACK nådde klient: ' + (renewal.ack.receivedAtClient ? 'ja' : 'nej'),
+      approved
+        ? 'FÖRNYAD BOUND-lease: ' + renewal.lease.ipv4
+          + ' · ny sluttid ' + renewal.lease.expiresAtSeconds + ' s'
+        : 'Ingen förnyelse. Ursprunglig lease och sluttid gäller oförändrade.',
+    ].join('\n\n');
   }
   const output = $('dora-session-result');
   output.classList.remove('ok', 'fail');
@@ -1461,6 +1512,7 @@ function sessionInteger(value, min, max) {
 async function startDoraSession() {
   if (doraSessionBusy || doraSessionId !== null || doraBusy) return;
   doraClockEvent = null;
+  doraRenewalTrace = null;
   const inputs = doraSessionInput();
   const [client, server, poolStart, poolEnd] = inputs;
   if (!client || !server || !poolStart || !poolEnd) {
@@ -1533,6 +1585,7 @@ async function runDoraSession() {
       doraSessionState = data;
       doraSessionTrace = data.result;
       doraClockEvent = null;
+      doraRenewalTrace = null;
     }
   } catch (error) {
     if (stillCurrent()) doraSessionTrace = {error: error.message};
@@ -1543,6 +1596,50 @@ async function runDoraSession() {
     }
   }
 }
+async function renewDoraSession() {
+  if (!doraSessionId || doraSessionBusy) return;
+  const inputs = doraSessionInput();
+  const [client, , , , rawTransaction] = inputs;
+  const transactionId = sessionInteger(rawTransaction, 1, 4294967295);
+  if (!client || transactionId === null) {
+    doraRenewalTrace = {error: 'Välj en giltig klient och ett transaktions-ID 1–4294967295.'};
+    renderDoraSession();
+    return;
+  }
+  const [clientNode, clientPort] = JSON.parse(client);
+  const id = doraSessionId;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  doraRenewalTrace = null;
+  renderDoraSession();
+  const stillCurrent = () => generation === doraSessionGeneration
+    && doraSessionId === id && edit === editRevision
+    && workspace === workspaceRevision
+    && JSON.stringify(project) === snapshot
+    && JSON.stringify(doraSessionInput()) === JSON.stringify(inputs);
+  try {
+    const data = await api('/api/dhcp/session/renew', {
+      sessionId: id, project: JSON.parse(snapshot),
+      clientNode, clientPort, transactionId,
+    });
+    if (stillCurrent()) {
+      doraSessionState = data;
+      doraRenewalTrace = data.result;
+      doraSessionTrace = null;
+      doraClockEvent = null;
+    }
+  } catch (error) {
+    if (stillCurrent()) doraRenewalTrace = {error: error.message};
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraSession();
+    }
+  }
+}
+
 async function advanceDoraSession() {
   if (!doraSessionId || doraSessionBusy) return;
   const seconds = sessionInteger($('dora-session-advance-seconds').value.trim(), 1, 604800);
@@ -1567,6 +1664,7 @@ async function advanceDoraSession() {
       doraSessionState = state;
       doraSessionTrace = null;
       doraClockEvent = state;
+      doraRenewalTrace = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration && doraSessionId === id) {
@@ -1598,6 +1696,7 @@ async function resetDoraSession() {
       doraSessionState = state;
       doraSessionTrace = null;
       doraClockEvent = null;
+      doraRenewalTrace = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration && doraSessionId === id) {
@@ -1622,6 +1721,7 @@ async function stopDoraSession() {
       doraSessionState = null;
       doraSessionTrace = null;
       doraClockEvent = null;
+      doraRenewalTrace = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration) {
@@ -2079,6 +2179,7 @@ $('run-dhcp').addEventListener('click', runDhcp);
 $('run-dora').addEventListener('click', runDora);
 $('dora-session-start').addEventListener('click', startDoraSession);
 $('dora-session-run').addEventListener('click', runDoraSession);
+$('dora-session-renew').addEventListener('click', renewDoraSession);
 $('dora-session-advance').addEventListener('click', advanceDoraSession);
 $('dora-session-reset').addEventListener('click', resetDoraSession);
 $('dora-session-stop').addEventListener('click', stopDoraSession);
@@ -2091,6 +2192,7 @@ for (const id of ['dora-client', 'dora-server', 'dora-pool-start', 'dora-pool-en
                                      'dora-lease-seconds'].includes(id)) {
       doraSessionGeneration += 1;
       doraSessionTrace = null;
+      doraRenewalTrace = null;
     }
     renderDoraDiagnostics();
     renderDoraSession();

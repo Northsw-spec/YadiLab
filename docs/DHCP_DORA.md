@@ -194,20 +194,88 @@ Ingen synk mot OS-klocka, sömn, timer, schemalagt jobb eller bakgrundsarbetare
 får förändra sessionen. Engångs-DORA har fortfarande ingen
 beständig klocka eller expiration; endast den uttryckliga sessionen har det.
 
+## DHCP RENEWING/REBINDING vid T1/T2 (PR #35)
+
+En **aktiv, tidsstämplad BOUND-lease** använder standardgränser,
+eftersom den nuvarande DHCPACK-kodningen inte innehåller explicit
+server-tilldelade optionerna 58/59:
+
+- `t1AtSeconds = startedAtSeconds + ceil(leaseSeconds / 2)`
+- `t2AtSeconds = startedAtSeconds + ceil(7 × leaseSeconds / 8)`
+- `expiresAtSeconds = startedAtSeconds + leaseSeconds`
+
+`renewalPhase` är `BOUND` före T1, `RENEWING` från T1 till
+före T2, och `REBINDING` från T2 till före expiration.
+Leasens ursprungliga `state` är fortfarande `BOUND` tills dess den
+blir `EXPIRED` vid klockgränsen. Att nå T1/T2 **startar inte**
+förnyelsen automatiskt; det behövs ett explicit knapptryck/API-anrop.
+
+`POST /api/dhcp/session/renew` kräver exakt:
+
+```json
+{"sessionId":"<opaque ID>","project":{},"clientNode":"client","clientPort":"eth0","transactionId":101}
+```
+
+`project` måste matcha sessionssnapshoten. Serverport och pool är
+låsta sedan `start`. Begäran avvisas med HTTP 422 innan T1, efter
+expiration, för klient utan aktiv lease, ogiltigt transaktions-ID,
+ändrat projekt eller uppnådd operationsbudget.
+
+**T1 (RENEWING):** Från `ciaddr` = klientens simulerade leasade IP
+skickas ett Ethernet-unicast/IP-unicast DHCPREQUEST till vald server
+på UDP 68→67, med BOOTP broadcast flag **0**, utan option 50/54.
+Motorn kräver att denna riktiga wire-kodade REQUEST når just serverporten.
+
+**T2 (REBINDING):** Samma BOOTP-`ciaddr`, UDP 68→67,
+flagga **0** och inga optioner 50/54, men
+Ethernet/IP broadcast (255.255.255.255). Endast den
+explicit konfigurerade DHCP-servern får i detta avgränsade
+enserverlabb svara. Detta är inte ett påstående om routad
+DHCP eller stöd för konkurrerande servrar.
+
+Vid faktisk mottagning på serverporten skapas en byte-kodad
+DHCPACK med `ciaddr` = den leasade adressen, `yiaddr=0`,
+optioner 53/54/1/51, UDP 67→68 och **unicast till klientens
+IP och dokumenterade MAC**. EthernetFabric måste sedan faktiskt
+leverera denna ACK till den **ursprungliga** klientporten.
+Först efter den observationen får motorn flytta leasens
+start-, T1-, T2- och sluttid till den virtuella klockans
+aktuella värde och öka `renewalCount`. IP-adressen ändras inte.
+
+- `ACK_RECEIVED`: `leaseRenewed=true` och uppdaterat BOUND-objekt.
+- `REQUEST_NOT_RECEIVED` eller `ACK_NOT_RECEIVED`:
+  `leaseRenewed=false`, paketspår och **orörda** lease-tidsgränser.
+- Alla genomförda förnyelseförsök räknas mot sessionsbudgeten.
+  Invalida indata före paketförsök gör det inte.
+- Framflyttad tid utan uttryckligt förnyelseanrop ger ingen
+  förlängning, och en expired lease kan endast få ny DORA.
+
+Varken T1 eller T2 stöder routade vägar eller DHCP-relay:
+paketen går enbart över faktiskt dokumenterade kablar och VLAN
+i en EthernetFabric. Bara en uttryckligen vald server stöds
+också vid T2. Operativsystemets riktiga NIC, kanoniska IPv4,
+projektfilens bytes och Save/Open påverkas inte. Inga NAK,
+tidsdrivna automatiska retries eller serverstyrda T1/T2-alternativ.
+
+Protokollreferens: [RFC 2131](https://www.rfc-editor.org/rfc/rfc2131).
+
 ## Avsiktliga begränsningar
 
 - Den simulerade leasen existerar endast i minnet. **Klientportens
   kanoniska IPv4-fält är fortfarande `null` och sparas inte.**
   Detta ändrar inte IP-sändning/ARP/routing i befintliga labbar.
-- Ingen beständig lease-databas, förnyelse (T1/T2),
+- Ingen beständig lease-databas, automatisk förnyelse,
   release, DECLINE, NAK, återförsök eller DHCP-relay.
-  Expiration stöds **endast** via uttrycklig virtuell tidsframflyttning.
+  T1/T2-förnyelse kräver användarens uttryckliga DHCPREQUEST-operation
+  och mottaget DHCPACK. Expiration kräver framflyttad virtuell tid.
 - Ingen ARP-probe eller observation från ett riktigt nät.
   Att ingen dokumenterad enhet använder en adress **bevisar inte**
   att den är ledig i ett verkligt nät.
-- Bara DHCP selecting-state broadcast med en vald server och
-  en enda klient per `run`; inga konkurrerande servrar,
-  relay-agenter, unicast ACK eller BOOTP-alternativ.
+- Den ursprungliga DORA-vägen använder DHCP SELECTING broadcast.
+  En separat session-bunden förnyelseväg använder T1 unicast och T2 broadcast,
+  med unicast ACK till `ciaddr`. Bara en uttryckligen vald server
+  stöds; inga konkurrerande servrar, reläagenter, routade förnyelser
+  eller andra BOOTP-alternativ.
 - Builder har en separat DORA-panel. Engångsknappen delar aldrig
   lease-databas med senare engångskörningar. De explicita
   DHCP-sessionsknapparna delar däremot tillfällig lease-tabell

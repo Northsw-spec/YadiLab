@@ -668,6 +668,67 @@ def run():
                 'client-3/eth0')
             expect(dhcp_page.locator('#dora-session-leases')).to_contain_text(
                 'kvar 3600 s')
+
+            # PR35: no automatic renewal; the first explicit T1 operation
+            # must send a unicast DHCPREQUEST with ciaddr and receive ACK.
+            expect(dhcp_page.locator('#dora-session-renew')).to_be_disabled()
+            assert reused['leases'][0]['t1AtSeconds'] == 5400
+            assert reused['leases'][0]['t2AtSeconds'] == 6750
+            dhcp_page.locator('#dora-session-advance-seconds').fill('1800')
+            with dhcp_page.expect_response('**/api/dhcp/session/advance') as t1_reached:
+                dhcp_page.locator('#dora-session-advance').click()
+            first_t1 = t1_reached.value.json()
+            assert first_t1['clockSeconds'] == 5400
+            assert first_t1['leases'][0]['renewalPhase'] == 'RENEWING'
+            assert first_t1['leases'][0]['expiresAtSeconds'] == 7200
+            expect(dhcp_page.locator('#dora-session-renew')).to_be_enabled()
+            dhcp_page.locator('#dora-transaction-id').fill('104')
+            with dhcp_page.expect_response('**/api/dhcp/session/renew') as t1_renew:
+                dhcp_page.locator('#dora-session-renew').click()
+            t1_renewal = t1_renew.value.json()
+            assert t1_renew.value.status == 200
+            assert t1_renewal['result']['phase'] == 'RENEWING'
+            assert t1_renewal['result']['status'] == 'ACK_RECEIVED'
+            assert t1_renewal['result']['leaseRenewed'] is True
+            assert t1_renewal['result']['request']['ipDestination'] == '192.0.2.1'
+            assert t1_renewal['result']['request']['ethernetDestination'] == '02:00:00:00:00:0B'
+            assert [t['linkId'] for t in t1_renewal['result']['request']['transmissions']] == [
+                'wire-3', 'to-server']
+            assert t1_renewal['leases'][0]['expiresAtSeconds'] == 9000
+            assert t1_renewal['leases'][0]['t1AtSeconds'] == 7200
+            assert t1_renewal['leases'][0]['t2AtSeconds'] == 8550
+            assert t1_renewal['leases'][0]['renewalCount'] == 1
+            expect(dhcp_page.locator('#dora-session-renew-result')).to_contain_text(
+                'FÖRNYAD BOUND-lease: 192.0.2.70')
+            expect(dhcp_page.locator('#dora-session-renew')).to_be_disabled()
+
+            # At the later T2 threshold this SAME leased client broadcasts
+            # DHCPREQUEST, without inventing a second DHCP server or router.
+            dhcp_page.locator('#dora-session-advance-seconds').fill('3150')
+            with dhcp_page.expect_response('**/api/dhcp/session/advance') as t2_reached:
+                dhcp_page.locator('#dora-session-advance').click()
+            second_t2 = t2_reached.value.json()
+            assert second_t2['clockSeconds'] == 8550
+            assert second_t2['leases'][0]['renewalPhase'] == 'REBINDING'
+            expect(dhcp_page.locator('#dora-session-renew')).to_be_enabled()
+            dhcp_page.locator('#dora-transaction-id').fill('105')
+            with dhcp_page.expect_response('**/api/dhcp/session/renew') as t2_renew:
+                dhcp_page.locator('#dora-session-renew').click()
+            t2_renewal = t2_renew.value.json()
+            assert t2_renew.value.status == 200
+            assert t2_renewal['result']['phase'] == 'REBINDING'
+            assert t2_renewal['result']['request']['ipDestination'] == '255.255.255.255'
+            assert t2_renewal['result']['request']['ethernetDestination'] == 'FF:FF:FF:FF:FF:FF'
+            assert t2_renewal['result']['ack']['receivedAtClient'] is True
+            assert t2_renewal['leases'][0]['ipv4'] == '192.0.2.70'
+            assert t2_renewal['leases'][0]['expiresAtSeconds'] == 12150
+            assert t2_renewal['leases'][0]['renewalCount'] == 2
+            expect(dhcp_page.locator('#dora-session-renew-result')).to_contain_text(
+                'DHCP-förnyelse: ACK_RECEIVED · REBINDING')
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('förnyelser 2')
+            # Neither renewal wrote a real client NIC IP or a project file.
+            dhcp_page.locator('[data-item-type="node"][data-item-id="client-3"]').click()
+            expect(dhcp_page.locator('[data-port-ipv4="eth0"]')).to_have_value('')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
 
             with dhcp_page.expect_response('**/api/dhcp/session/reset') as multi_reset:

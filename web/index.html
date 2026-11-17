@@ -131,10 +131,11 @@
           <button id="run-dora" class="btn btn-soft full" type="button">Simulera full DHCP DORA</button>
           <div id="dora-result" class="trace-result" aria-live="polite">Ingen DORA-simulering utförd. Inga adresser har tilldelats.</div>
           <div class="eyebrow">FLERA KLIENTER · TILLFÄLLIG DHCP-SESSION</div>
-          <p class="muted tiny">Starta en session med vald server och adresspool. Tilldela flera klienter via DORA och flytta fram den <strong>simulerade</strong> tiden uttryckligen. Leases upphör vid exakt sluttid; ingen verklig klocka, DHCP-förnyelse eller automatisk Save används.</p>
+          <p class="muted tiny">Starta en session, tilldela flera klienter via DORA och flytta fram den <strong>simulerade</strong> tiden uttryckligen. Vid T1 kan klienten begära förnyelse direkt från servern (unicast), vid T2 via broadcast. Bara mottaget DHCPACK förlänger leasen. Ingen verklig klocka eller automatisk Save används.</p>
           <div class="session-actions">
             <button id="dora-session-start" type="button" class="btn btn-soft">Starta DHCP-session</button>
             <button id="dora-session-run" type="button" class="btn btn-soft" disabled>Tilldela vald klient</button>
+            <button id="dora-session-renew" type="button" class="btn btn-soft" disabled>Förnya vald lease (T1/T2)</button>
             <button id="dora-session-reset" type="button" class="btn btn-outline" disabled>Nollställ leases</button>
             <button id="dora-session-stop" type="button" class="btn btn-outline" disabled>Avsluta session</button>
           </div>
@@ -144,6 +145,7 @@
           <div id="dora-session-status" class="small-muted" role="status">Ingen aktiv DHCP-session.</div>
           <div id="dora-session-clock-result" class="trace-result" aria-live="polite">Ingen simuleringstid har flyttats fram.</div>
           <div id="dora-session-result" class="trace-result" aria-live="polite">Inga sessionoperationer har körts.</div>
+          <div id="dora-session-renew-result" class="trace-result" aria-live="polite">Ingen DHCP-förnyelse har begärts.</div>
           <div class="eyebrow">SIMULERADE LEASES (ENDAST MINNE)</div>
           <div id="dora-session-leases" class="trace-result" aria-live="polite">Ingen aktiv lease-tabell.</div>
         </section>
