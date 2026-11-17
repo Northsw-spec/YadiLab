@@ -24,6 +24,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from network_core import config
+from xlsx_fixture import make_workbook, workbook_parts, zip_parts
 
 
 def port():
@@ -279,7 +280,9 @@ def run():
             prompts = []
             def accept_import_dialog(dialog):
                 prompts.append(dialog.type)
-                dialog.accept('CSV acceptance lab') if dialog.type == 'prompt' else dialog.accept()
+                dialog.accept(
+                    'XLSX Browser Lab' if 'XLSX' in dialog.message else 'CSV acceptance lab'
+                ) if dialog.type == 'prompt' else dialog.accept()
             page.on('dialog', accept_import_dialog)
             page.locator('#import-file').set_input_files([
                 {'name': name, 'mimeType': 'text/csv',
@@ -306,6 +309,63 @@ def run():
             page.locator('#saved-projects').select_option('csv-demo')
             page.locator('#open-project').click()
             expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
+
+            # PR23: genuinely zipped OOXML files, not CSV masquerading as
+            # a workbook. Unsupported hidden worksheets must be rejected
+            # without replacing the still-open project or changing on-disk SHA.
+            csv_sha = hashlib.sha256((store/'csv-demo.yadilab').read_bytes()).hexdigest()
+            invalid_parts = workbook_parts()
+            workbook_xml = invalid_parts['xl/workbook.xml'].decode('utf-8')
+            assert 'name="Devices" sheetId="1"' in workbook_xml
+            invalid_parts['xl/workbook.xml'] = workbook_xml.replace(
+                'name="Devices" sheetId="1"',
+                'name="Devices" state="hidden" sheetId="1"'
+            ).encode('utf-8')
+            with page.expect_response('**/api/import/xlsx') as bad_xlsx:
+                page.locator('#import-file').set_input_files({
+                    'name':'bad-hidden.xlsx',
+                    'mimeType':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'buffer':zip_parts(invalid_parts),
+                })
+            assert bad_xlsx.value.status == 422
+            expect(page.locator('#toast')).to_contain_text('Import avvisad:')
+            expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
+            assert hashlib.sha256((store/'csv-demo.yadilab').read_bytes()).hexdigest() == csv_sha
+            assert not (store/'xlsx-demo.yadilab').exists()
+
+            # Real XLSX with reordered XML sheet declarations, shared strings,
+            # numeric coordinates and boolean enabled cells. Import validates
+            # before asking for consent to replace working data. No autosave.
+            real_xlsx = make_workbook(shared_strings=True, reorder=True)
+            with page.expect_response('**/api/import/xlsx') as good_xlsx:
+                page.locator('#import-file').set_input_files({
+                    'name':'documentation.xlsx',
+                    'mimeType':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'buffer':real_xlsx,
+                })
+            assert good_xlsx.value.status == 200
+            incoming = good_xlsx.value.json()['project']
+            assert incoming['schemaVersion'] == '1.0'
+            assert incoming['name'] == 'XLSX Browser Lab'
+            assert [n['id'] for n in incoming['nodes']] == ['pc-a','sw-a']
+            assert incoming['links'][0]['id'] == 'cable-1'
+            expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+            assert not (store/'xlsx-demo.yadilab').exists()
+            assert hashlib.sha256((store/'csv-demo.yadilab').read_bytes()).hexdigest() == csv_sha
+            page.locator('#project-filename').fill('xlsx-demo')
+            page.locator('#project-filename').dispatch_event('change')
+            page.locator('#save-project').click()
+            expect(page.locator('#save-indicator')).to_contain_text(
+                'Sparat · xlsx-demo.yadilab', timeout=12000)
+            saved_xlsx = json.loads((store/'xlsx-demo.yadilab').read_bytes())
+            assert saved_xlsx == incoming
+            xlsx_sha = hashlib.sha256((store/'xlsx-demo.yadilab').read_bytes()).hexdigest()
+            page.locator('#new-project').click()
+            page.locator('#saved-projects').select_option('xlsx-demo')
+            page.locator('#open-project').click()
+            expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
+            assert hashlib.sha256((store/'xlsx-demo.yadilab').read_bytes()).hexdigest() == xlsx_sha
+            assert hashlib.sha256((store/'csv-demo.yadilab').read_bytes()).hexdigest() == csv_sha
 
             # Browser ARP diagnostics use real HTTP and unsaved current workspace.
             # Reopen the previous genuinely persisted VLAN 1.2 file, then edit

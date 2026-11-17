@@ -15,6 +15,7 @@ from urllib.parse import unquote, urlsplit
 from . import __version__, config
 from .model import ProjectValidationError, topology_trace, validate_project
 from .csv_import import import_csv_tables
+from .xlsx_import import import_xlsx_workbook
 from .arp import ArpSession
 from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
@@ -106,6 +107,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"project": validate_project(body)})
             elif path == "/api/import/csv":
                 self._json(200, {"project": import_csv_tables(body)})
+            elif path == "/api/import/xlsx":
+                self._json(200, {"project": import_xlsx_workbook(body)})
             elif path == "/api/trace":
                 if not isinstance(body, dict) or set(body) != {"project", "source", "target"}:
                     raise ProjectValidationError("trace: expected project, source, target")
