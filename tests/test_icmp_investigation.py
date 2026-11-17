@@ -53,6 +53,9 @@ class IcmpInvestigationTests(unittest.TestCase):
                 link = case.probe("link", {"linkId": "la"})["observation"]
                 self.assertTrue(link["documentedEnabled"])
                 self.assertIn(link["observedEnabled"], (True, False))
+                port = case.probe("port", {"nodeId": "sw-left", "portId": "a"})["observation"]
+                self.assertTrue(port["documentedEnabled"])
+                self.assertEqual(port["source"], "SIMULATED_CONFIG")
                 vlan = case.probe("vlan", {"nodeId": "sw-left", "portId": "a"})["observation"]
                 self.assertEqual(vlan["documentedVlan"], {"mode": "access", "vlan": 10})
                 self.assertEqual(vlan["source"], "SIMULATED_CONFIG")
@@ -78,6 +81,27 @@ class IcmpInvestigationTests(unittest.TestCase):
                     case.probe("ping", {})
                 with self.assertRaisesRegex(ProjectValidationError, "already repaired"):
                     case.repair()
+
+    def test_hidden_switch_port_shutdown_measured_and_recovered(self):
+        case = scenario("PORT_SHUTDOWN")
+        fault = case._fault
+        self.assertEqual(fault["type"], "PORT_DISABLED")
+        measured = case.probe("port", {
+            "nodeId": fault["nodeId"], "portId": fault["portId"],
+        })["observation"]
+        self.assertEqual(measured["source"], "SIMULATED_CONFIG")
+        self.assertTrue(measured["documentedEnabled"])
+        self.assertFalse(measured["observedEnabled"])
+        self.assertNotIn("PORT_SHUTDOWN", json.dumps(case.state()))
+        self.assertNotEqual(case.probe("ping", {})["observation"]["status"], "REPLIED")
+        case.probe("route", {"nodeId": "a", "destinationIpv4": "203.0.113.20"})
+        self.assertTrue(case.state()["canDiagnose"])
+        self.assertTrue(case.diagnose("PORT_SHUTDOWN")["correct"])
+        restored = case.repair()
+        self.assertEqual(restored["status"], "RECOVERED")
+        self.assertEqual(restored["repair"]["action"], "RE_ENABLE_PORT")
+        self.assertEqual(restored["repair"]["scope"], "PREVIEW_ONLY")
+        self.assertTrue(restored["replyMatched"])
 
     def test_lookup_reverse_route_proves_reply_failure_not_fake_ping_pass(self):
         case = scenario("STATIC_ROUTE_MISSING")
@@ -110,6 +134,11 @@ class IcmpInvestigationTests(unittest.TestCase):
             ("route", {"nodeId": "a", "destinationIpv4": "203.0.113.20", "extra": 1}),
             ("link", {"linkId": "wrong"}),
             ("link", {"linkId": True}),
+            ("port", {"nodeId": "missing", "portId": "a"}),
+            ("port", {"nodeId": "sw-left"}),
+            ("port", {"nodeId": True, "portId": "a"}),
+            ("port", {"nodeId": "sw-left", "portId": "missing"}),
+            ("port", {"nodeId": "sw-left", "portId": "a", "extra": 1}),
             ("vlan", {"nodeId": "a", "portId": "eth0"}),
             ("vlan", {"nodeId": "sw-left", "portId": "missing"}),
             ("vlan", {"nodeId": "sw-left"}),
@@ -233,6 +262,12 @@ class IcmpInvestigationHttpTests(unittest.TestCase):
         self.assertEqual(call("probe", probe="route", target={
             "nodeId": "a", "destinationIpv4": "203.0.113.20",
         })[0], 200)
+        status, port_status = call("probe", probe="port", target={
+            "nodeId": "sw-left", "portId": "a",
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(port_status["observation"]["documentedEnabled"])
+        self.assertEqual(port_status["observation"]["source"], "SIMULATED_CONFIG")
         self.assertEqual(call("repair")[0], 422)
         self.assertEqual(call("diagnose", diagnosis="STATIC_ROUTE_MISSING")[1]["correct"],
                          False)
