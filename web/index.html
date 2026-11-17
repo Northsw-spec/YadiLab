@@ -131,13 +131,16 @@
           <button id="run-dora" class="btn btn-soft full" type="button">Simulera full DHCP DORA</button>
           <div id="dora-result" class="trace-result" aria-live="polite">Ingen DORA-simulering utförd. Inga adresser har tilldelats.</div>
           <div class="eyebrow">FLERA KLIENTER · TILLFÄLLIG DHCP-SESSION</div>
-          <p class="muted tiny">Starta en session med vald server och adresspool. Välj därefter en klientport och tilldela via DORA. Samma pool och leasetabell behålls mellan körningar tills sessionen nollställs eller avslutas. Ingen timer, DHCP-förnyelse eller automatisk Save.</p>
+          <p class="muted tiny">Starta en session med vald server och adresspool. Tilldela flera klienter via DORA och flytta fram den <strong>simulerade</strong> tiden uttryckligen. Leases upphör vid exakt sluttid; ingen verklig klocka, DHCP-förnyelse eller automatisk Save används.</p>
           <div class="session-actions">
             <button id="dora-session-start" type="button" class="btn btn-soft">Starta DHCP-session</button>
             <button id="dora-session-run" type="button" class="btn btn-soft" disabled>Tilldela vald klient</button>
             <button id="dora-session-reset" type="button" class="btn btn-outline" disabled>Nollställ leases</button>
             <button id="dora-session-stop" type="button" class="btn btn-outline" disabled>Avsluta session</button>
           </div>
+          <label for="dora-session-advance-seconds">Flytta fram simulerad klocka (sekunder 1–604800)</label>
+          <input id="dora-session-advance-seconds" class="control" type="number" min="1" max="604800" step="1" value="60">
+          <button id="dora-session-advance" type="button" class="btn btn-outline full" disabled>Flytta fram DHCP-klockan</button>
           <div id="dora-session-status" class="small-muted" role="status">Ingen aktiv DHCP-session.</div>
           <div id="dora-session-result" class="trace-result" aria-live="polite">Inga sessionoperationer har körts.</div>
           <div class="eyebrow">SIMULERADE LEASES (ENDAST MINNE)</div>
