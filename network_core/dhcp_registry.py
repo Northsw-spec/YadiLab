@@ -44,7 +44,11 @@ class DhcpLabSession:
     def state(self) -> dict:
         leases = [
             {**lease,
-             "remainingSeconds": lease["expiresAtSeconds"] - self.clock_seconds}
+             "remainingSeconds": lease["expiresAtSeconds"] - self.clock_seconds,
+             "renewalPhase": (
+                 "REBINDING" if self.clock_seconds >= lease["t2AtSeconds"]
+                 else "RENEWING" if self.clock_seconds >= lease["t1AtSeconds"]
+                 else "BOUND")}
             for lease in self.dhcp.leases()
         ]
         return {
@@ -77,6 +81,37 @@ class DhcpLabSession:
             result["lease"] = self.dhcp.timestamp_lease(
                 result["lease"]["ipv4"], self.clock_seconds)
             result["lease"]["remainingSeconds"] = result["lease"]["leaseSeconds"]
+        return {"result": result, **self.state()}
+
+    def renew(self, client_node: str, client_port: str, transaction_id: int) -> dict:
+        """One explicit RENEWING / REBINDING attempt at virtual T1 / T2.
+
+        Changing the clock only changes eligibility, never renews by itself.
+        The existing address and deadlines persist after a lost REQUEST/ACK.
+        """
+        if self.operation_count >= MAX_OPERATIONS:
+            raise ProjectValidationError(
+                "dhcp session: operation limit reached; reset the session")
+        lease = self.dhcp.bound_lease(client_node, client_port)
+        if self.clock_seconds >= lease["expiresAtSeconds"]:
+            raise ProjectValidationError(
+                "dhcp session: expired lease cannot be renewed; use new DORA")
+        if self.clock_seconds < lease["t1AtSeconds"]:
+            raise ProjectValidationError(
+                "dhcp session: T1 not reached; renewal would be premature")
+        phase = ("REBINDING" if self.clock_seconds >= lease["t2AtSeconds"]
+                 else "RENEWING")
+        result = self.dhcp.renew(
+            client_node, client_port, self.server_node, self.server_port,
+            phase, transaction_id)
+        self.operation_count += 1
+        if result["leaseRenewed"]:
+            updated = self.dhcp.commit_renewal(
+                lease["ipv4"], self.clock_seconds, transaction_id)
+            result["lease"] = {
+                **updated, "remainingSeconds": updated["leaseSeconds"],
+                "renewalPhase": "BOUND",
+            }
         return {"result": result, **self.state()}
 
     def advance(self, seconds: int) -> dict:
@@ -134,6 +169,14 @@ class DhcpSessionRegistry:
             session.check_project(project)
             return {"sessionId": session_id, **session.run(
                 client_node, client_port, transaction_id, lease_seconds)}
+
+    def renew(self, session_id: object, project: object, client_node: str,
+              client_port: str, transaction_id: int) -> dict:
+        with self._lock:
+            session = self._get(session_id)
+            session.check_project(project)
+            return {"sessionId": session_id, **session.renew(
+                client_node, client_port, transaction_id)}
 
     def advance(self, session_id: object, project: object, seconds: int) -> dict:
         with self._lock:
