@@ -227,6 +227,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, self.server.dhcp_sessions.run(
                     body["sessionId"], body["project"], body["clientNode"],
                     body["clientPort"], body["transactionId"], body["leaseSeconds"]))
+            elif path == "/api/dhcp/session/renew":
+                required = {"sessionId", "project", "clientNode", "clientPort", "transactionId"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "dhcp session renew: expected sessionId, project, clientNode, clientPort, transactionId")
+                self._json(200, self.server.dhcp_sessions.renew(
+                    body["sessionId"], body["project"], body["clientNode"],
+                    body["clientPort"], body["transactionId"]))
             elif path == "/api/dhcp/session/advance":
                 if not isinstance(body, dict) or set(body) != {"sessionId", "project", "seconds"}:
                     raise ProjectValidationError(
