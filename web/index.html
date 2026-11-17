@@ -328,6 +328,56 @@
           <button id="run-troubleshoot" class="btn btn-soft full" type="button">Verifiera fel och återställning</button>
           <div id="trouble-result" class="trace-result" aria-live="polite">Ingen kontrollerad felsökningsjämförelse utförd.</div>
         </section>
+        <section class="trace-panel" aria-label="Dold ICMP routing och Layer 2 felsökning">
+          <div class="eyebrow">FELSÖKNINGSLABB · ROUTING ELLER LAYER 2?</div>
+          <h3>Varför fungerar inte ping mellan två nät?</h3>
+          <p class="muted tiny">Välj en källa och en destination som redan har bevisats nå varandra via verkligt simulerade ICMP Echo Request/Reply. Labbet injicerar ett dolt, separat verifierat fel i dokumenterad kabel, VLAN eller statisk route. Undersök först IP-uppgifter, routingtabeller och faktiska paket. DHCP-adressens ursprung är inte lagrat i projektet och markeras därför som EJ VERIFIERAT – aldrig automatiskt friskförklarat. Allt sker i minnet.</p>
+          <label for="icmp-investigation-source">Källa med dokumenterad IPv4</label>
+          <select id="icmp-investigation-source" class="control"></select>
+          <label for="icmp-investigation-destination">Målets uttryckliga IPv4</label>
+          <input id="icmp-investigation-destination" class="control" autocomplete="off" placeholder="203.0.113.20">
+          <label for="icmp-investigation-ttl">TTL per riktning (2–255)</label>
+          <input id="icmp-investigation-ttl" class="control" type="number" min="2" max="255" step="1" value="5">
+          <div class="session-actions">
+            <button id="icmp-investigation-start" type="button" class="btn btn-soft">Starta dolt routing/L2-fall</button>
+            <button id="icmp-investigation-stop" type="button" class="btn btn-outline" disabled>Avsluta routingfall</button>
+          </div>
+          <div id="icmp-investigation-status" class="small-muted" role="status">Ingen routing-/Layer 2-övning startad.</div>
+          <div class="eyebrow">1 · SYSTEMATISKA MÄTNINGAR</div>
+          <label for="icmp-investigation-probe">Undersök</label>
+          <select id="icmp-investigation-probe" class="control">
+            <option value="address">Klientens dokumenterade IP och DHCP-bevisläge</option>
+            <option value="route">Routingtabell och longest-prefix match</option>
+            <option value="ping">Verkligt ICMP Echo över ARP och Layer 2</option>
+            <option value="link">Observerad kabelstatus mot dokumentation</option>
+            <option value="vlan">Observerad VLAN-konfiguration på switchport</option>
+          </select>
+          <label for="icmp-investigation-route-node">Enhet för routingtabell</label>
+          <select id="icmp-investigation-route-node" class="control"></select>
+          <label for="icmp-investigation-route-destination">Slå upp route till</label>
+          <select id="icmp-investigation-route-destination" class="control">
+            <option value="destination">Destinationens IPv4</option>
+            <option value="source">Källans IPv4 (returväg)</option>
+          </select>
+          <label for="icmp-investigation-link">Kabel att mäta</label>
+          <select id="icmp-investigation-link" class="control"></select>
+          <label for="icmp-investigation-vlan">Switchport att läsa VLAN på</label>
+          <select id="icmp-investigation-vlan" class="control"></select>
+          <button id="icmp-investigation-measure" type="button" class="btn btn-outline full" disabled>Utför faktisk simulerad mätning</button>
+          <div id="icmp-investigation-observations" class="trace-result" aria-live="polite">Börja med IP-konfiguration. Undersök routing, ICMP och länk/VLAN för att utesluta fel.</div>
+          <div class="eyebrow">2 · PRÖVA ROTORSAKEN</div>
+          <label for="icmp-investigation-diagnosis">Vilket fel stöds av mätningarna?</label>
+          <select id="icmp-investigation-diagnosis" class="control">
+            <option value="CABLE_DOWN">Layer 2: kabelavbrott</option>
+            <option value="VLAN_MISMATCH">Layer 2: fel access-VLAN</option>
+            <option value="STATIC_ROUTE_MISSING">Layer 3: saknad statisk route</option>
+          </select>
+          <button id="icmp-investigation-diagnose" type="button" class="btn btn-soft full" disabled>Pröva diagnos efter mätningar</button>
+          <div id="icmp-investigation-verdict" class="trace-result" aria-live="polite">Kräver riktig ping, route lookup och en ytterligare oberoende kontroll.</div>
+          <div class="eyebrow">3 · VERIFIERA ÅTERHÄMTNING</div>
+          <button id="icmp-investigation-repair" type="button" class="btn btn-outline full" disabled>Återställ det dolda felet och verifiera Echo Reply</button>
+          <div id="icmp-investigation-recovery" class="trace-result" aria-live="polite">Ingen reparation eller tvåvägskommunikation är ännu verifierad.</div>
+        </section>
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
