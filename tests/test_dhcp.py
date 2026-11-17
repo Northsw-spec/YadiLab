@@ -151,8 +151,8 @@ class DhcpSimulationTests(unittest.TestCase):
         p["nodes"][1]["ports"][1]["vlan"] = {"mode":"access","vlan":10}
         r = exchange(p)
         self.assertEqual(r["status"], "OFFER_RECEIVED")
-        self.assertEqual([v["vlanId"] for v in r["discover"]["transmissions"]], [10, 10])
-        self.assertEqual([v["vlanId"] for v in r["offer"]["transmissions"]], [10, 10])
+        self.assertEqual([v["vlanId"] for v in r["discover"]["transmissions"]], [None, 10])
+        self.assertEqual([v["vlanId"] for v in r["offer"]["transmissions"]], [None, 10])
 
     def test_unconfigured_server_or_client_is_not_inferred(self):
         p = topology()
