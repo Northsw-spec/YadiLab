@@ -30,6 +30,7 @@ from ods_fixture import make_ods, ods_parts, zip_parts as zip_ods_parts
 from spreadsheet_v13_fixture import TABLES_13, expected_v13, xlsx_v13, ods_v13
 from network_core.xlsx_import import import_xlsx_workbook
 from network_core.ods_import import import_ods_workbook
+from test_dhcp import topology as dhcp_topology
 
 
 def port():
@@ -115,7 +116,7 @@ def browser_open(page, base):
     canvas = (ROOT / 'web/canvas.js').read_text(encoding='utf8')
     canvas = canvas.replace("import {truncate} from './model.js';", '').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
-    app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, exampleProject, KINDS} from './model.js';", '')
+    app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
     app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
     page.add_script_tag(content=model + '\n' + canvas + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
@@ -323,6 +324,122 @@ def run():
             assert download.suggested_filename == 'lab.yadilab'
             exported = json.loads(Path(download.path()).read_bytes())
             assert exported == parsed, 'exported bytes do not represent saved canonical facts'
+
+            # PR30: a separate real Chromium window imports explicit
+            # DHCP network facts. The diagnostic must NOT allocate an IP,
+            # modify another saved project or invent links/MAC addresses.
+            dhcp_page = context.new_page()
+            dhcp_page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+            assert browser_open(dhcp_page, base) == network_mode
+            dhcp_page.once('dialog', lambda dialog: dialog.accept())
+            with dhcp_page.expect_response('**/api/validate') as imported_dhcp:
+                dhcp_page.locator('#import-file').set_input_files({
+                    'name': 'explicit-dhcp.json',
+                    'mimeType': 'application/json',
+                    'buffer': json.dumps(dhcp_topology()).encode('utf-8'),
+                })
+            assert imported_dhcp.value.status == 200
+            expect(dhcp_page.locator('[data-node-id="client"]')).to_have_count(1)
+            expect(dhcp_page.locator('[data-node-id="server"]')).to_have_count(1)
+            expect(dhcp_page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+            dhcp_page.locator('#dhcp-client').select_option(
+                json.dumps(['client', 'eth0'], separators=(',', ':')))
+            dhcp_page.locator('#dhcp-server').select_option(
+                json.dumps(['server', 'eth0'], separators=(',', ':')))
+            dhcp_page.locator('#dhcp-offered-ip').fill('192.0.2.70')
+            dhcp_page.locator('#dhcp-transaction-id').fill('305419896')
+            dhcp_page.locator('#dhcp-lease-seconds').fill('3600')
+            with dhcp_page.expect_response('**/api/dhcp/discover-offer') as valid_dhcp:
+                dhcp_page.locator('#run-dhcp').click()
+            assert valid_dhcp.value.status == 200
+            data = valid_dhcp.value.json()
+            assert data['status'] == 'OFFER_RECEIVED'
+            assert [t['linkId'] for t in data['discover']['transmissions']] == [
+                'to-client', 'to-server']
+            assert [t['linkId'] for t in data['offer']['transmissions']] == [
+                'to-server', 'to-client']
+            assert data['leaseCommitted'] is False
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('DHCP-status: OFFER_RECEIVED')
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('to-server: sw/s → server/eth0')
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('Lease skapad: NEJ')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert sorted(x.name for x in store.glob('*.yadilab')) == ['lab.yadilab']
+
+            # Disconnect the existing server wire. Seeing a switch and a
+            # client is not enough to fabricate reception or an offer.
+            dhcp_page.locator('[data-item-type="link"][data-item-id="to-server"]').click()
+            dhcp_page.locator('#inspector input[type="checkbox"]').uncheck()
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('Ingen aktuell DHCP-diagnostik')
+            with dhcp_page.expect_response('**/api/dhcp/discover-offer') as broken_dhcp:
+                dhcp_page.locator('#run-dhcp').click()
+            assert broken_dhcp.value.json()['status'] == 'DISCOVER_NOT_RECEIVED'
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('DHCP-status: DISCOVER_NOT_RECEIVED')
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('OFFER (server → broadcast): 0')
+            dhcp_page.locator('#inspector input[type="checkbox"]').check()
+
+            # Switch access VLAN 10 and 20 must isolate the DHCP server.
+            dhcp_page.locator('[data-item-type="node"][data-item-id="sw"]').click()
+            dhcp_page.locator('[data-port-vlan="c"]').fill('access:10')
+            dhcp_page.locator('[data-port-vlan="c"]').dispatch_event('change')
+            expect(dhcp_page.locator('[data-port-vlan="c"]')).to_have_value('access:10')
+            dhcp_page.locator('[data-port-vlan="s"]').fill('access:20')
+            dhcp_page.locator('[data-port-vlan="s"]').dispatch_event('change')
+            expect(dhcp_page.locator('[data-port-vlan="s"]')).to_have_value('access:20')
+            with dhcp_page.expect_response('**/api/dhcp/discover-offer') as isolated_dhcp:
+                dhcp_page.locator('#run-dhcp').click()
+            assert isolated_dhcp.value.json()['status'] == 'DISCOVER_NOT_RECEIVED'
+            assert isolated_dhcp.value.json()['offer']['transmissions'] == []
+            dhcp_page.locator('[data-port-vlan="s"]').fill('access:10')
+            dhcp_page.locator('[data-port-vlan="s"]').dispatch_event('change')
+            with dhcp_page.expect_response('**/api/dhcp/discover-offer') as restored_dhcp:
+                dhcp_page.locator('#run-dhcp').click()
+            assert restored_dhcp.value.json()['status'] == 'OFFER_RECEIVED'
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('DHCP-status: OFFER_RECEIVED')
+
+            # Server's own address is already in use; fail closed with HTTP
+            # 422 and never show a stale previous success.
+            dhcp_page.locator('#dhcp-offered-ip').fill('192.0.2.1')
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('Ingen aktuell DHCP-diagnostik')
+            with dhcp_page.expect_response('**/api/dhcp/discover-offer') as bad_offer:
+                dhcp_page.locator('#run-dhcp').click()
+            assert bad_offer.value.status == 422
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('DHCP-diagnostik avvisad')
+            assert 'OFFER_RECEIVED' not in dhcp_page.locator('#dhcp-result').inner_text()
+
+            # An HTTP request may complete on the server but the browser
+            # must discard its response if the proposal changed meanwhile.
+            dhcp_page.locator('#dhcp-offered-ip').fill('192.0.2.70')
+            dhcp_page.evaluate("""() => {
+              window.__originalDhcpFetch = window.fetch;
+              window.__releaseDhcp = null;
+              window.fetch = async (...args) => {
+                const response = await window.__originalDhcpFetch(...args);
+                if (args[0] === '/api/dhcp/discover-offer') {
+                  return new Promise(resolve => {
+                    window.__releaseDhcp = () => resolve(response);
+                  });
+                }
+                return response;
+              };
+            }""")
+            dhcp_page.locator('#run-dhcp').click()
+            dhcp_page.wait_for_function("typeof window.__releaseDhcp === 'function'")
+            expect(dhcp_page.locator('#run-dhcp')).to_be_disabled()
+            dhcp_page.locator('#dhcp-offered-ip').fill('192.0.2.71')
+            dhcp_page.evaluate('window.__releaseDhcp()')
+            expect(dhcp_page.locator('#run-dhcp')).to_be_enabled()
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('Ingen aktuell DHCP-diagnostik')
+            dhcp_page.evaluate('window.fetch = window.__originalDhcpFetch')
+            with dhcp_page.expect_response('**/api/dhcp/discover-offer') as fresh_dhcp:
+                dhcp_page.locator('#run-dhcp').click()
+            assert fresh_dhcp.value.json()['offeredIpv4'] == '192.0.2.71'
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('Föreslagen IP: 192.0.2.71')
+            dhcp_page.locator('[data-item-type="node"][data-item-id="client"]').click()
+            expect(dhcp_page.locator('[data-port-ipv4="eth0"]')).to_have_value('')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert sorted(x.name for x in store.glob('*.yadilab')) == ['lab.yadilab']
+            assert not errors, errors
+            dhcp_page.close()
 
             # A different saved project must not be silently overwritten.
             page.locator('#new-project').click()
