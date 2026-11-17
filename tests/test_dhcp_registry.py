@@ -142,6 +142,18 @@ class MultiClientRegistryTests(unittest.TestCase):
             start(registry, p)
         self.assertEqual(len(registry._sessions), 16)
 
+    def test_operation_limit_rejects_run_without_mutating_leases(self):
+        p = clients()
+        registry = DhcpSessionRegistry()
+        sid = start(registry, p)["sessionId"]
+        # This is the counted bound, not 256 fabricated DHCP packets.
+        registry._get(sid).operation_count = 256
+        with self.assertRaisesRegex(ProjectValidationError, "operation limit"):
+            run(registry, sid, p, "client", 101)
+        self.assertEqual(registry._get(sid).state()["leaseCount"], 0)
+        self.assertEqual(registry._get(sid).state()["operationCount"], 256)
+        self.assertEqual(registry.reset(sid, p)["operationCount"], 0)
+
     def test_failed_l2_exchange_counts_attempt_not_lease(self):
         p = clients()
         p["links"][1]["enabled"] = False
@@ -269,3 +281,34 @@ class MultiClientHTTPTests(unittest.TestCase):
                 self.assertEqual(body["error"], "INVALID_PROJECT")
                 self.assertEqual(saved.read_bytes(), before)
         self.assertEqual(self.server.dhcp_sessions._get(sid).state()["leaseCount"], 0)
+
+    def test_process_restart_discards_session_but_preserves_real_file(self):
+        p = clients()
+        self.store.save("baseline", p)
+        saved = self.root / "baseline.yadilab"
+        digest = hashlib.sha256(saved.read_bytes()).hexdigest()
+        status, state = self.post("/api/dhcp/session/start", {
+            "project": p, "serverNode": "server", "serverPort": "eth0",
+            "poolStart": "192.0.2.70", "poolEnd": "192.0.2.71"})
+        self.assertEqual(status, 200)
+        sid = state["sessionId"]
+        status, active = self.post("/api/dhcp/session/run", {
+            "project": p, "sessionId": sid, "clientNode": "client",
+            "clientPort": "eth0", "transactionId": 101, "leaseSeconds": 3600})
+        self.assertEqual(status, 200)
+        self.assertEqual(active["leaseCount"], 1)
+        # A NEW HTTP server object against exactly the same on-disk store.
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+        self.server = LabHTTPServer(("127.0.0.1", 0), ProjectStore(self.root))
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.url = f"http://127.0.0.1:{self.server.server_port}"
+        code, refused = self.post("/api/dhcp/session/run", {
+            "project": p, "sessionId": sid, "clientNode": "client-2",
+            "clientPort": "eth0", "transactionId": 102, "leaseSeconds": 3600})
+        self.assertEqual(code, 422)
+        self.assertIn("unknown or expired session", refused["message"])
+        self.assertEqual(hashlib.sha256(saved.read_bytes()).hexdigest(), digest)
+        self.assertEqual(ProjectStore(self.root).read("baseline")["project"], p)
