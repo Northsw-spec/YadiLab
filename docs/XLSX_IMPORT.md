@@ -13,7 +13,7 @@ A network consultant may receive documentation as an XLSX workbook. This impleme
 
 Each worksheet's first row contains **all and only** its defined headers. Further rows contain explicit data. Blank *cells* are represented as empty CSV fields; completely empty records and gaps in declared row numbering are rejected. Only declared `Links` rows create physical links; a matching IPv4 address, geographical zone, name or screen position never creates a port/cable.
 
-The only supported canonical result is **schema version 1.0**, so MAC bindings, VLAN settings, static routes, custom notes, additional columns and worksheet annotations are **not** silently imported. A workbook carrying them is rejected (unsupported columns/parts) until a separate versioned contract is implemented. No data may be guessed or dropped.
+Unversioned workbooks retain canonical **schema 1.0**. A separate, explicit `Project` worksheet with `schemaVersion=1.3` enables the versioned MAC/VLAN/static-route format described in [SPREADSHEET_V13.md](SPREADSHEET_V13.md). Unknown columns and unsupported content remain rejected.
 
 ## XLSX byte-level contract
 
@@ -21,7 +21,7 @@ The only supported canonical result is **schema version 1.0**, so MAC bindings, 
 
 The standard OOXML workbook manifest and local worksheet relationships identify the named sheets. Sheet order, generated worksheet filenames, and column order are not assumed. The importer recognizes normal inline strings, plain shared strings, numeric coordinates, and native boolean `enabled` cells; all device/port/link IDs remain literal **text** to avoid Excel's numeric normalization destroying leading zeros. Unsupported numeric identity cells, formulas/cached formula values, cell errors, rich-text shared strings, hidden sheets/rows/columns, merged cells, drawings, external links, embedded objects/macros, unexpected worksheet parts, out-of-range/duplicate coordinates, malformed XML, corrupt ZIP archives, duplicate archive members and unsupported OOXML package parts are rejected with HTTP 422 rather than skipped.
 
-`network_core/xlsx_import.py` converts the declared cell matrix to CSV records **in memory**, using the exact `csv_import.TABLES` schema and existing `import_csv_tables`. Only that existing path creates and validates the canonical graph, its identities, explicit zone references, endpoints and boolean states. No second model/import validation implementation and no filesystem writes.
+`network_core/xlsx_import.py` converts the declared cell matrix to CSV records **in memory**, using the exact `csv_import.TABLES` schema and existing `import_csv_tables`. That existing path validates the canonical graph and declared identities; the shared spreadsheet version converter then adds schema-1.3 facts and validates the complete document again. No second model/import validation implementation and no filesystem writes.
 
 ## UI and Save
 

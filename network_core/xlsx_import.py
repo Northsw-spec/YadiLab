@@ -16,7 +16,7 @@ import re
 import zipfile
 import xml.etree.ElementTree as ET
 
-from .csv_import import TABLES, import_csv_tables
+from .spreadsheet_schema import KNOWN_SHEETS, columns_for_sheets, import_spreadsheet_tables
 from .model import ProjectValidationError
 
 NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -27,7 +27,7 @@ MAX_XLSX_BYTES = 5 * 1024 * 1024
 MAX_UNCOMPRESSED = 12 * 1024 * 1024
 MAX_XML = 5 * 1024 * 1024
 MAX_ROWS = 5001
-SHEETS = {name[:-4]: name for name in TABLES}
+SHEETS = {name: name + ".csv" for name in KNOWN_SHEETS}
 COLREF = re.compile(r"([A-Z]{1,3})([1-9][0-9]*)\Z")
 DATA_NAMES = {"x", "y", "enabled"}
 
@@ -117,7 +117,7 @@ def _cell(cell: ET.Element, shared: list[str], where: str, field: str) -> str:
 
 
 def _table(archive: zipfile.ZipFile, part: str, name: str,
-           shared: list[str]) -> str:
+           shared: list[str], columns: tuple[str, ...]) -> str:
     root = _xml(archive, part)
     if root.tag != f"{{{NS}}}worksheet":
         _fail(name, "invalid worksheet root")
@@ -152,19 +152,19 @@ def _table(archive: zipfile.ZipFile, part: str, name: str,
             if not ref:
                 _fail(name, "cell missing explicit reference")
             col = _index(ref, expected_row, name)
-            if col >= len(TABLES[name + ".csv"]) or col in fields:
+            if col >= len(columns) or col in fields:
                 _fail(name, f"duplicate/out-of-range column {ref}")
             # Column meaning is determined by the first, literal header row.
             field = rows[0][col] if rows and col < len(rows[0]) else "header"
             fields[col] = _cell(cell, shared, f"{name}!{ref}", field)
         if not fields:
             _fail(name, f"empty formatted row {expected_row} is not a record")
-        rows.append([fields.get(i, "") for i in range(len(TABLES[name + ".csv"]))])
+        rows.append([fields.get(i, "") for i in range(len(columns))])
         expected_row += 1
     if not rows:
         _fail(name, "missing header row")
     header = rows[0]
-    if len(set(header)) != len(header) or set(header) != set(TABLES[name + ".csv"]):
+    if len(set(header)) != len(header) or set(header) != set(columns):
         _fail(name, "expected exactly the named CSV columns (any order)")
     # Type-check data against the actual header's column order, independent
     # of cell XML formatting and implicit empty cells.
@@ -232,7 +232,7 @@ def _workbook_sheets(archive: zipfile.ZipFile) -> dict[str, str]:
 
 
 def import_xlsx_workbook(value: object) -> dict:
-    """Return a validated schema-1.0 project; the caller controls workspace Save."""
+    """Return a validated legacy schema-1.0 or explicit schema-1.3 project."""
     if not isinstance(value, dict) or set(value) != {"filename", "projectName", "contentBase64"}:
         _fail("request", "expected exactly filename, projectName and contentBase64")
     filename, name, encoded = (value[k] for k in ("filename", "projectName", "contentBase64"))
@@ -279,8 +279,12 @@ def import_xlsx_workbook(value: object) -> dict:
                 _fail("archive", f"unsupported workbook parts: {', '.join(sorted(extra))}")
             _relationships(archive, "_rels/.rels")  # reject external package links
             shared = _shared_strings(archive)
-            sources = [{"name": SHEETS[name], "text": _table(archive, part, name, shared)}
-                       for name, part in sheets.items()]
+            schema_columns = columns_for_sheets(sheets.keys())
+            sources = [
+                {"name": SHEETS[name], "text": _table(archive, part, name, shared,
+                                                       schema_columns[name])}
+                for name, part in sheets.items()
+            ]
     except (zipfile.BadZipFile, EOFError, OSError):
         _fail("archive", "invalid XLSX ZIP structure")
-    return import_csv_tables({"projectName": name, "files": sources})
+    return import_spreadsheet_tables({"projectName": name, "files": sources})

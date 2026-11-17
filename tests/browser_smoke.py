@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 from network_core import config
 from xlsx_fixture import make_workbook, workbook_parts, zip_parts
 from ods_fixture import make_ods, ods_parts, zip_parts as zip_ods_parts
+from spreadsheet_v13_fixture import TABLES_13, expected_v13, xlsx_v13, ods_v13
 
 
 def port():
@@ -427,6 +428,69 @@ def run():
             assert hashlib.sha256((store/'ods-demo.yadilab').read_bytes()).hexdigest() == ods_sha
             assert hashlib.sha256((store/'xlsx-demo.yadilab').read_bytes()).hexdigest() == xlsx_sha
             assert hashlib.sha256((store/'csv-demo.yadilab').read_bytes()).hexdigest() == csv_sha
+
+            # PR25: both REAL workbook formats with explicit Project=1.3,
+            # declared MACs, access/trunk VLAN and bidirectional static routes.
+            # First refuse off-link next-hop before user accepts replacement.
+            malformed_v13 = dict(TABLES_13)
+            malformed_v13['StaticRoutes'] = malformed_v13['StaticRoutes'].replace(
+                '192.0.2.1,eth0','198.51.100.1,eth0',1)
+            with page.expect_response('**/api/import/xlsx') as rejected_v13:
+                page.locator('#import-file').set_input_files({
+                    'name':'invalid-route.xlsx',
+                    'mimeType':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'buffer':make_workbook(malformed_v13,shared_strings=True),
+                })
+            assert rejected_v13.value.status == 422
+            expect(page.locator('#toast')).to_contain_text('Import avvisad:')
+            expect(page.locator('[data-node-id="pc-a"]')).to_have_count(1)
+            assert hashlib.sha256((store/'ods-demo.yadilab').read_bytes()).hexdigest() == ods_sha
+
+            for ext, payload, mime, filename, project_name in [
+                ('xlsx',xlsx_v13(shared_strings=True,reorder=True),
+                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                 'v13-rich.xlsx','XLSX Browser Lab'),
+                ('ods',ods_v13(reorder=True,trailing=True,styles=True),
+                 'application/vnd.oasis.opendocument.spreadsheet',
+                 'v13-rich.ods','ODS Browser Lab'),
+            ]:
+                previous_sha = hashlib.sha256(
+                    (store/'ods-demo.yadilab').read_bytes()).hexdigest()
+                with page.expect_response('**/api/import/'+ext) as v13_import:
+                    page.locator('#import-file').set_input_files({
+                        'name':filename,'mimeType':mime,'buffer':payload,
+                    })
+                assert v13_import.value.status == 200
+                imported = v13_import.value.json()['project']
+                assert imported == expected_v13(project_name)
+                assert imported['schemaVersion'] == '1.3'
+                assert imported['nodes'][0]['ports'][0]['mac'] == '02:00:00:00:00:0A'
+                assert imported['nodes'][1]['ports'][1]['vlan'] == {
+                    'mode':'trunk','allowedVlans':[10,20]}
+                assert imported['nodes'][0]['staticRoutes'][0]['nextHop'] == '192.0.2.1'
+                expect(page.locator('[data-node-id="ha"]')).to_have_count(1)
+                expect(page.locator('[data-link-id="trunk"]')).to_have_count(1)
+                expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+                saved_name='v13-'+ext
+                assert not (store/(saved_name+'.yadilab')).exists()
+                assert hashlib.sha256((store/'ods-demo.yadilab').read_bytes()).hexdigest() == previous_sha
+                page.locator('#project-filename').fill(saved_name)
+                page.locator('#project-filename').dispatch_event('change')
+                page.locator('#save-project').click()
+                expect(page.locator('#save-indicator')).to_contain_text(
+                    'Sparat · '+saved_name+'.yadilab',timeout=12000)
+                stored=(store/(saved_name+'.yadilab')).read_bytes()
+                assert json.loads(stored) == imported
+                saved_sha=hashlib.sha256(stored).hexdigest()
+                page.locator('#new-project').click()
+                page.locator('#saved-projects').select_option(saved_name)
+                page.locator('#open-project').click()
+                expect(page.locator('[data-node-id="ha"]')).to_have_count(1)
+                expect(page.locator('[data-link-id="trunk"]')).to_have_count(1)
+                assert hashlib.sha256((store/(saved_name+'.yadilab')).read_bytes()).hexdigest() == saved_sha
+                assert hashlib.sha256((store/'ods-demo.yadilab').read_bytes()).hexdigest() == previous_sha
+                assert hashlib.sha256((store/'xlsx-demo.yadilab').read_bytes()).hexdigest() == xlsx_sha
+                assert hashlib.sha256((store/'csv-demo.yadilab').read_bytes()).hexdigest() == csv_sha
 
             # Browser ARP diagnostics use real HTTP and unsaved current workspace.
             # Reopen the previous genuinely persisted VLAN 1.2 file, then edit
