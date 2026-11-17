@@ -1,10 +1,10 @@
 # Ethernet II: explicita MAC-identiteter och bytebaserade ramar
 
-**Status:** Implementerat och testat som isolerat Python-API, inte integrerat med GUI. Ingen IP-, ARP- eller VLAN-simulering.
+**Status:** Implementerat och testat som isolerat Python-API. En begränsad 802.1Q C-tagg stöds; VLAN-forwarding kräver en separat explicit Python-session. Inget stöd för IP-paketforwarding.
 
 ## Kontrakt
 
-- `EthernetFrame(destination, source, ether_type, payload)` är en immutabel Ethernet II-ram, utan FCS, preamble eller VLAN-taggar.
+- `EthernetFrame(destination, source, ether_type, payload, vlan_id=None)` är en immutabel Ethernet II-ram utan FCS eller preamble. Ett explicit `vlan_id` anger en enda 802.1Q C-tagg (PCP/DEI=0); se [VLAN.md](VLAN.md).
 - MAC-format är exakt sex kolonseparerade hexadecimala oktetter. Källa måste vara icke-noll unicast. Destination får vara unicast eller broadcast. Multicast avvisas som ej stödd.
 - `ether_type` är heltal `0x0600..0xFFFF`, utom 802.1Q/802.1ad-taggar (`0x8100`, `0x88A8`, `0x9100`). 802.3-längdfält och odefinierade gränsvärden avvisas. Detta är **endast EtherType-fältet**; payload avkodas inte.
 - `payload` måste vara `bytes`, 0–1500 oktetter. `serialize()` returnerar destination(6), källa(6), EtherType(2) och payload, med nollpadding upp till 46 payloadoktetter. Resultatets storlek är 60–1514 oktetter, **exklusive FCS**.
@@ -38,7 +38,7 @@ Detta är en **API-illustration med platshållar-ID:n**, inte ett bevis på att 
 
 ## Avsiktliga begränsningar
 
-Ingen FCS-beräkning, VLAN, multicast, MAC-aging, STP, ARP-protokoll, IP-stack eller NIC-filtrering. EtherType `0x0800` eller `0x0806` innebär inte att IPv4 eller ARP avkodas. En importerad fil med okänd MAC tilldelas aldrig en adress.
+Ingen FCS-beräkning, native VLAN, QinQ, multicast, MAC-aging, STP, IP-stack eller NIC-filtrering. EtherType `0x0800` eller `0x0806` innebär inte att IPv4 eller ARP avkodas. En importerad fil med okänd MAC tilldelas aldrig en adress.
 
 ## Tester
 

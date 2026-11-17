@@ -10,7 +10,7 @@ Modulen `network_core/ethernet.py` implementerar en *deterministisk MAC-forwardi
 2. Endast länkar med `enabled: true` och aktiverade portar i **båda ändarna** kan transportera ramen.
 3. `inject(node_id, port_id, source_mac, destination_mac)` är det ursprungliga MAC-only-anropet. Den striktare `inject_frame(node_id, port_id, frame)` kräver en faktisk `EthernetFrame` och en explicit MAC i projektets 1.1-portfält eller `interface_macs` vid sessionens start. Ingen MAC tilldelas automatiskt.
 4. Endast sex oktetter hex, separerade med kolon, stöds. Källadressen måste vara icke-noll unicast. Destinationen måste vara unicast eller `FF:FF:FF:FF:FF:FF` (broadcast). Multicast avvisas uttryckligen som ej implementerat.
-5. Samtliga portars forwarding-domän antas för denna modell vara **otaggad, utan VLAN-segmentering**. Det är en begränsning, inte ett påstående om verkliga switchkonfigurationer.
+5. Utan `vlan_ports` används den historiska, otaggade forwardingmodellen. När `vlan_ports` anges explicit, används samma forwardingkö med separat MAC-inlärning per VLAN, access-/trunk-tagging och strikt VLAN-filtrering. Se [VLAN.md](VLAN.md).
 
 ## Regler för forwarding
 
@@ -43,10 +43,10 @@ Exemplet är kodfragment med **platshållar-ID:n**, inte ett bevis att dessa nä
 ## Icke-implementerat
 
 - L2-ramar kan nu serialiseras/parsas **utan FCS** som Ethernet II i `ethernet_frame.py`. Däremot saknas FCS, preamble, tidsfördröjning, länkförhandling och protokollavkodning av payload.
-- Dynamisk MAC-aging, STP/RSTP, multicastgrupper, VLAN och trunkar.
+- Dynamisk MAC-aging, STP/RSTP, multicastgrupper, native VLAN och QinQ. En begränsad VLAN access-/trunkmodell finns via Python-API; se [VLAN.md](VLAN.md).
 - ARP-protokollet finns **inte i forwardingmotorn** `ethernet.py`; en separat begränsad ARP-session finns i [ARP.md](ARP.md). IP, ICMP, ping, DHCP, DNS, routing och brandväggslogik saknas.
 - MAC-filtrering eller paketacceptans i mottagande host/NIC. `endpointArrivals` betyder **enbart att ramen nådde ett deklarerat gränssnitt**.
-- UI, HTTP-endpoint eller beständig lagring av simuleringssessionen.
+- UI, HTTP-endpoint eller beständig lagring av simuleringssessionen, inklusive VLAN-konfiguration.
 
 Den befintliga `topology_trace` är fortfarande en **dokumentationsgraf**, inte denna forwardingmodell. Blanda inte ihop deras resultat och ersätt inte den ena med falska antaganden om den andra.
 

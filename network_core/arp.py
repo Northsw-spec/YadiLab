@@ -83,6 +83,8 @@ class ArpMessage:
     def from_frame(cls, frame: EthernetFrame) -> ArpMessage:
         if not isinstance(frame, EthernetFrame) or frame.ether_type != ARP_ETHER_TYPE:
             raise ProjectValidationError("arp: Ethernet frame must have EtherType 0x0806")
+        if frame.vlan_id is not None:
+            raise ProjectValidationError("arp: tagged VLAN frames unsupported by isolated endpoint ARP")
         if len(frame.payload) < 28 or len(frame.payload) > 46 or any(frame.payload[28:]):
             raise ProjectValidationError("arp: unsupported trailing ARP payload or padding")
         message = cls.parse(frame.payload[:28])

@@ -43,15 +43,19 @@ Detta är **inte** en färdig Ethernet-/ARP-/IP-simulator och har **ännu ingen 
 
 Den fristående Layer 2-motorn kan nu serialisera och tolka väldefinierade Ethernet II-ramar utan FCS, med strikt EtherType- och MAC-validering. En simuleringssession kan få **uttryckliga port-MAC-bindningar** och avvisar ramkällor utan sådan bindning eller med fel källadress. MAC-tabeller lärs fortfarande in av verkligt simulerade inkommande ramar, inte av IP-adresser eller påhittade enheter.
 
-**Utökat i schema 1.1:** Explicit MAC-adress kan sparas per icke-switchport via Builder och verklig Save/Open. Den isolerade Python-motorn använder sparade bindningar eller validerade sessionsbindningar. Inlärda MAC-tabeller och ARP-cache är fortfarande flyktiga; VLAN, IP-forwarding och ping stöds inte. Se [MAC-kontraktet](docs/MAC_CONFIG.md). Se [Ethernet II-kontrakt](docs/ETHERNET_FRAMES.md) och [forwardingkontrakt](docs/ETHERNET_FORWARDING.md).
+**Utökat i schema 1.1:** Explicit MAC-adress kan sparas per icke-switchport via Builder och verklig Save/Open. Den isolerade Python-motorn använder sparade bindningar eller validerade sessionsbindningar. Inlärda MAC-tabeller och ARP-cache är fortfarande flyktiga; IP-forwarding och ping stöds inte. VLAN-forwarding kan nu aktiveras explicit per Python-session. Se [MAC-kontraktet](docs/MAC_CONFIG.md). Se [Ethernet II-kontrakt](docs/ETHERNET_FRAMES.md) och [forwardingkontrakt](docs/ETHERNET_FORWARDING.md).
 
 ## Isolerad ARP-fråga och svar (endast Python)
 
 Den separata modulen `network_core/arp.py` modellerar ARP-meddelanden enligt Ethernet/IPv4-formatet och kör en uttrycklig **request → broadcast-forwarding → reply → ARP-cache** över redan deklarerade och aktiva länkar. Både IPv4-gränssnitt och MAC-bindningar måste anges uttryckligen. Resultaten gäller **bara den begränsade simuleringssessionen** och är inte ping, IP-routing, VLAN eller verklig nätverksreachability. ARP-kommandon och cache är fortfarande inte integrerade i UI eller lagring, men explicit konfigurerade MAC-adresser kan läsas ur schema 1.1. Se [ARP-kontraktet](docs/ARP.md).
 
+## Explicit VLAN-forwarding (endast Python-API)
+
+`EthernetFabric(project, vlan_ports=...)` kan nu forwarda mellan uttryckligen konfigurerade access- och trunkportar med **isolerade MAC-tabeller per VLAN**, begränsade allowlists och korrekt 802.1Q-tagging på trunkar. `EthernetFrame` kan serialisera och tolka en C-tagg. Detta är **endast simuleringssessionsdata** och finns ännu inte i Builder eller .yadilab-formatet. ARP-simuleringen är fortfarande inte VLAN-medveten. Se [VLAN-kontraktet](docs/VLAN.md).
+
 ## Avsiktligt INTE implementerat
 
-**Topologisk väg är inte ping, IP-routing, VLAN-forwarding, brandväggslogik eller ett bevis på nätverksanslutning.** Första versionens grafspårning traverserar dokumentationsgrafen, inte verkliga protokoll.
+**Topologisk grafväg är inte ping, IP-routing, VLAN-medveten reachability, brandväggslogik eller ett bevis på nätverksanslutning.** Första versionens grafspårning traverserar dokumentationsgrafen, inte verkliga protokoll.
 
 Ännu inte implementerat: XLSX/ODS-import eller godtyckliga CSV-format, IP forwarding, Layer 2 bridging, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
 
