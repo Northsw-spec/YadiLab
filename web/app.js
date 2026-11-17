@@ -62,6 +62,7 @@ let doraSessionBusy = false;
 let doraSessionState = null;
 let doraSessionTrace = null;
 let doraClockEvent = null;
+let doraRenewalTrace = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -159,6 +160,7 @@ function invalidateDoraSession() {
   doraSessionState = null;
   doraSessionTrace = null;
   doraClockEvent = null;
+  doraRenewalTrace = null;
   if (previous) {
     // Best-effort release; backend also refuses any changed project snapshot.
     void api('/api/dhcp/session/stop', {sessionId: previous}).catch(() => {});
@@ -495,6 +497,12 @@ function renderDoraSession() {
   for (const id of ['dora-client', 'dora-transaction-id', 'dora-lease-seconds']) {
     $(id).disabled = busy;
   }
+  const selectedClient = $('dora-client').value;
+  const chosen = active && selectedClient ? JSON.parse(selectedClient) : [];
+  const selectedLease = active ? doraSessionState.leases.find(l =>
+    l.clientNode === chosen[0] && l.clientPort === chosen[1]) : null;
+  $('dora-session-renew').disabled = !active || busy || !selectedLease
+    || selectedLease.renewalPhase === 'BOUND';
   const count = doraSessionState?.leaseCount ?? 0;
   const operations = doraSessionState?.operationCount ?? 0;
   const clock = doraSessionState?.clockSeconds ?? 0;
@@ -516,6 +524,8 @@ function renderDoraSession() {
       ? leases.map(l => l.clientNode + '/' + l.clientPort + ' · '
           + l.clientMac + ' → ' + l.ipv4 + ' · ' + l.state
           + ' · kvar ' + l.remainingSeconds + ' s'
+          + ' · T1 ' + l.t1AtSeconds + ' s · T2 ' + l.t2AtSeconds + ' s'
+          + ' · fas ' + l.renewalPhase + ' · förnyelser ' + l.renewalCount
           + ' · slut vid ' + l.expiresAtSeconds + ' s').join('\n')
       : 'Inga BOUND-leases. Endast mottaget DHCPACK kan skapa en post.';
     if (leases.length) leaseOutput.classList.add('ok');
@@ -537,6 +547,47 @@ function renderDoraSession() {
         ? expired.map(l => 'EXPIRED: ' + l.clientNode + '/' + l.clientPort
           + ' · ' + l.ipv4 + ' · frigjord ur simulerad pool').join('\n')
         : 'Inga leases har gått ut i detta tidssteg.');
+  }
+  const renewalOutput = $('dora-session-renew-result');
+  renewalOutput.classList.remove('ok', 'fail');
+  if (!active || !doraRenewalTrace) {
+    renewalOutput.textContent = active
+      ? selectedLease
+        ? 'Vald lease ' + selectedLease.ipv4 + ' · fas ' + selectedLease.renewalPhase
+          + ' · T1 ' + selectedLease.t1AtSeconds + ' s · T2 '
+          + selectedLease.t2AtSeconds + ' s. Förnyelse sker endast efter knapptryckning.'
+        : 'Välj en klient med aktiv BOUND-lease för T1/T2-förnyelse.'
+      : 'Ingen DHCP-förnyelse har begärts.';
+  } else if (doraRenewalTrace.error) {
+    renewalOutput.classList.add('fail');
+    renewalOutput.textContent = 'DHCP-förnyelse avvisad: ' + doraRenewalTrace.error
+      + '\nIngen lease förlängdes.';
+  } else {
+    const renewal = doraRenewalTrace;
+    const approved = renewal.leaseRenewed === true && renewal.status === 'ACK_RECEIVED';
+    renewalOutput.classList.add(approved ? 'ok' : 'fail');
+    const wires = name => {
+      const phase = renewal[name];
+      return name.toUpperCase() + ': ' + phase.transmissions.length + ' överföringar\n'
+        + phase.transmissions.map(t => '  ' + t.linkId + ': '
+            + t.from.node + '/' + t.from.port + ' → ' + t.to.node + '/' + t.to.port
+            + (t.vlanId == null ? '' : ' · VLAN ' + t.vlanId)).join('\n')
+        + phase.vlanDrops.map(d => '\n  VLAN-drop: ' + d.reason).join('');
+    };
+    renewalOutput.textContent = [
+      'DHCP-förnyelse: ' + renewal.status + ' · ' + renewal.phase,
+      renewal.meaning,
+      'DHCPREQUEST destination: ' + renewal.request.ipDestination
+        + ' · MAC: ' + renewal.request.ethernetDestination,
+      wires('request'),
+      'REQUEST nådde server: ' + (renewal.request.receivedAtServer ? 'ja' : 'nej'),
+      wires('ack'),
+      'ACK nådde klient: ' + (renewal.ack.receivedAtClient ? 'ja' : 'nej'),
+      approved
+        ? 'FÖRNYAD BOUND-lease: ' + renewal.lease.ipv4
+          + ' · ny sluttid ' + renewal.lease.expiresAtSeconds + ' s'
+        : 'Ingen förnyelse. Ursprunglig lease och sluttid gäller oförändrade.',
+    ].join('\n\n');
   }
   const output = $('dora-session-result');
   output.classList.remove('ok', 'fail');
