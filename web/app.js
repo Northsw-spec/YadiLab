@@ -56,6 +56,11 @@ let dhcpBusy = false;
 let doraDiagnostic = null;
 let doraGeneration = 0;
 let doraBusy = false;
+let doraSessionId = null;
+let doraSessionGeneration = 0;
+let doraSessionBusy = false;
+let doraSessionState = null;
+let doraSessionTrace = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -90,6 +95,7 @@ const canvas = new TopologyCanvas($('topology'), {
       troubleDiagnostic = null;
       invalidateDhcpDiagnostics();
       invalidateDoraDiagnostics();
+      invalidateDoraSession();
       invalidateSimulationSession();
       renderSessionDiagnostics();
       renderDhcpDiagnostics();
@@ -144,10 +150,23 @@ function invalidateDoraDiagnostics() {
   doraGeneration += 1;
   doraDiagnostic = null;
 }
+function invalidateDoraSession() {
+  doraSessionGeneration += 1;
+  const previous = doraSessionId;
+  doraSessionId = null;
+  doraSessionBusy = false;
+  doraSessionState = null;
+  doraSessionTrace = null;
+  if (previous) {
+    // Best-effort release; backend also refuses any changed project snapshot.
+    void api('/api/dhcp/session/stop', {sessionId: previous}).catch(() => {});
+  }
+}
 function changed({keepTrace = false} = {}) {
   editRevision += 1;
   invalidateDhcpDiagnostics();
   invalidateDoraDiagnostics();
+  invalidateDoraSession();
   if (!keepTrace) {traceResult = null; highlightedLinks = [];}
   routeLookup = null;
   ipv4Diagnostic = null;
@@ -387,7 +406,8 @@ function renderDhcpDiagnostics() {
 
 function renderDoraDiagnostics() {
   const {clientOptions, serverOptions} = populateDhcpPortSelectors('dora');
-  $('run-dora').disabled = doraBusy || !clientOptions.length || !serverOptions.length;
+  $('run-dora').disabled = doraBusy || doraSessionBusy || doraSessionId !== null
+    || !clientOptions.length || !serverOptions.length;
   const output = $('dora-result');
   output.classList.remove('ok', 'fail');
   if (doraBusy && !doraDiagnostic) {
@@ -454,6 +474,87 @@ function renderDoraDiagnostics() {
   resultLines.push('Endast tillfällig DHCP-simuleringssession. Klientens kanoniska IPv4 ändras inte.'
     + ' Ingen fil sparas. Ingen faktisk adresskonfliktskontroll eller lease-förnyelse.');
   output.textContent = resultLines.join('\n\n');
+}
+
+function renderDoraSession() {
+  const active = doraSessionId !== null;
+  const clients = dhcpPortChoices('client');
+  const servers = dhcpPortChoices('server');
+  const busy = doraSessionBusy || doraBusy;
+  $('dora-session-start').disabled = active || busy || !clients.length || !servers.length;
+  $('dora-session-run').disabled = !active || busy || !clients.length;
+  $('dora-session-reset').disabled = !active || busy;
+  $('dora-session-stop').disabled = !active || busy;
+  for (const id of ['dora-server', 'dora-pool-start', 'dora-pool-end']) {
+    $(id).disabled = active || busy;
+  }
+  for (const id of ['dora-client', 'dora-transaction-id', 'dora-lease-seconds']) {
+    $(id).disabled = busy;
+  }
+  const count = doraSessionState?.leaseCount ?? 0;
+  const operations = doraSessionState?.operationCount ?? 0;
+  $('dora-session-status').textContent = doraSessionBusy
+    ? 'DHCP-sessionoperation pågår…'
+    : active
+      ? 'Aktiv DHCP-session · ' + operations + ' operation(er) · ' + count
+        + ' BOUND-lease(s) · server ' + doraSessionState.serverNode
+        + '/' + doraSessionState.serverPort + ' · pool '
+        + doraSessionState.poolStart + '–' + doraSessionState.poolEnd
+      : 'Ingen aktiv DHCP-session. Starta för att behålla leases mellan klientkörningar.';
+  const leaseOutput = $('dora-session-leases');
+  leaseOutput.classList.remove('ok', 'fail');
+  if (!active) {
+    leaseOutput.textContent = 'Ingen aktiv lease-tabell. Inget lagras på disk.';
+  } else {
+    const leases = doraSessionState.leases;
+    leaseOutput.textContent = leases.length
+      ? leases.map(l => l.clientNode + '/' + l.clientPort + ' · '
+          + l.clientMac + ' → ' + l.ipv4 + ' · ' + l.state
+          + ' · ' + l.leaseSeconds + ' s').join('\n')
+      : 'Inga BOUND-leases. Endast mottaget DHCPACK kan skapa en post.';
+    if (leases.length) leaseOutput.classList.add('ok');
+  }
+  const output = $('dora-session-result');
+  output.classList.remove('ok', 'fail');
+  if (!doraSessionTrace) {
+    output.textContent = active
+      ? 'Sessionen är aktiv. Välj en klient och klicka Tilldela vald klient.'
+      : 'Inga sessionoperationer har körts.';
+    return;
+  }
+  if (doraSessionTrace.error) {
+    output.classList.add('fail');
+    output.textContent = 'DHCP-session avvisad: ' + doraSessionTrace.error
+      + '\nTidigare bekräftade leases påverkas inte.';
+    return;
+  }
+  const r = doraSessionTrace;
+  const successful = r.status === 'ACK_RECEIVED' && r.leaseCommitted === true
+    && r.lease?.state === 'BOUND';
+  output.classList.add(successful ? 'ok' : 'fail');
+  const phases = ['discover', 'offer', 'request', 'ack'].map(name => {
+    const phase = r[name];
+    const transmissions = phase.transmissions.map(t =>
+      '  ' + t.linkId + ': ' + t.from.node + '/' + t.from.port
+      + ' → ' + t.to.node + '/' + t.to.port
+      + (t.vlanId == null ? '' : ' · VLAN ' + t.vlanId));
+    const drops = phase.vlanDrops.map(d =>
+      '  VLAN-drop: ' + d.switch + '/' + d.port + ' ' + d.reason);
+    return name.toUpperCase() + ': ' + phase.transmissions.length
+      + ' överföringar\n' + [...transmissions, ...drops].join('\n');
+  });
+  output.textContent = [
+    'DORA-status: ' + r.status + ' · transaktions-ID ' + r.transactionId,
+    r.meaning,
+    ...phases,
+    'REQUEST nådde server: ' + (r.request.receivedAtServer ? 'ja' : 'nej'),
+    'ACK nådde klient: ' + (r.ack.receivedAtClient ? 'ja' : 'nej'),
+    successful
+      ? 'SIMULERAD BOUND-lease: ' + r.lease.ipv4 + ' · '
+        + r.lease.clientNode + '/' + r.lease.clientPort
+      : 'Ingen ny lease tilldelades.',
+    'Endast processlokal simuleringssession; dokumenterad IPv4 och sparade projekt är oförändrade.',
+  ].join('\n\n');
 }
 
 function renderSessionDiagnostics() {
@@ -1096,6 +1197,7 @@ function render() {
   renderArpDiagnostics();
   renderDhcpDiagnostics();
   renderDoraDiagnostics();
+  renderDoraSession();
   renderSessionDiagnostics();
   renderRouteLookup();
   renderIPv4Trace();
@@ -1228,6 +1330,7 @@ async function openProject() {
     arpDiagnostic = null; arpHighlightedLinks = [];
     invalidateDhcpDiagnostics();
     invalidateDoraDiagnostics();
+    invalidateDoraSession();
     render(); canvas.fit();
     notify(`Öppnade verklig projektfil: ${loaded.filename}.yadilab · SHA-256 ${loaded.sha256.slice(0,14)}…`);
   } catch (error) { notify(`Kunde inte öppna: ${error.message}`,true); }
@@ -1320,6 +1423,154 @@ async function exportProject() {
     notify('Export/nedladdning initierad. Webbläsarens faktiska skrivning till disk är inte verifierad.');
   } catch (error) { notify(`Export avvisad: ${error.message}`,true); }
 }
+function doraSessionInput() {
+  return [
+    $('dora-client').value, $('dora-server').value,
+    $('dora-pool-start').value.trim(), $('dora-pool-end').value.trim(),
+    $('dora-transaction-id').value.trim(), $('dora-lease-seconds').value.trim(),
+  ];
+}
+function sessionInteger(value, min, max) {
+  return /^[0-9]+$/.test(value) && Number.isSafeInteger(Number(value))
+    && Number(value) >= min && Number(value) <= max ? Number(value) : null;
+}
+async function startDoraSession() {
+  if (doraSessionBusy || doraSessionId !== null || doraBusy) return;
+  const inputs = doraSessionInput();
+  const [client, server, poolStart, poolEnd] = inputs;
+  if (!client || !server || !poolStart || !poolEnd) {
+    doraSessionTrace = {error: 'Välj klient, server och både poolgränserna uttryckligen.'};
+    renderDoraSession();
+    return;
+  }
+  const [serverNode, serverPort] = JSON.parse(server);
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  doraSessionTrace = null;
+  renderDoraSession();
+  const stillCurrent = () => generation === doraSessionGeneration
+    && edit === editRevision && workspace === workspaceRevision
+    && JSON.stringify(project) === snapshot
+    && JSON.stringify(doraSessionInput()) === JSON.stringify(inputs);
+  try {
+    const state = await api('/api/dhcp/session/start', {
+      project: JSON.parse(snapshot), serverNode, serverPort, poolStart, poolEnd,
+    });
+    if (stillCurrent()) {
+      doraSessionId = state.sessionId;
+      doraSessionState = state;
+    } else {
+      // Stale Start may have allocated a server session; explicitly release it.
+      void api('/api/dhcp/session/stop', {sessionId: state.sessionId}).catch(() => {});
+    }
+  } catch (error) {
+    if (stillCurrent()) doraSessionTrace = {error: error.message};
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraDiagnostics();
+      renderDoraSession();
+    }
+  }
+}
+async function runDoraSession() {
+  if (!doraSessionId || doraSessionBusy) return;
+  const inputs = doraSessionInput();
+  const [client, , , , rawTransaction, rawLease] = inputs;
+  const transactionId = sessionInteger(rawTransaction, 1, 4294967295);
+  const leaseSeconds = sessionInteger(rawLease, 60, 604800);
+  if (!client || transactionId === null || leaseSeconds === null) {
+    doraSessionTrace = {error: 'Välj klient, giltigt transaktions-ID och leasetid 60–604800.'};
+    renderDoraSession();
+    return;
+  }
+  const [clientNode, clientPort] = JSON.parse(client);
+  const id = doraSessionId;
+  const edit = editRevision, workspace = workspaceRevision;
+  const snapshot = JSON.stringify(project);
+  const generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  doraSessionTrace = null;
+  renderDoraSession();
+  const stillCurrent = () => generation === doraSessionGeneration
+    && doraSessionId === id && edit === editRevision
+    && workspace === workspaceRevision
+    && JSON.stringify(project) === snapshot
+    && JSON.stringify(doraSessionInput()) === JSON.stringify(inputs);
+  try {
+    const data = await api('/api/dhcp/session/run', {
+      sessionId: id, project: JSON.parse(snapshot), clientNode, clientPort,
+      transactionId, leaseSeconds,
+    });
+    if (stillCurrent()) {
+      doraSessionState = data;
+      doraSessionTrace = data.result;
+    }
+  } catch (error) {
+    if (stillCurrent()) doraSessionTrace = {error: error.message};
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraSession();
+    }
+  }
+}
+async function resetDoraSession() {
+  if (!doraSessionId || doraSessionBusy) return;
+  const id = doraSessionId;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  renderDoraSession();
+  try {
+    const state = await api('/api/dhcp/session/reset', {
+      sessionId: id, project: JSON.parse(snapshot),
+    });
+    if (generation === doraSessionGeneration && doraSessionId === id
+        && edit === editRevision && workspace === workspaceRevision
+        && JSON.stringify(project) === snapshot) {
+      doraSessionState = state;
+      doraSessionTrace = null;
+    }
+  } catch (error) {
+    if (generation === doraSessionGeneration && doraSessionId === id) {
+      doraSessionTrace = {error: error.message};
+    }
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraSession();
+    }
+  }
+}
+async function stopDoraSession() {
+  if (!doraSessionId || doraSessionBusy) return;
+  const id = doraSessionId, generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  renderDoraSession();
+  try {
+    await api('/api/dhcp/session/stop', {sessionId: id});
+    if (generation === doraSessionGeneration) {
+      doraSessionId = null;
+      doraSessionState = null;
+      doraSessionTrace = null;
+    }
+  } catch (error) {
+    if (generation === doraSessionGeneration) {
+      doraSessionTrace = {error: error.message};
+    }
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraDiagnostics();
+      renderDoraSession();
+    }
+  }
+}
+
 async function runDora() {
   if (doraBusy) return;
   const currentInputs = () => [
@@ -1761,11 +2012,22 @@ $('route-destination-ip').addEventListener('input', () => {
 $('run-arp').addEventListener('click', runArp);
 $('run-dhcp').addEventListener('click', runDhcp);
 $('run-dora').addEventListener('click', runDora);
+$('dora-session-start').addEventListener('click', startDoraSession);
+$('dora-session-run').addEventListener('click', runDoraSession);
+$('dora-session-reset').addEventListener('click', resetDoraSession);
+$('dora-session-stop').addEventListener('click', stopDoraSession);
+
 for (const id of ['dora-client', 'dora-server', 'dora-pool-start', 'dora-pool-end',
                   'dora-transaction-id', 'dora-lease-seconds']) {
   $(id).addEventListener(id === 'dora-client' || id === 'dora-server' ? 'change' : 'input', () => {
     invalidateDoraDiagnostics();
+    if (doraSessionId !== null && ['dora-client', 'dora-transaction-id',
+                                     'dora-lease-seconds'].includes(id)) {
+      doraSessionGeneration += 1;
+      doraSessionTrace = null;
+    }
     renderDoraDiagnostics();
+    renderDoraSession();
   });
 }
 
