@@ -24,6 +24,7 @@ from .arp import ArpSession
 from .dhcp import discover_offer, simulate_dora
 from .dhcp_registry import DhcpSessionRegistry
 from .dhcp_investigation import InvestigationRegistry
+from .icmp_investigation import IcmpInvestigationRegistry
 from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
 from .ipv4 import IPv4Trace
@@ -43,6 +44,7 @@ class LabHTTPServer(ThreadingHTTPServer):
         self.simulations = SimulationRegistry()
         self.dhcp_sessions = DhcpSessionRegistry()
         self.investigations = InvestigationRegistry()
+        self.icmp_investigations = IcmpInvestigationRegistry()
         super().__init__(address, Handler)
 
 
@@ -212,6 +214,39 @@ class Handler(BaseHTTPRequestHandler):
                 # graph paths, cached MAC/ARP entries, or invent IP forwarding.
                 self._json(200, ConnectedRoutingTable(body["project"], body["nodeId"])
                            .lookup(body["destinationIpv4"]))
+            elif path == "/api/icmp/investigation/start":
+                required = {"project", "sourceNode", "sourcePort", "destinationIpv4", "ttl"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "icmp investigation start: expected project, sourceNode, sourcePort, destinationIpv4, ttl")
+                self._json(200, self.server.icmp_investigations.start(
+                    body["project"], body["sourceNode"], body["sourcePort"],
+                    body["destinationIpv4"], body["ttl"]))
+            elif path == "/api/icmp/investigation/probe":
+                required = {"sessionId", "project", "probe", "target"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "icmp investigation probe: expected sessionId, project, probe, target")
+                self._json(200, self.server.icmp_investigations.probe(
+                    body["sessionId"], body["project"], body["probe"], body["target"]))
+            elif path == "/api/icmp/investigation/diagnose":
+                required = {"sessionId", "project", "diagnosis"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "icmp investigation diagnose: expected sessionId, project, diagnosis")
+                self._json(200, self.server.icmp_investigations.diagnose(
+                    body["sessionId"], body["project"], body["diagnosis"]))
+            elif path == "/api/icmp/investigation/repair":
+                if not isinstance(body, dict) or set(body) != {"sessionId", "project"}:
+                    raise ProjectValidationError(
+                        "icmp investigation repair: expected sessionId, project")
+                self._json(200, self.server.icmp_investigations.repair(
+                    body["sessionId"], body["project"]))
+            elif path == "/api/icmp/investigation/stop":
+                if not isinstance(body, dict) or set(body) != {"sessionId"}:
+                    raise ProjectValidationError(
+                        "icmp investigation stop: expected sessionId")
+                self._json(200, self.server.icmp_investigations.stop(body["sessionId"]))
             elif path == "/api/dhcp/investigation/start":
                 required = {"project", "clientNode", "clientPort", "serverNode",
                             "serverPort", "poolStart", "poolEnd", "leaseSeconds"}
