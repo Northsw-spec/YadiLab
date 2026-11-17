@@ -85,6 +85,7 @@ class InvestigationEngineTests(unittest.TestCase):
                 self.assertTrue(restored["ackReachedClient"])
                 self.assertEqual(restored["cause"], kind)
                 self.assertEqual(restored["expiresAtSeconds"], 90)
+                self.assertEqual(restored["phase"], "BOUND")
                 self.assertEqual(session.lab.dhcp.leases()[0]["renewalCount"], 1)
                 self.assertEqual(session.lab.state()["faultedLinks"], [])
                 self.assertEqual(session.lab.state()["faultedPorts"], [])
