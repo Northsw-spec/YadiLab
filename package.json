@@ -1,0 +1,10 @@
+{
+  "name": "network-topology-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Independent canonical network lab; npm is not required for runtime",
+  "scripts": {
+    "check": "node --check web/model.js && node --check web/canvas.js && node --check web/app.js"
+  }
+}
