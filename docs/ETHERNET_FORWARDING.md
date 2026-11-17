@@ -58,7 +58,7 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 Beteendet provas i `tests/test_ethernet.py`: kända/okända destinationer, broadcast, flyttad MAC, nedstängd port eller länk, två switchar, loopar och ogiltiga MAC-adresser samt oförändrat källdokument. Dessa tester är **funktionella modelltester**, inte test av verklig fysisk nätverkskommunikation.
 
-Persistens för explicita port-MAC-adresser finns nu i schema 1.1 och [MAC_CONFIG.md](MAC_CONFIG.md); sessionens inlärda MAC-tabeller sparas inte. Den separata ARP-sessionen är verifierad i `tests/test_arp.py` och dokumenterad i [ARP.md](ARP.md). Ingen UI-integrering får antyda IP-reachability innan IP-forwarding finns.
+Persistens för explicita port-MAC-adresser finns nu i schema 1.1 och [MAC_CONFIG.md](MAC_CONFIG.md); sessionens inlärda MAC-tabeller sparas inte. Den separata ARP-sessionen är verifierad i `tests/test_arp.py` och VLAN-fallen i `tests/test_vlan_arp.py`, dokumenterade i [ARP.md](ARP.md). Ingen UI-integrering får antyda IP-reachability innan IP-forwarding finns.
 
 ## Utökning: uttryckliga NIC-MAC-bindningar och Ethernet II
 

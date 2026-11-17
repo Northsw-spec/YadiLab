@@ -1,8 +1,9 @@
 """Narrow RFC 826 Ethernet/IPv4 ARP model over explicit Layer-2 forwarding.
 
 ARP messages and cache exist only in a simulation session. Configured v1.1
-project MACs can be used as explicit NIC identities. No MAC inference,
-router forwarding, IPv6, VLAN, proxy-ARP or host IP data-plane is implemented.
+project MACs can be used as explicit NIC identities. Optional explicit VLAN
+switch-port configuration reuses the existing EthernetFabric forwarding path.
+No MAC inference, router forwarding, IPv6, proxy-ARP or host IP data-plane.
 """
 from __future__ import annotations
 
@@ -99,12 +100,18 @@ class ArpMessage:
 class ArpSession:
     """Simulate one ARP exchange over the canonical declared Ethernet fabric.
 
-    Only configured endpoint IPv4 interfaces with explicit session MACs can
-    reply. ARP cache is session-only and replies require return wire delivery.
+    Only configured endpoint IPv4 interfaces with explicit MAC bindings can
+    reply. Optional VLAN port configuration is applied to BOTH the request
+    and reply using the same EthernetFabric. Cache remains session-only.
     """
 
-    def __init__(self, project: dict, *, interface_macs: Mapping[tuple[str, str], str] | None = None):
-        self.fabric = EthernetFabric(project, interface_macs=interface_macs)
+    def __init__(self, project: dict, *,
+                 interface_macs: Mapping[tuple[str, str], str] | None = None,
+                 vlan_ports: Mapping[tuple[str, str], dict] | None = None):
+        # A VLAN session must be explicit; None retains legacy unsegmented ARP.
+        # There is no second implementation of switching or VLAN traversal.
+        self.fabric = EthernetFabric(project, interface_macs=interface_macs, vlan_ports=vlan_ports)
+        self._vlan_aware = vlan_ports is not None
         self._macs = self.fabric.bound_macs()
         self._ips: dict[tuple[str, str], ipaddress.IPv4Interface] = {}
         known_ips: dict[str, tuple[str, str]] = {}
@@ -122,6 +129,14 @@ class ArpSession:
                 known_ips[address] = endpoint
                 self._ips[endpoint] = iface
         self._cache: dict[tuple[str, str], dict[str, str]] = {}
+
+    def _vlan_diagnostics(self, request: dict | None = None,
+                          reply: dict | None = None) -> dict:
+        """Expose actual switch drops without inventing a new result status."""
+        if not self._vlan_aware:
+            return {}
+        return {"requestVlanDrops": list((request or {}).get("vlanDrops", [])),
+                "replyVlanDrops": list((reply or {}).get("vlanDrops", []))}
 
     def arp_table(self, node_id: str, port_id: str) -> dict[str, str]:
         endpoint = (node_id, port_id)
@@ -147,7 +162,8 @@ class ArpSession:
         if target in self._cache.get(endpoint, {}):
             return {"status": "CACHE_HIT", "resolvedMac": self._cache[endpoint][target],
                     "requestTransmissions": [], "replyTransmissions": [],
-                    "meaning": "Previously resolved in this isolated ARP session; no new frames emitted."}
+                    "meaning": "Previously resolved in this isolated ARP session; no new frames emitted.",
+                    **self._vlan_diagnostics()}
 
         request = ArpMessage(1, self._macs[endpoint], str(iface.ip), _ZERO_MAC, target)
         # Exercise the same strict byte codec used by external Ethernet II frames.
@@ -158,7 +174,8 @@ class ArpSession:
         if dispatched["status"] == "NO_ACTIVE_LINK":
             return {"status": "NO_ACTIVE_LINK", "resolvedMac": None,
                     "requestTransmissions": [], "replyTransmissions": [],
-                    "meaning": "No enabled physical link at source; no ARP request was transmitted."}
+                    "meaning": "No enabled physical link at source; no ARP request was transmitted.",
+                    **self._vlan_diagnostics(dispatched)}
 
         responders = []
         pending_unbound = False
@@ -177,7 +194,8 @@ class ArpSession:
                     "resolvedMac": None, "requestTransmissions": dispatched["transmissions"],
                     "replyTransmissions": [],
                     "meaning": ("Matching endpoint has no explicit MAC binding." if pending_unbound else
-                                "No configured endpoint in the reached broadcast domain answered the ARP request.")}
+                                "No configured endpoint in the reached broadcast domain answered the ARP request."),
+                    **self._vlan_diagnostics(dispatched)}
         peer = responders[0]
         reply = ArpMessage(2, self._macs[peer], target, self._macs[endpoint], str(iface.ip))
         reply_frame = EthernetFrame.parse(reply.to_frame().serialize())
@@ -188,9 +206,11 @@ class ArpSession:
             return {"status": "NO_REPLY", "resolvedMac": None,
                     "requestTransmissions": dispatched["transmissions"],
                     "replyTransmissions": response["transmissions"],
-                    "meaning": "ARP reply did not reach the requesting interface."}
+                    "meaning": "ARP reply did not reach the requesting interface.",
+                    **self._vlan_diagnostics(dispatched, response)}
         self._cache.setdefault(endpoint, {})[target] = self._macs[peer]
         return {"status": "RESOLVED", "resolvedMac": self._macs[peer],
                 "requestTransmissions": dispatched["transmissions"],
                 "replyTransmissions": response["transmissions"],
-                "meaning": "Simulated ARP resolution over explicit Ethernet links, not IP reachability."}
+                "meaning": "Simulated ARP resolution over explicit Ethernet links, not IP reachability.",
+                **self._vlan_diagnostics(dispatched, response)}
