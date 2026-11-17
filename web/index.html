@@ -112,6 +112,25 @@
           <button id="run-dhcp" class="btn btn-soft full" type="button">Simulera DHCP Discover / Offer</button>
           <div id="dhcp-result" class="trace-result" aria-live="polite">Ingen DHCP-simulering utförd.</div>
         </section>
+        <section class="trace-panel" aria-label="DHCPv4 DORA-session">
+          <div class="eyebrow">LAYER 3 · DHCPv4 DORA</div>
+          <h3>DHCP – Discover / Offer / Request / ACK</h3>
+          <p class="muted tiny">En engångssimulering med fyra riktiga kodade DHCP-meddelanden över deklarerade kablar och VLAN. Välj klient, server och en begränsad adresspool uttryckligen. En BOUND-lease finns endast i minnet för detta anrop – klientens dokumenterade IPv4 ändras aldrig.</p>
+          <label for="dora-client">Klientgränssnitt (host utan IPv4)</label>
+          <select id="dora-client" class="control"></select>
+          <label for="dora-server">DHCP-servergränssnitt (host/router med IPv4)</label>
+          <select id="dora-server" class="control"></select>
+          <label for="dora-pool-start">Adresspool från IPv4</label>
+          <input id="dora-pool-start" class="control" type="text" placeholder="192.0.2.70" autocomplete="off">
+          <label for="dora-pool-end">Adresspool till IPv4 (max 256 adresser)</label>
+          <input id="dora-pool-end" class="control" type="text" placeholder="192.0.2.90" autocomplete="off">
+          <label for="dora-transaction-id">Transaktions-ID (1–4294967295)</label>
+          <input id="dora-transaction-id" class="control" type="number" min="1" max="4294967295" step="1" value="1">
+          <label for="dora-lease-seconds">Simulerad leasetid i sekunder (60–604800)</label>
+          <input id="dora-lease-seconds" class="control" type="number" min="60" max="604800" step="1" value="3600">
+          <button id="run-dora" class="btn btn-soft full" type="button">Simulera full DHCP DORA</button>
+          <div id="dora-result" class="trace-result" aria-live="polite">Ingen DORA-simulering utförd. Inga adresser har tilldelats.</div>
+        </section>
         <section class="trace-panel" aria-label="Beständig Layer 2-session">
           <div class="eyebrow">LAYER 2 · SESSION</div>
           <h3>Stegvis nätverkslabb</h3>

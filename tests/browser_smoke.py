@@ -436,6 +436,119 @@ def run():
             expect(dhcp_page.locator('#dhcp-result')).to_contain_text('Föreslagen IP: 192.0.2.71')
             dhcp_page.locator('[data-item-type="node"][data-item-id="client"]').click()
             expect(dhcp_page.locator('[data-port-ipv4="eth0"]')).to_have_value('')
+
+            # PR32: the new DORA Builder panel must execute the genuine
+            # four-packet HTTP exchange, not infer a lease from an Offer.
+            # The documented project is still the same unsaved imported one.
+            dhcp_page.locator('#dora-client').select_option(
+                json.dumps(['client', 'eth0'], separators=(',', ':')))
+            dhcp_page.locator('#dora-server').select_option(
+                json.dumps(['server', 'eth0'], separators=(',', ':')))
+            dhcp_page.locator('#dora-pool-start').fill('192.0.2.70')
+            dhcp_page.locator('#dora-pool-end').fill('192.0.2.72')
+            dhcp_page.locator('#dora-transaction-id').fill('12345')
+            dhcp_page.locator('#dora-lease-seconds').fill('3600')
+            with dhcp_page.expect_response('**/api/dhcp/dora') as dora_good:
+                dhcp_page.locator('#run-dora').click()
+            dora_good_data = dora_good.value.json()
+            assert dora_good.value.status == 200
+            assert dora_good_data['status'] == 'ACK_RECEIVED'
+            assert dora_good_data['leaseCommitted'] is True
+            assert dora_good_data['lease']['ipv4'] == '192.0.2.70'
+            assert dora_good_data['lease']['state'] == 'BOUND'
+            assert dora_good_data['transactionId'] == 12345
+            for phase, wires in (
+                ('discover', ['to-client', 'to-server']),
+                ('offer', ['to-server', 'to-client']),
+                ('request', ['to-client', 'to-server']),
+                ('ack', ['to-server', 'to-client']),
+            ):
+                assert [t['linkId'] for t in dora_good_data[phase]['transmissions']] == wires
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('DORA-status: ACK_RECEIVED')
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('SIMULERAD BOUND-lease: 192.0.2.70')
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('ACK nådde ursprunglig klientport: ja')
+            # The separate legacy read-only diagnostic remains unchanged.
+            expect(dhcp_page.locator('#dhcp-result')).to_contain_text('DHCP-status: OFFER_RECEIVED')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # Every HTTP request starts with no old leases. The same pool
+            # selects the first unused address again; no shared server state.
+            with dhcp_page.expect_response('**/api/dhcp/dora') as dora_repeat:
+                dhcp_page.locator('#run-dora').click()
+            assert dora_repeat.value.json()['lease']['ipv4'] == '192.0.2.70'
+
+            # Server's own IP cannot be offered from a one-address pool.
+            dhcp_page.locator('#dora-pool-start').fill('192.0.2.1')
+            dhcp_page.locator('#dora-pool-end').fill('192.0.2.1')
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('Ingen aktuell DORA-diagnostik')
+            with dhcp_page.expect_response('**/api/dhcp/dora') as bad_dora:
+                dhcp_page.locator('#run-dora').click()
+            assert bad_dora.value.status == 422
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('DORA avvisad:')
+            assert 'SIMULERAD BOUND-lease' not in dhcp_page.locator('#dora-result').inner_text()
+
+            dhcp_page.locator('#dora-pool-start').fill('192.0.2.70')
+            dhcp_page.locator('#dora-pool-end').fill('192.0.2.72')
+            # Broken existing cable means no DISCOVER at server and no ACK.
+            dhcp_page.locator('[data-item-type="link"][data-item-id="to-server"]').click()
+            dhcp_page.locator('#inspector input[type="checkbox"]').uncheck()
+            with dhcp_page.expect_response('**/api/dhcp/dora') as dora_disconnected:
+                dhcp_page.locator('#run-dora').click()
+            disconnected = dora_disconnected.value.json()
+            assert disconnected['status'] == 'DISCOVER_NOT_RECEIVED'
+            assert disconnected['leaseCommitted'] is False
+            assert disconnected['ack']['transmissions'] == []
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('DORA-status: DISCOVER_NOT_RECEIVED')
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('Ingen simulerad lease bekräftad')
+            dhcp_page.locator('#inspector input[type="checkbox"]').check()
+
+            # VLAN isolation also prevents a lease; restoring the VLAN
+            # permits all four packets again with no guessed relay.
+            dhcp_page.locator('[data-item-type="node"][data-item-id="sw"]').click()
+            dhcp_page.locator('[data-port-vlan="s"]').fill('access:20')
+            dhcp_page.locator('[data-port-vlan="s"]').dispatch_event('change')
+            with dhcp_page.expect_response('**/api/dhcp/dora') as dora_isolated:
+                dhcp_page.locator('#run-dora').click()
+            assert dora_isolated.value.json()['status'] == 'DISCOVER_NOT_RECEIVED'
+            assert dora_isolated.value.json()['lease'] is None
+            dhcp_page.locator('[data-port-vlan="s"]').fill('access:10')
+            dhcp_page.locator('[data-port-vlan="s"]').dispatch_event('change')
+            with dhcp_page.expect_response('**/api/dhcp/dora') as dora_restored:
+                dhcp_page.locator('#run-dora').click()
+            assert dora_restored.value.json()['status'] == 'ACK_RECEIVED'
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('SIMULERAD BOUND-lease: 192.0.2.70')
+
+            # A delayed but genuinely completed DORA HTTP response must
+            # be discarded after its input snapshot has been superseded.
+            dhcp_page.evaluate("""() => {
+              window.__unwrappedDoraFetch = window.fetch;
+              window.__releaseDora = null;
+              window.fetch = async (...args) => {
+                const response = await window.__unwrappedDoraFetch(...args);
+                if (args[0] === '/api/dhcp/dora') {
+                  return new Promise(resolve => {
+                    window.__releaseDora = () => resolve(response);
+                  });
+                }
+                return response;
+              };
+            }""")
+            dhcp_page.locator('#run-dora').click()
+            dhcp_page.wait_for_function("typeof window.__releaseDora === 'function'")
+            expect(dhcp_page.locator('#run-dora')).to_be_disabled()
+            dhcp_page.locator('#dora-pool-start').fill('192.0.2.71')
+            dhcp_page.evaluate('window.__releaseDora()')
+            expect(dhcp_page.locator('#run-dora')).to_be_enabled()
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('Ingen aktuell DORA-diagnostik')
+            dhcp_page.evaluate('window.fetch = window.__unwrappedDoraFetch')
+            with dhcp_page.expect_response('**/api/dhcp/dora') as fresh_dora:
+                dhcp_page.locator('#run-dora').click()
+            assert fresh_dora.value.status == 200
+            assert fresh_dora.value.json()['lease']['ipv4'] == '192.0.2.71'
+            expect(dhcp_page.locator('#dora-result')).to_contain_text('SIMULERAD BOUND-lease: 192.0.2.71')
+            dhcp_page.locator('[data-item-type="node"][data-item-id="client"]').click()
+            expect(dhcp_page.locator('[data-port-ipv4="eth0"]')).to_have_value('')
+            expect(dhcp_page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
             assert sorted(x.name for x in store.glob('*.yadilab')) == ['lab.yadilab']
             assert not errors, errors
