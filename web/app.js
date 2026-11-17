@@ -61,6 +61,7 @@ let doraSessionGeneration = 0;
 let doraSessionBusy = false;
 let doraSessionState = null;
 let doraSessionTrace = null;
+let doraClockEvent = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -157,6 +158,7 @@ function invalidateDoraSession() {
   doraSessionBusy = false;
   doraSessionState = null;
   doraSessionTrace = null;
+  doraClockEvent = null;
   if (previous) {
     // Best-effort release; backend also refuses any changed project snapshot.
     void api('/api/dhcp/session/stop', {sessionId: previous}).catch(() => {});
@@ -485,6 +487,8 @@ function renderDoraSession() {
   $('dora-session-run').disabled = !active || busy || !clients.length;
   $('dora-session-reset').disabled = !active || busy;
   $('dora-session-stop').disabled = !active || busy;
+  $('dora-session-advance').disabled = !active || busy;
+  $('dora-session-advance-seconds').disabled = !active || busy;
   for (const id of ['dora-server', 'dora-pool-start', 'dora-pool-end']) {
     $(id).disabled = active || busy;
   }
@@ -493,11 +497,12 @@ function renderDoraSession() {
   }
   const count = doraSessionState?.leaseCount ?? 0;
   const operations = doraSessionState?.operationCount ?? 0;
+  const clock = doraSessionState?.clockSeconds ?? 0;
   $('dora-session-status').textContent = doraSessionBusy
     ? 'DHCP-sessionoperation pågår…'
     : active
-      ? 'Aktiv DHCP-session · ' + operations + ' operation(er) · ' + count
-        + ' BOUND-lease(s) · server ' + doraSessionState.serverNode
+      ? 'Aktiv DHCP-session · simulerad tid ' + clock + ' s · ' + operations
+        + ' operation(er) · ' + count + ' BOUND-lease(s) · server ' + doraSessionState.serverNode
         + '/' + doraSessionState.serverPort + ' · pool '
         + doraSessionState.poolStart + '–' + doraSessionState.poolEnd
       : 'Ingen aktiv DHCP-session. Starta för att behålla leases mellan klientkörningar.';
@@ -510,9 +515,28 @@ function renderDoraSession() {
     leaseOutput.textContent = leases.length
       ? leases.map(l => l.clientNode + '/' + l.clientPort + ' · '
           + l.clientMac + ' → ' + l.ipv4 + ' · ' + l.state
-          + ' · ' + l.leaseSeconds + ' s').join('\n')
+          + ' · kvar ' + l.remainingSeconds + ' s'
+          + ' · slut vid ' + l.expiresAtSeconds + ' s').join('\n')
       : 'Inga BOUND-leases. Endast mottaget DHCPACK kan skapa en post.';
     if (leases.length) leaseOutput.classList.add('ok');
+  }
+  const clockOutput = $('dora-session-clock-result');
+  clockOutput.classList.remove('ok', 'fail');
+  if (!active || !doraClockEvent) {
+    clockOutput.textContent = active
+      ? 'Simulerad tid: ' + clock + ' s. Inga nya expiration-händelser.'
+      : 'Ingen aktiv simuleringsklocka.';
+  } else if (doraClockEvent.error) {
+    clockOutput.classList.add('fail');
+    clockOutput.textContent = 'Tidshopp avvisat: ' + doraClockEvent.error;
+  } else {
+    const expired = doraClockEvent.expiredLeases;
+    clockOutput.textContent = 'Flyttade fram ' + doraClockEvent.advancedSeconds
+      + ' s till simulerad tid ' + clock + ' s.\n'
+      + (expired.length
+        ? expired.map(l => 'EXPIRED: ' + l.clientNode + '/' + l.clientPort
+          + ' · ' + l.ipv4 + ' · frigjord ur simulerad pool').join('\n')
+        : 'Inga leases har gått ut i detta tidssteg.');
   }
   const output = $('dora-session-result');
   output.classList.remove('ok', 'fail');
@@ -1534,6 +1558,7 @@ async function resetDoraSession() {
         && JSON.stringify(project) === snapshot) {
       doraSessionState = state;
       doraSessionTrace = null;
+      doraClockEvent = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration && doraSessionId === id) {
