@@ -20,8 +20,8 @@ from .troubleshooting import _mutation, _observed_wires, compare_fault
 
 MAX_PROBES = 48
 MAX_GUESSES = 3
-KINDS = ("CABLE_DOWN", "VLAN_MISMATCH", "STATIC_ROUTE_MISSING")
-PROBES = ("address", "route", "ping", "link", "vlan")
+KINDS = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH", "STATIC_ROUTE_MISSING")
+PROBES = ("address", "route", "ping", "link", "port", "vlan")
 
 
 def _candidates(project: dict, baseline: dict) -> list[tuple[str, dict]]:
@@ -39,6 +39,28 @@ def _candidates(project: dict, baseline: dict) -> list[tuple[str, dict]]:
                 candidates.append(("STATIC_ROUTE_MISSING", {
                     "type": "STATIC_ROUTE_REMOVED",
                     "nodeId": node["id"], "routeId": route["id"],
+                }))
+    # Disabling an enabled switchport is eligible only if its cable was
+    # traversed in the real baseline. compare_fault below must still prove
+    # independently that the shutdown breaks Echo and can be restored.
+    switches = {n["id"]: n for n in project["nodes"] if n["kind"] == "switch"}
+    seen_ports = set()
+    for link in project["links"]:
+        if link["id"] not in visited or not link["enabled"]:
+            continue
+        for endpoint in (link["a"], link["b"]):
+            node = switches.get(endpoint["node"])
+            if node is None:
+                continue
+            identity = (node["id"], endpoint["port"])
+            if identity in seen_ports:
+                continue
+            seen_ports.add(identity)
+            port = next(p for p in node["ports"] if p["id"] == endpoint["port"])
+            if port["enabled"]:
+                candidates.append(("PORT_SHUTDOWN", {
+                    "type": "PORT_DISABLED", "nodeId": node["id"],
+                    "portId": port["id"],
                 }))
     documented_vlans = sorted({
         number
@@ -102,7 +124,7 @@ class IcmpInvestigation:
                 allowed.append((kind, fault))
         if not allowed:
             raise ProjectValidationError(
-                "icmp investigation: no verified reversible link/VLAN/route fault")
+                "icmp investigation: no verified reversible link/port/VLAN/route fault")
         if _test_kind is None:
             choice = allowed[secrets.randbelow(len(allowed))]
         else:
@@ -147,7 +169,7 @@ class IcmpInvestigation:
             "observations": len(self._probes),
             "probesPerformed": list(self._probes),
             "canDiagnose": "ping" in kinds and "route" in kinds
-                          and bool(kinds & {"address", "link", "vlan"}),
+                          and bool(kinds & {"address", "link", "port", "vlan"}),
             "diagnosisAttempts": self._guesses,
             "diagnosed": self._diagnosed,
             "repaired": self._repaired,
@@ -237,6 +259,29 @@ class IcmpInvestigation:
                 "documentedEnabled": documented["enabled"],
                 "observedEnabled": link["enabled"],
                 "endpoints": [dict(link["a"]), dict(link["b"])],
+                "source": "SIMULATED_CONFIG",
+            }
+        elif kind == "port":
+            if set(target) != {"nodeId", "portId"} or any(
+                    type(target[key]) is not str for key in ("nodeId", "portId")):
+                raise ProjectValidationError("icmp investigation: port needs nodeId, portId")
+            node_id, port_id = target["nodeId"], target["portId"]
+            doc_node = next((n for n in self.project["nodes"]
+                             if n["id"] == node_id), None)
+            sim_node = next((n for n in self._faulted["nodes"]
+                             if n["id"] == node_id), None)
+            if doc_node is None or sim_node is None:
+                raise ProjectValidationError("icmp investigation: unknown declared node")
+            original = next((p for p in doc_node["ports"]
+                             if p["id"] == port_id), None)
+            observed = next((p for p in sim_node["ports"]
+                             if p["id"] == port_id), None)
+            if original is None or observed is None:
+                raise ProjectValidationError("icmp investigation: unknown declared port")
+            result = {
+                "nodeId": node_id, "portId": port_id,
+                "documentedEnabled": original["enabled"],
+                "observedEnabled": observed["enabled"],
                 "source": "SIMULATED_CONFIG",
             }
         else:
