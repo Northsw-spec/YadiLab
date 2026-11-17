@@ -47,6 +47,10 @@ class EthernetFabric:
             self.wires[(a["node"], a["port"])] = (b["node"], b["port"], link["id"])
             self.wires[(b["node"], b["port"])] = (a["node"], a["port"], link["id"])
         self._reject_switch_loops()
+        # The canonical/project physical wiring is immutable. Explicit fault
+        # injection affects only THIS fabric and is always fully reversible.
+        self._original_wires = dict(self.wires)
+        self._faulted_links: set[str] = set()
         # Explicit VLAN configuration may be persisted on switch ports in
         # schema 1.2, or added to one session without overwriting source data.
         persisted_vlans = {
@@ -144,6 +148,46 @@ class EthernetFabric:
             node_id: {} for node_id, node in self.nodes.items()
             if node["kind"] == "switch"
         }
+
+    def faulted_links(self) -> list[str]:
+        """Detached session-only faults; never changes canonical link flags."""
+        return sorted(self._faulted_links)
+
+    def set_link_fault(self, link_id: str, disabled: bool) -> None:
+        """Simulate disconnect/reconnect of an *originally active* declared cable.
+
+        Both wire directions are removed/restored atomically. Learned switch
+        MAC entries are flushed on a topology transition: a stale learned
+        destination must never point to a now-disconnected switch port.
+        The validated project and initial declared topology are untouched.
+        """
+        if not isinstance(link_id, str) or not link_id or type(disabled) is not bool:
+            raise ProjectValidationError(
+                "ethernet fault: expected declared link ID and boolean disabled")
+        link = next((item for item in self.project["links"]
+                     if item["id"] == link_id), None)
+        if link is None:
+            raise ProjectValidationError("ethernet fault: unknown declared link ID")
+        left = link["a"]["node"], link["a"]["port"]
+        right = link["b"]["node"], link["b"]["port"]
+        if (not link["enabled"] or left not in self._original_wires
+                or right not in self._original_wires):
+            raise ProjectValidationError(
+                "ethernet fault: link was not active in the original session topology")
+        if (disabled and link_id in self._faulted_links
+                or not disabled and link_id not in self._faulted_links):
+            raise ProjectValidationError(
+                "ethernet fault: requested link state is already active")
+        if disabled:
+            self.wires.pop(left)
+            self.wires.pop(right)
+            self._faulted_links.add(link_id)
+        else:
+            self.wires[left] = self._original_wires[left]
+            self.wires[right] = self._original_wires[right]
+            self._faulted_links.remove(link_id)
+        for table in self._tables.values():
+            table.clear()
 
     def _reject_switch_loops(self) -> None:
         adjacent: dict[str, list[tuple[str, str]]] = {
