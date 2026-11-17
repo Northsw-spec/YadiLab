@@ -47,11 +47,11 @@ Den fristående Layer 2-motorn kan nu serialisera och tolka väldefinierade Ethe
 
 ## Isolerad ARP-fråga och svar (endast Python)
 
-Den separata modulen `network_core/arp.py` modellerar ARP-meddelanden enligt Ethernet/IPv4-formatet och kör en uttrycklig **request → broadcast-forwarding → reply → ARP-cache** över redan deklarerade och aktiva länkar. Både IPv4-gränssnitt och MAC-bindningar måste anges uttryckligen. Resultaten gäller **bara den begränsade simuleringssessionen** och är inte ping, IP-routing, VLAN eller verklig nätverksreachability. ARP-kommandon och cache är fortfarande inte integrerade i UI eller lagring, men explicit konfigurerade MAC-adresser kan läsas ur schema 1.1. Se [ARP-kontraktet](docs/ARP.md).
+Den separata modulen `network_core/arp.py` modellerar ARP-meddelanden enligt Ethernet/IPv4-formatet och kör en uttrycklig **request → broadcast-forwarding → reply → ARP-cache** över redan deklarerade och aktiva länkar. Både IPv4-gränssnitt och MAC-bindningar måste anges uttryckligen. Resultaten gäller **bara den begränsade simuleringssessionen** och är inte ping, IP-routing eller verklig nätverksreachability. ARP kan nu begränsas till explicit konfigurerade access-/trunk-VLAN via `ArpSession(..., vlan_ports=...)`. ARP-kommandon och cache är fortfarande inte integrerade i UI eller lagring, men explicit konfigurerade MAC-adresser kan läsas ur schema 1.1. Se [ARP-kontraktet](docs/ARP.md).
 
 ## Explicit VLAN-forwarding (endast Python-API)
 
-`EthernetFabric(project, vlan_ports=...)` kan nu forwarda mellan uttryckligen konfigurerade access- och trunkportar med **isolerade MAC-tabeller per VLAN**, begränsade allowlists och korrekt 802.1Q-tagging på trunkar. `EthernetFrame` kan serialisera och tolka en C-tagg. Detta är **endast simuleringssessionsdata** och finns ännu inte i Builder eller .yadilab-formatet. ARP-simuleringen är fortfarande inte VLAN-medveten. Se [VLAN-kontraktet](docs/VLAN.md).
+`EthernetFabric(project, vlan_ports=...)` kan nu forwarda mellan uttryckligen konfigurerade access- och trunkportar med **isolerade MAC-tabeller per VLAN**, begränsade allowlists och korrekt 802.1Q-tagging på trunkar. `EthernetFrame` kan serialisera och tolka en C-tagg. Detta är **endast simuleringssessionsdata** och finns ännu inte i Builder eller .yadilab-formatet. Den separata ARP-sessionen kan nu återanvända samma VLAN-forwarding för request och reply, men har ingen automatisk eller sparad VLAN-konfiguration. Se [VLAN-kontraktet](docs/VLAN.md).
 
 ## Avsiktligt INTE implementerat
 
