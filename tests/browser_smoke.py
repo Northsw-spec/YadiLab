@@ -649,6 +649,51 @@ def run():
             assert err_data['icmpError']['status'] == 'RECEIVED'
             expect(page.locator('#ping-result')).to_contain_text('Destination Unreachable (Network)')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # PR20: repeat the very same real ICMP exchange under three
+            # independent canonical snapshots: known-good, one link down,
+            # and precisely restored. Nothing changes in the user's Builder
+            # project or in the real .yadilab bytes.
+            page.locator('#trouble-source').select_option(source_option)
+            page.locator('#trouble-destination').fill('192.0.2.20')
+            page.locator('#trouble-link').select_option('link-1')
+            page.locator('#trouble-ttl').fill('5')
+            with page.expect_response('**/api/troubleshoot/link') as comparison:
+                page.locator('#run-troubleshoot').click()
+            assert comparison.value.status == 200
+            result = comparison.value.json()
+            assert result['status'] == 'FAULT_CONFIRMED'
+            assert result['baseline']['status'] == 'REPLIED'
+            assert result['faulted']['status'] == 'REQUEST_FAILED'
+            assert result['faulted']['request']['status'] == 'ARP_FAILED'
+            assert result['restored']['status'] == 'REPLIED'
+            assert result['repair']['scope'] == 'PREVIEW_ONLY'
+            assert result['repair']['linkId'] == 'link-1'
+            assert result['verifiedRecovery'] is True
+            expect(page.locator('#trouble-result')).to_contain_text('Felsökningsstatus: FAULT_CONFIRMED')
+            expect(page.locator('#trouble-result')).to_contain_text('Referens: REPLIED')
+            expect(page.locator('#trouble-result')).to_contain_text('Kabel avstängd: REQUEST_FAILED')
+            expect(page.locator('#trouble-result')).to_contain_text('Återställd kabel: REPLIED')
+            expect(page.locator('#trouble-result')).to_contain_text('Återställning efter fel verifierad: JA')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+            page.locator('[data-item-type="link"][data-item-id="link-1"]').click()
+            expect(page.locator('#inspector input[type="checkbox"]')).to_be_checked()
+
+            # Baseline already fails for this destination: no fabricated root
+            # cause, despite the explicit selected link fault.
+            page.locator('#trouble-destination').fill('203.0.113.10')
+            expect(page.locator('#trouble-result')).to_contain_text('Inga jämförda ICMP Echo-spår')
+            with page.expect_response('**/api/troubleshoot/link') as baseline_failed:
+                page.locator('#run-troubleshoot').click()
+            assert baseline_failed.value.status == 200
+            failed = baseline_failed.value.json()
+            assert failed['status'] == 'BASELINE_NOT_REPLIED'
+            assert failed['verifiedFault'] is False
+            expect(page.locator('#trouble-result')).to_contain_text('Felsökningsstatus: BASELINE_NOT_REPLIED')
+            page.locator('#trouble-ttl').fill('0')
+            page.locator('#run-troubleshoot').click()
+            expect(page.locator('#trouble-result')).to_contain_text('Felsökningsjämförelse avvisad')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
