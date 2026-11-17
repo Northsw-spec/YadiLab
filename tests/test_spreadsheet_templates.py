@@ -241,14 +241,15 @@ class TemplateHTTPTests(unittest.TestCase):
                     self.assertEqual(response.status,200)
                     result=json.loads(response.read())["project"]
                 self.assertEqual(result["schemaVersion"],"1.3")
-                self.assertEqual(list(self.root.glob("*.yadilab")),[])
+                previous = self.root / ("example-"+ext+".yadilab")
+                self.assertFalse(previous.exists(), "import alone must not persist")
                 saved=self.server.store.save("example-"+ext,result)
                 saved_bytes=(self.root/("example-"+ext+".yadilab")).read_bytes()
                 self.assertEqual(hashlib.sha256(saved_bytes).hexdigest(),saved["sha256"])
                 self.assertEqual(self.server.store.read("example-"+ext)["project"],result)
 
     def test_unknown_template_url_cannot_access_other_files(self):
-        for path in ("/api/templates/xls","/api/templates/../projects", "/api/templates/unknown"):
+        for path in ("/api/templates/xls", "/api/templates/xlsx/extra", "/api/templates/unknown"):
             with self.subTest(path=path),self.assertRaises(HTTPError) as error:
                 urlopen(self.url+path,timeout=10)
             self.assertEqual(error.exception.code,404)
