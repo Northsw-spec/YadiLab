@@ -111,7 +111,8 @@ class ArpSession:
         # A VLAN session must be explicit; None retains legacy unsegmented ARP.
         # There is no second implementation of switching or VLAN traversal.
         self.fabric = EthernetFabric(project, interface_macs=interface_macs, vlan_ports=vlan_ports)
-        self._vlan_aware = vlan_ports is not None
+        # The fabric can also enable VLANs from persisted schema 1.2 ports.
+        self._vlan_aware = self.fabric._vlan_enabled
         self._macs = self.fabric.bound_macs()
         self._ips: dict[tuple[str, str], ipaddress.IPv4Interface] = {}
         known_ips: dict[str, tuple[str, str]] = {}
