@@ -90,6 +90,22 @@ def workbook_parts(sheets=None, *, shared_strings=False, reorder=False) -> dict[
             '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
             '</worksheet>')
         package[f"xl/worksheets/sheet{index}.xml"] = data_xml.encode("utf-8")
+    # Declare actual Open Packaging Convention content types instead of
+    # relying on the importer's permissive XML filename resolution.
+    content_overrides = "".join(
+        '<Override PartName="/xl/worksheets/sheet' + str(i) + '.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        for i in range(1, len(names)+1))
+    if shared_strings:
+        content_overrides += (
+            '<Override PartName="/xl/sharedStrings.xml" '
+            'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>')
+        rels.append(
+            '<Relationship Id="rIdShared" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" '
+            'Target="sharedStrings.xml"/>')
+    package["[Content_Types].xml"] = package["[Content_Types].xml"].replace(
+        b"</Types>", content_overrides.encode("utf-8") + b"</Types>")
     package["xl/workbook.xml"] = (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
