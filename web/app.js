@@ -74,6 +74,7 @@ let investigationLog = [];
 let investigationVerdict = null;
 let investigationRecovery = null;
 let investigationError = null;
+let investigationClockEvent = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -173,6 +174,7 @@ function invalidateInvestigation() {
   investigationVerdict = null;
   investigationRecovery = null;
   investigationError = null;
+  investigationClockEvent = null;
   if (previous) void api('/api/dhcp/investigation/stop', {sessionId: previous}).catch(() => {});
 }
 
@@ -509,6 +511,14 @@ function renderDoraDiagnostics() {
 }
 
 function investigationDescription(probe, observation) {
+  if (probe === 'advance') {
+    return 'VIRTUELL TID: +' + observation.advancedSeconds + ' s'
+      + ' · t=' + observation.clockSeconds + ' s · fas ' + observation.phase
+      + (observation.expiredLeases.length
+        ? '\n  EXPIRED: ' + observation.expiredLeases.map(x => x.ipv4).join(', ')
+          + ' · ny DORA krävs'
+        : '\n  Ingen ny DHCP-förnyelse skickades automatiskt.');
+  }
   if (probe === 'lease') {
     return 'LEASE: ' + observation.status + ' · IPv4 ' + observation.ipv4
       + ' · t=' + observation.clockSeconds + ' s'
@@ -551,6 +561,25 @@ function renderInvestigation() {
   $('investigation-start').disabled = active || busy
     || !startValues[0] || !startValues[1] || !startValues[2] || !startValues[3];
   $('investigation-stop').disabled = !active || busy;
+  $('investigation-difficulty').disabled = active || busy;
+  const nextClock = investigationState?.nextClockTargetSeconds;
+  $('investigation-advance').disabled = !active || busy
+    || !investigationState?.canAdvance || !Number.isInteger(nextClock);
+  $('investigation-advance').textContent = active && Number.isInteger(nextClock)
+    ? 'Flytta klockan till ' + (nextClock === investigationState.t2AtSeconds
+      ? 'T2' : 'lease-expiration') + ' (t=' + nextClock + ' s)'
+    : 'Flytta till nästa DHCP-gräns (T2 / expiration)';
+  const clockResult = $('investigation-clock-result');
+  clockResult.classList.remove('ok', 'fail');
+  if (investigationClockEvent?.error) {
+    clockResult.classList.add('fail');
+    clockResult.textContent = 'Tidsändring avvisad: ' + investigationClockEvent.error;
+  } else if (investigationClockEvent) {
+    clockResult.textContent = investigationDescription('advance', investigationClockEvent);
+  } else {
+    clockResult.textContent = 'Ingen tid har flyttats fram i denna övning. '
+      + 'Klockan kan först flyttas när den aktuella fasens DHCP-försök observerats.';
+  }
   const links = project.links.filter(link => link.enabled
     && [link.a, link.b].every(endpoint => {
       const node = project.nodes.find(n => n.id === endpoint.node);
@@ -582,14 +611,18 @@ function renderInvestigation() {
   $('investigation-probe').disabled = !active || busy;
   $('investigation-run-probe').disabled = !active || busy
     || (needsLink && !linkSelector.value) || (needsPort && !portSelector.value)
-    || Boolean(investigationState?.repaired);
+    || Boolean(investigationState?.repaired)
+    || (selectedProbe === 'renew' && !investigationState?.leaseActive);
   const observed = new Set(investigationState?.probesPerformed ?? []);
   $('investigation-submit').disabled = !active || busy
     || Boolean(investigationState?.repaired) || Boolean(investigationState?.diagnosed)
-    || !observed.has('renew') || [...observed].filter(k => k !== 'renew').length < 2;
+    || !investigationState?.canDiagnose;
   $('investigation-diagnosis').disabled = !active || busy || Boolean(investigationState?.diagnosed);
   $('investigation-repair').disabled = !active || busy
     || !investigationState?.diagnosed || Boolean(investigationState?.repaired);
+  $('investigation-repair').textContent = investigationState?.requiredRecovery === 'NEW_DORA'
+    ? 'Återställ identifierat fel och starta ny DHCP DORA'
+    : 'Återställ identifierat fel och testa riktig DHCPACK';
   const status = $('investigation-status');
   status.textContent = investigationBusy
     ? 'Undersökning pågår…'
@@ -598,7 +631,10 @@ function renderInvestigation() {
       ? 'Aktiv övning · ' + investigationState.clientNode + '/' + investigationState.clientPort
         + ' · simulerad tid ' + investigationState.clockSeconds + ' s'
         + ' · tidigare DHCP-lease ' + investigationState.leaseIpv4
+        + ' · fas ' + investigationState.phase
         + ' · ' + investigationState.remainingSeconds + ' s kvar'
+        + (investigationState.phase === 'EXPIRED'
+          ? ' · lease har upphört, ny DORA krävs' : '')
         + ' · ' + investigationState.observations + ' observation(er)'
       : 'Ingen felsökningsövning. Starta från ett dokumenterat DHCP-nät.';
   const log = $('investigation-observations');
@@ -632,6 +668,11 @@ function renderInvestigation() {
   } else if (investigationRecovery) {
     recovery.classList.add(investigationRecovery.status === 'RECOVERED' ? 'ok' : 'fail');
     recovery.textContent = 'RESULTAT: ' + investigationRecovery.status
+      + '\nVerifierad metod: ' + investigationRecovery.verifiedProtocol
+      + (investigationRecovery.verifiedProtocol === 'NEW_DORA'
+        ? '\nDHCPDISCOVER nådde servern: ' + (investigationRecovery.discoverReachedServer ? 'ja' : 'nej')
+          + '\nDHCPOFFER nådde klienten: ' + (investigationRecovery.offerReachedClient ? 'ja' : 'nej')
+        : '')
       + '\nREQUEST nådde servern: ' + (investigationRecovery.requestReachedServer ? 'ja' : 'nej')
       + '\nACK nådde klienten: ' + (investigationRecovery.ackReachedClient ? 'ja' : 'nej')
       + '\nNy simulerad slutsekund: ' + investigationRecovery.expiresAtSeconds
