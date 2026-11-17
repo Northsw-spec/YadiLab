@@ -16,6 +16,7 @@ import threading
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
@@ -98,6 +99,27 @@ class TemplateUnitTests(unittest.TestCase):
         self.assertEqual(template_bytes("ods"),template_bytes("ods"))
         with self.assertRaises(ValueError):
             template_bytes("csv")
+
+    def test_template_zip_bytes_ignore_wall_clock_and_have_fixed_member_metadata(self):
+        # Old writestr(name, ...) reads localtime and changes binary SHA
+        # across the two-second ZIP timestamp boundary. Do not weaken the
+        # browser's exact downloaded-file hash check; fix the writer.
+        for ext in ("xlsx", "ods"):
+            with self.subTest(extension=ext):
+                with patch("zipfile.time.localtime",
+                           side_effect=AssertionError("ZIP writer read the wall clock")):
+                    first = template_bytes(ext)
+                    second = template_bytes(ext)
+                self.assertEqual(first, second)
+                self.assertEqual(hashlib.sha256(first).hexdigest(),
+                                 hashlib.sha256(second).hexdigest())
+                with zipfile.ZipFile(io.BytesIO(first)) as archive:
+                    for info in archive.infolist():
+                        self.assertEqual(info.date_time, (1980, 1, 1, 0, 0, 0))
+                        self.assertEqual(info.create_system, 3)
+                        self.assertEqual(info.external_attr >> 16, 0o600)
+                        if ext == "ods" and info.filename == "mimetype":
+                            self.assertEqual(info.compress_type, zipfile.ZIP_STORED)
 
     def test_format_specific_parser_rejects_misidentified_payload(self):
         with self.assertRaises(ProjectValidationError):
