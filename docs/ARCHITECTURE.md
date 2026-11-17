@@ -24,6 +24,7 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 |---|---|---|
 | `model.py` | Schema, referenser, explicit grafspårning | Routing, ping, fysisk sanning |
 | `storage.py` | Verkliga filer, SHA-256, förväntad föregående version | Autosave, tyst overwrite |
+| `csv_import.py` | Explicit fyrtabells-CSV till verifierad kanonisk modell | Implicita kablar, heuristisk kolumnmappning, filskrivning |
 | `server.py` | Lokal UI, API, validering | Tolka källdata som topologi |
 | `web/model.js` | Explicit UI-modell, enhets- och portkommandon | Adressbaserad länkförutsägelse |
 | `web/canvas.js` | SVG-geometri och direktträff på portpunkter | Ändra noders eller länkars identitet |
@@ -37,4 +38,4 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 
 ## Nästa steg (inte implementerade)
 
-Inför verklig IP-simulering först när routingtabell, L2-beteende, nätmask, TTL och avvisningsvillkor definierats och verifierats separat. Integrera inte äldre YadiLab-n-motorkod per automatik. CSV/XLSX/ODS får egna importerare som avvisar oklara/otydliga port- och länkbeskrivningar.
+Inför verklig IP-simulering först när routingtabell, L2-beteende, nätmask, TTL och avvisningsvillkor definierats och verifierats separat. Integrera inte äldre YadiLab-n-motorkod per automatik. Det definierade fyrtabells-CSV-formatet har en separat strikt importör. XLSX/ODS och godtyckliga CSV-scheman kräver egna kontrakt och verifierbara avvisningsfall.

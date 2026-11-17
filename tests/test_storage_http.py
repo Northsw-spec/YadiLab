@@ -114,6 +114,19 @@ class APIIntegrationTests(unittest.TestCase):
         self.assertEqual(code,200)
         self.assertEqual(listing['projects'],[])
 
+    def test_explicit_csv_tables_import_without_writing_or_inference(self):
+        from test_csv_import import source, LINKS
+        code, result = self.request('/api/import/csv', source())
+        self.assertEqual(code, 200)
+        self.assertEqual([node['id'] for node in result['project']['nodes']], ['pc-a', 'sw-a'])
+        self.assertEqual(result['project']['links'][0]['id'], 'cable-1')
+        self.assertEqual(self.request('/api/projects')[1]['projects'], [])
+        broken = source(**{'Links.csv': LINKS.replace('sw-a,gi1', 'unknown,gi1')})
+        code, error = self.request('/api/import/csv', broken)
+        self.assertEqual(code, 422)
+        self.assertEqual(error['error'], 'INVALID_PROJECT')
+        self.assertEqual(self.request('/api/projects')[1]['projects'], [])
+
     def test_conflict_is_explicit_in_http(self):
         payload = {'filename':'lab','project':example(),'expectedSha256':None}
         self.assertEqual(self.request('/api/save',payload)[0],200)

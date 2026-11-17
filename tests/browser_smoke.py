@@ -240,6 +240,50 @@ def run():
             page.locator('#save-project').click()
             expect(page.locator('#toast')).to_contain_text('Kunde inte spara:',timeout=10000)
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # CSV rejected: malformed canonical links cannot overwrite the
+            # current unsaved workspace and must not change existing disk data.
+            page.once('dialog', lambda dialog: dialog.accept('Invalid CSV test'))
+            page.locator('#import-file').set_input_files({
+                'name': 'Links.csv', 'mimeType': 'text/csv',
+                'buffer': (ROOT / 'examples/csv/Links.csv').read_bytes(),
+            })
+            expect(page.locator('#toast')).to_contain_text('Import avvisad:', timeout=10000)
+            expect(page.locator('[data-node-id="node-1"]')).to_have_count(1)
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # Explicit, user-approved four-table CSV import. No guessed nodes,
+            # implicit links, or write to disk occurs during import.
+            prompts = []
+            def accept_import_dialog(dialog):
+                prompts.append(dialog.type)
+                dialog.accept('CSV acceptance lab') if dialog.type == 'prompt' else dialog.accept()
+            page.on('dialog', accept_import_dialog)
+            page.locator('#import-file').set_input_files([
+                {'name': name, 'mimeType': 'text/csv',
+                 'buffer': (ROOT / 'examples/csv' / name).read_bytes()}
+                for name in ('Devices.csv', 'Interfaces.csv', 'Links.csv', 'Zones.csv')
+            ])
+            expect(page.locator('[data-node-id="pc-a"]')).to_have_count(1, timeout=12000)
+            expect(page.locator('[data-node-id="sw-a"]')).to_have_count(1)
+            expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
+            assert page.locator('[data-link-id]').count() == 1
+            assert prompts.count('confirm') >= 2 and prompts.count('prompt') == 1, prompts
+            expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert not (store / 'csv-demo.yadilab').exists()
+            page.locator('#project-filename').fill('csv-demo')
+            page.locator('#project-filename').dispatch_event('change')
+            page.locator('#save-project').click()
+            expect(page.locator('#save-indicator')).to_contain_text('Sparat · csv-demo.yadilab',timeout=12000)
+            actual_csv = json.loads((store / 'csv-demo.yadilab').read_bytes())
+            assert [n['id'] for n in actual_csv['nodes']] == ['pc-a', 'sw-a']
+            assert actual_csv['links'][0]['a'] == {'node': 'pc-a', 'port': 'eth0'}
+            assert actual_csv['links'][0]['b'] == {'node': 'sw-a', 'port': 'gi1'}
+            page.locator('#new-project').click()
+            page.locator('#saved-projects').select_option('csv-demo')
+            page.locator('#open-project').click()
+            expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')

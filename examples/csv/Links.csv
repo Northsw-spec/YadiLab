@@ -1,0 +1,2 @@
+id,aNode,aPort,bNode,bPort,enabled
+cable-1,pc-a,eth0,sw-a,gi1,true
