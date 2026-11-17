@@ -159,6 +159,14 @@ def run():
             page.locator('#submit-port').click()
             page.locator('#new-port-name').fill('Gi2')
             page.locator('#submit-port').click()
+            # Explicit VLAN entry, validated by the real server; no file yet.
+            page.locator('[data-port-vlan="port-1"]').fill('access:10')
+            page.locator('[data-port-vlan="port-1"]').dispatch_event('change')
+            expect(page.locator('[data-port-vlan="port-1"]')).to_have_value('access:10')
+            page.locator('[data-port-vlan="port-2"]').fill('trunk:10,20')
+            page.locator('[data-port-vlan="port-2"]').dispatch_event('change')
+            expect(page.locator('[data-port-vlan="port-2"]')).to_have_value('trunk:10,20')
+            assert not (store / 'lab.yadilab').exists()
 
             # Explicit physical connection (two deliberately chosen ports).
             page.locator('[data-port-node="node-1"]').click()
@@ -203,8 +211,10 @@ def run():
             digest=hashlib.sha256(saved_data).hexdigest()
             parsed=json.loads(saved_data)
             assert len(parsed['nodes']) == 2 and len(parsed['links']) == 1
-            assert parsed['schemaVersion'] == '1.1'
+            assert parsed['schemaVersion'] == '1.2'
             assert parsed['nodes'][0]['ports'][0]['mac'] == '02:00:00:00:00:0A'
+            assert parsed['nodes'][1]['ports'][0]['vlan'] == {'mode':'access','vlan':10}
+            assert parsed['nodes'][1]['ports'][1]['vlan'] == {'mode':'trunk','allowedVlans':[10,20]}
             assert parsed['links'][0]['a'] == {'node':'node-1','port':'port-1'}
             assert parsed['links'][0]['b'] == {'node':'node-2','port':'port-1'}
             assert parsed['links'][0]['enabled'] is True
@@ -231,6 +241,9 @@ def run():
             expect(page.locator('[data-link-id="link-1"]')).to_have_count(1)
             page.locator('[data-item-type="node"][data-item-id="node-1"]').click()
             expect(page.locator('[data-port-mac="port-1"]')).to_have_value('02:00:00:00:00:0A')
+            page.locator('[data-item-type="node"][data-item-id="node-2"]').click()
+            expect(page.locator('[data-port-vlan="port-1"]')).to_have_value('access:10')
+            expect(page.locator('[data-port-vlan="port-2"]')).to_have_value('trunk:10,20')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
 
             # Explicit export contains only the canonical document format.

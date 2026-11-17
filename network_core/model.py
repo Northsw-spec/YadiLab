@@ -11,8 +11,9 @@ import re
 from collections import deque
 from typing import Any
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 LEGACY_SCHEMA_VERSION = "1.0"
+MAC_SCHEMA_VERSION = "1.1"
 MAC_RE = re.compile(r"^[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}$")
 NODE_KINDS = frozenset({"host", "switch", "router", "firewall"})
 ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,63}$")
@@ -72,6 +73,34 @@ def _number(value: Any, where: str) -> float | int:
     return value
 
 
+def _vlan_config(value: Any, where: str) -> dict:
+    """Strict access/trunk contract: no implicit VLAN or ignored fields."""
+    obj = _object(value, where, {"mode"}, {"vlan", "allowedVlans"})
+    mode = obj["mode"]
+    if mode == "access":
+        _object(obj, where, {"mode", "vlan"})
+        vlan = obj["vlan"]
+        if type(vlan) is not int or not 1 <= vlan <= 4094:
+            _fail(where + ".vlan", "VLAN ID must be an integer 1..4094")
+        return {"mode": "access", "vlan": vlan}
+    if mode == "trunk":
+        _object(obj, where, {"mode", "allowedVlans"})
+        allowed = obj["allowedVlans"]
+        if not isinstance(allowed, list) or not 1 <= len(allowed) <= 4094:
+            _fail(where + ".allowedVlans", "expected 1..4094 explicit VLAN IDs")
+        seen: set[int] = set()
+        result = []
+        for index, item in enumerate(allowed):
+            if type(item) is not int or not 1 <= item <= 4094:
+                _fail(f"{where}.allowedVlans[{index}]", "VLAN ID must be an integer 1..4094")
+            if item in seen:
+                _fail(where + ".allowedVlans", "duplicate VLAN ID")
+            seen.add(item)
+            result.append(item)
+        return {"mode": "trunk", "allowedVlans": result}
+    _fail(where + ".mode", "expected access or trunk")
+
+
 def blank_project(name: str = "Nytt nätverkslabb") -> dict:
     return {"schemaVersion": SCHEMA_VERSION, "name": name, "zones": [], "nodes": [], "links": []}
 
@@ -80,8 +109,8 @@ def validate_project(value: Any) -> dict:
     """Reject incompatible/lossy documents; normalize only explicitly declared data."""
     p = _object(value, "project", {"schemaVersion", "name", "zones", "nodes", "links"})
     version = p["schemaVersion"]
-    if type(version) is not str or version not in (LEGACY_SCHEMA_VERSION, SCHEMA_VERSION):
-        _fail("project.schemaVersion", f"only {LEGACY_SCHEMA_VERSION!r} and {SCHEMA_VERSION!r} are supported")
+    if type(version) is not str or version not in (LEGACY_SCHEMA_VERSION, MAC_SCHEMA_VERSION, SCHEMA_VERSION):
+        _fail("project.schemaVersion", "only '1.0', '1.1' and '1.2' are supported")
     project = blank_project(_name(p["name"], "project.name"))
     # Never silently upgrade or rewrite a legacy document during validation.
     project["schemaVersion"] = version
@@ -117,8 +146,10 @@ def validate_project(value: Any) -> dict:
         seen_ports: set[str] = set()
         for pi, po in enumerate(_array(n["ports"], loc + ".ports", 128)):
             ploc = f"{loc}.ports[{pi}]"
-            port = _object(po, ploc, {"id", "name", "enabled", "ipv4"},
-                           {"mac"} if version == SCHEMA_VERSION else frozenset())
+            optional = {"mac"} if version in (MAC_SCHEMA_VERSION, SCHEMA_VERSION) else set()
+            if version == SCHEMA_VERSION:
+                optional.add("vlan")
+            port = _object(po, ploc, {"id", "name", "enabled", "ipv4"}, optional)
             pid = _id(port["id"], ploc + ".id")
             if pid in seen_ports:
                 _fail(ploc, f"duplicate port ID {pid!r} on {nid!r}")
@@ -151,6 +182,11 @@ def validate_project(value: Any) -> dict:
                         _fail(ploc + ".mac", "duplicate endpoint MAC binding")
                     configured_macs.add(mac)
                 parsed_port["mac"] = mac
+            if "vlan" in port:
+                if kind != "switch":
+                    _fail(ploc + ".vlan", "VLAN port configuration requires a switch")
+                vlan = port["vlan"]
+                parsed_port["vlan"] = None if vlan is None else _vlan_config(vlan, ploc + ".vlan")
             node["ports"].append(parsed_port)
         nodes_by_id[nid] = node
         port_ids_by_node[nid] = seen_ports
