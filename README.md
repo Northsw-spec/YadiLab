@@ -55,7 +55,13 @@ Det finns nu ett **explicit startat och återställbart sessionsläge** i Builde
 
 ## Första Layer 3-steget – connected IPv4-route lookup
 
-`network_core/routing.py` läser nu **endast explicit konfigurerade IPv4/CIDR på aktiverade portar** och bygger en separat routingtabell per vald klient, router eller brandvägg. Builder och `POST /api/routing/connected` kan visa tabellen samt välja **längsta matchande prefix** för en uttryckligen angiven destinations-IPv4. `MATCH` betyder bara att ett konfigurerat lokalt prefix matchar, **inte** att IP-paket har skickats eller kan nå destinationen. Saknad match ger `NO_ROUTE`; lika specifika överlappande gränssnitt ger `AMBIGUOUS` utan påhittat tie-break. Frånkopplad kabel ändrar inte matematisk connected-route-uppslagning, men är inte någon verifierad fysisk anslutning. Inga statiska routes, gateways, IP-forwarding, TTL eller ICMP/ping finns ännu. Projektformatet är oförändrat **1.2**. Se [connected-routingkontraktet](docs/ROUTING_CONNECTED.md).
+`network_core/routing.py` läser nu **endast explicit konfigurerade IPv4/CIDR på aktiverade portar** och bygger en separat routingtabell per vald klient, router eller brandvägg. Builder och `POST /api/routing/connected` kan visa tabellen samt välja **längsta matchande prefix** för en uttryckligen angiven destinations-IPv4. `MATCH` betyder bara att ett konfigurerat lokalt prefix matchar, **inte** att IP-paket har skickats eller kan nå destinationen. Saknad match ger `NO_ROUTE`; lika specifika överlappande gränssnitt ger `AMBIGUOUS` utan påhittat tie-break. Frånkopplad kabel ändrar inte matematisk routeuppslagning, men är inte någon verifierad fysisk anslutning. Statiska routes kan nu konfigureras uttryckligen i schema 1.3; IP-forwarding, TTL och ICMP/ping finns fortfarande inte. Se [connected-routingkontraktet](docs/ROUTING_CONNECTED.md).
+
+## Statiska IPv4-routes – schema 1.3
+
+Enheter av typen **host, router eller firewall** kan nu ha valfria `staticRoutes` med stabilt route-ID, explicit destinationsprefix, next-hop och utgående port. Builder validerar konfigureringen mot Pythonmodellen innan arbetsytan ändras och skriver ingen fil utan användarens **Spara**. Next-hop måste vara en unicastadress på den deklarerade utgående portens eget IPv4-subnät och får inte vara portens egen adress, subnet-/broadcastadress eller en gissad gateway. Avaktiverad port behåller den dokumenterade konfigurationen men installerar inte routen i routingtabellen.
+
+Longest-prefix match omfattar nu både `CONNECTED` och `STATIC`; lika specifika alternativ ger `AMBIGUOUS` (ingen metric eller administrative distance antas). Statiska default routes anges uttryckligen som `0.0.0.0/0`. Schema **1.0–1.2** kan fortsätta läsas och sparas oförändrade, medan uttrycklig route- eller portredigering uppgraderar arbetsminnet till schema **1.3** utan autosave. Routingtabellerna är read-only resultat från dokumentationen: ingen faktisk forwarding, next-hop-ARP, TTL eller ICMP/ping finns ännu. Se [kontraktet för statiska routes](docs/STATIC_ROUTES.md).
 
 ## Explicit VLAN-forwarding (endast Python-API)
 
@@ -90,7 +96,7 @@ UTF-8 JSON, `.yadilab` (befintlig dokumentfiländelse, inte ett produktnamn):
 
 ```json
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "1.3",
   "name": "Lab 1",
   "zones": [],
   "nodes": [
@@ -101,7 +107,7 @@ UTF-8 JSON, `.yadilab` (befintlig dokumentfiländelse, inte ett produktnamn):
 }
 ```
 
-Schema **1.0** och **1.1** kan fortfarande läsas, valideras och sparas utan tyst migrering. Version **1.1** tillåter ett valfritt portfält `"mac"` (null eller sex kolonseparerade hexoktetter för icke-switchportar). En explicit MAC-redigering i Builder uppgraderar ett öppet 1.0-projekt i minnet; filen skrivs endast vid **Spara**. MAC kräver icke-noll unicast, är unik inom projektet och normaliseras till versaler. Ingen MAC tilldelas automatiskt. Schema **1.2** tillåter dessutom `vlan: {"mode":"access","vlan":10}` eller `vlan: {"mode":"trunk","allowedVlans":[10,20]}` på **switchportar**. Inställningarna kan redigeras som `access:10` respektive `trunk:10,20` i Builder. En explicit redigering uppgraderar äldre schema till 1.2 **i minnet**, och sparar inte förrän användaren väljer Spara. Avsaknad av VLAN-konfiguration betyder **inte** VLAN 1. För simulering måste varje aktiv ansluten switchport vara konfigurerad när VLAN har aktiverats. Se [VLAN-lagringskontrakt](docs/VLAN_PERSISTENCE.md) och [MAC-kontraktet](docs/MAC_CONFIG.md).
+Schema **1.0** och **1.1** kan fortfarande läsas, valideras och sparas utan tyst migrering. Version **1.1** tillåter ett valfritt portfält `"mac"` (null eller sex kolonseparerade hexoktetter för icke-switchportar). En explicit MAC-redigering i Builder uppgraderar ett öppet 1.0-projekt i minnet; filen skrivs endast vid **Spara**. MAC kräver icke-noll unicast, är unik inom projektet och normaliseras till versaler. Ingen MAC tilldelas automatiskt. Schema **1.2** tillåter dessutom `vlan: {"mode":"access","vlan":10}` eller `vlan: {"mode":"trunk","allowedVlans":[10,20]}` på **switchportar**. Inställningarna kan redigeras som `access:10` respektive `trunk:10,20` i Builder. En explicit redigering uppgraderar äldre schema till 1.3 **i minnet**, och sparar inte förrän användaren väljer Spara. Avsaknad av VLAN-konfiguration betyder **inte** VLAN 1. För simulering måste varje aktiv ansluten switchport vara konfigurerad när VLAN har aktiverats. Schema **1.3** stöder även statiska IPv4-routes på icke-switch-enheter. Se [VLAN-lagringskontrakt](docs/VLAN_PERSISTENCE.md), [statiska routes](docs/STATIC_ROUTES.md) och [MAC-kontraktet](docs/MAC_CONFIG.md).
 
 Inga anslutningar härleds från adresser, nodnamn, närhet eller zoner. En port kan ha högst en fysisk länk i schema v1. Okända formatversioner avvisas, i stället för att data tappas.
 

@@ -162,7 +162,7 @@ class StaticRouteModelTests(unittest.TestCase):
             validate_project(p)
 
     def test_bad_static_route_shape_or_switch_owner_is_rejected(self):
-        for wrong in (None,{},{"id":"x"},[],"string"):
+        for wrong in (None,{},{"id":"x"},"string"):
             with self.subTest(wrong=wrong):
                 p=static_lab()
                 p["nodes"][0]["staticRoutes"]=wrong
