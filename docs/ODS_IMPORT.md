@@ -11,7 +11,7 @@ A single genuine **.ods** file may contain named worksheets `Devices` (required)
 | Links | Links.csv | id, aNode, aPort, bNode, bPort, enabled |
 | Zones | Zones.csv | id, label |
 
-The result is always a **validated canonical schema 1.0 document**. Richer fields (MACs, VLANs, static routes and arbitrary notes) are **not** imported or silently discarded; unrecognized additional columns or worksheet content are rejected.
+Unversioned ODS workbooks retain canonical **schema 1.0**. An explicit `Project` worksheet with `schemaVersion=1.3` enables MAC/VLAN/static-route import according to [SPREADSHEET_V13.md](SPREADSHEET_V13.md). Unknown columns and unsupported content remain rejected.
 
 ## Physical ODF package and cell semantics
 

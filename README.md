@@ -101,17 +101,23 @@ Longest-prefix match omfattar nu både `CONNECTED` och `STATIC`; lika specifika 
 
 **Topologisk grafväg är inte ping, IP-routing, VLAN-medveten reachability, brandväggslogik eller ett bevis på nätverksanslutning.** Första versionens grafspårning traverserar dokumentationsgrafen, inte verkliga protokoll.
 
-Ännu inte implementerat: godtycklig kalkylbladsimport, schema-1.3 MAC/VLAN/route-kolumner i kalkylblad, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, extern nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+Ännu inte implementerat: godtycklig kalkylbladsimport, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, extern nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+
+## Versionshanterad XLSX-/ODS-import – MAC, VLAN och routes (PR #25)
+
+De ursprungliga fyra tabellerna fortsätter att importeras som **schema 1.0** utan förändring. Ett uttryckligt blad `Project` med kolumnen `schemaVersion` och en enda datarad `1.3` aktiverar det nya formatet. `Interfaces` har då kolumnerna `nodeId,id,name,enabled,ipv4,mac,vlanMode,accessVlan,allowedVlans`, och det valfria bladet `StaticRoutes` har `nodeId,id,destination,nextHop,outPort`. Alla käll-ID:n och länkändpunkter bevaras; MAC-, VLAN- och routedata valideras mot den **befintliga** kanoniska modellen. Felaktiga versioner, next-hop utanför rätt subnät och motsägelsefulla switchkonfigurationer avvisas utan dataförlust.
+
+XLSX och ODS delar samma versionskontrakt och samma existerande CSV-parser för grundobjekten. Inga nya kablar, MAC-adresser eller gateways skapas automatiskt. Separat användargodkännande och Save krävs fortfarande. Se [schema 1.3 för XLSX/ODS](docs/SPREADSHEET_V13.md).
 
 ## Import av strikt ODS-dokumentation (PR #24)
 
 Builder kan nu importera **en riktig OpenDocument Spreadsheet-fil (`.ods`)** med tabellerna `Devices` (obligatorisk), `Interfaces`, `Links` och `Zones` (valfria). Tabellen använder **samma exakta kolumner** som CSV och XLSX, oberoende av tabell-/kolumnordning. ODS-formatet granskas med korrekt ZIP-`mimetype`, ODF-manifest, `content.xml` och strikta ODF-celltyper. Det accepterar explicita strängar, numeriska `x`/`y`-värden, booleska `enabled`-fält och tillåter tomt, upprepat fyllnadsmaterial i slutet av en tabell.
 
-Formler, främmande tabeller, okända fält, dolda eller filtrerade rader/kolumner, makron, externa objekt, felaktiga referenser, sammanslagna celler och godtyckliga kalkylbladsformat avvisas. ODS-importen återanvänder `import_csv_tables` och importerar enbart **schema 1.0**, inte MAC/VLAN/routes. Builder frågar uttryckligen innan arbetsytan ersätts och skriver ingen fil utan separat **Save**. Se [ODS-kontraktet](docs/ODS_IMPORT.md).
+Formler, främmande tabeller, okända fält, dolda eller filtrerade rader/kolumner, makron, externa objekt, felaktiga referenser, sammanslagna celler och godtyckliga kalkylbladsformat avvisas. ODS utan versionsblad återanvänder `import_csv_tables` för **schema 1.0**; ett uttryckligt versionsblad aktiverar **schema 1.3** med MAC/VLAN/routes. Builder frågar uttryckligen innan arbetsytan ersätts och skriver ingen fil utan separat **Save**. Se [ODS-kontraktet](docs/ODS_IMPORT.md).
 
 ## Import av strikt XLSX-dokumentation (PR #23)
 
-Builder kan nu importera **en XLSX-arbetsbok** med namngivna blad `Devices` (obligatoriskt), `Interfaces`, `Links` och `Zones` (valfria). Varje blad har exakt motsvarande CSV-tabells kolumner; kolumnordning och bladordning får variera. Det är **inte en generell Excel-importör**. Textidentiteter måste förbli textceller; numeriska celler stöds för `x`/`y`, booleanceller för `enabled`, och vanliga `inlineStr` och delade strängar stöds. Okända blad, formler, dolda rader/blad, sammanslagna celler, makron, externa länkar och extra workbookdelar avvisas. Den första XLSX-versionen importerar enbart kanoniskt **schema 1.0**, alltså inte MAC-/VLAN-/routefält som finns i senare schema.
+Builder kan nu importera **en XLSX-arbetsbok** med namngivna blad `Devices` (obligatoriskt), `Interfaces`, `Links` och `Zones` (valfria). Varje blad har exakt motsvarande CSV-tabells kolumner; kolumnordning och bladordning får variera. Det är **inte en generell Excel-importör**. Textidentiteter måste förbli textceller; numeriska celler stöds för `x`/`y`, booleanceller för `enabled`, och vanliga `inlineStr` och delade strängar stöds. Okända blad, formler, dolda rader/blad, sammanslagna celler, makron, externa länkar och extra workbookdelar avvisas. XLSX utan versionsblad importerar fortsatt **schema 1.0**; ett uttryckligt `Project`-blad aktiverar **schema 1.3**.
 
 Import görs med **Importera**, en `.xlsx` och uttryckligt projektnamn. Servern konverterar de strikta OOXML-tabellerna till den **befintliga CSV-valideringen** och returnerar ett helt validerat dokument före något beslut om att ersätta arbetsytan. Användaren får därefter bekräfta, och **Save krävs separat** för att skriva till disk. Se [XLSX-kontraktet](docs/XLSX_IMPORT.md).
 

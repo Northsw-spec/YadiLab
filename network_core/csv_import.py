@@ -24,7 +24,7 @@ def _invalid(where: str, reason: str) -> None:
     raise ProjectValidationError(f"{where}: {reason}")
 
 
-def _read_table(name: str, text: str) -> list[dict[str, str]]:
+def _read_table(name: str, text: str, columns: tuple[str, ...] | None = None) -> list[dict[str, str]]:
     if not isinstance(text, str):
         _invalid(name, "expected UTF-8 text")
     if "\x00" in text or "\ufffd" in text:
@@ -34,7 +34,7 @@ def _read_table(name: str, text: str) -> list[dict[str, str]]:
     reader = csv.reader(io.StringIO(text, newline=""), strict=True)
     try:
         header = next(reader)
-        expected = set(TABLES[name])
+        expected = set(columns if columns is not None else TABLES[name])
         if len(header) != len(expected) or len(set(header)) != len(header) or set(header) != expected:
             _invalid(name, f"expected exactly these columns (any order): {', '.join(TABLES[name])}")
         records = []

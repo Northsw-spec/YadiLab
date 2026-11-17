@@ -12,7 +12,7 @@ import io
 import zipfile
 import xml.etree.ElementTree as ET
 
-from .csv_import import TABLES, import_csv_tables
+from .spreadsheet_schema import KNOWN_SHEETS, columns_for_sheets, import_spreadsheet_tables
 from .model import ProjectValidationError
 
 OFFICE = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -20,7 +20,7 @@ TABLE = "urn:oasis:names:tc:opendocument:xmlns:table:1.0"
 TEXT = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
 MANIFEST = "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"
 MIMETYPE = b"application/vnd.oasis.opendocument.spreadsheet"
-SHEETS = {n[:-4]: n for n in TABLES}
+SHEETS = {n: n + ".csv" for n in KNOWN_SHEETS}
 MAX_BYTES = 5 * 1024 * 1024
 MAX_XML = 5 * 1024 * 1024
 MAX_EXPANDED = 12 * 1024 * 1024
@@ -135,7 +135,8 @@ def _cell(cell: ET.Element, where: str, field: str) -> tuple[str, int]:
     _fail(where, f"unsupported value-type {kind!r}, including dates and errors")
 
 
-def _row(row: ET.Element, name: str, row_index: int, header: list[str] | None) -> tuple[list[str], int]:
+def _row(row: ET.Element, name: str, row_index: int, header: list[str] | None,
+         columns: tuple[str, ...]) -> tuple[list[str], int]:
     where = f"{name} row {row_index}"
     if row.tag != _q(TABLE, "table-row"):
         _fail(where, "unsupported table row or group")
@@ -147,7 +148,7 @@ def _row(row: ET.Element, name: str, row_index: int, header: list[str] | None) -
     }:
         _fail(where, "unsupported row attributes")
     times = _count(row, "number-rows-repeated", where, 1048576)
-    width = len(TABLES[name + ".csv"])
+    width = len(columns)
     values: list[str] = []
     for cell in row:
         field = (header[len(values)] if header is not None and len(values) < width else "header")
@@ -170,7 +171,7 @@ def _row(row: ET.Element, name: str, row_index: int, header: list[str] | None) -
     return values, times
 
 
-def _sheet(sheet: ET.Element, name: str) -> str:
+def _sheet(sheet: ET.Element, name: str, columns: tuple[str, ...]) -> str:
     where = f"sheet {name}"
     if sheet.get(_q(TABLE, "visibility"), "visible") != "visible":
         _fail(where, "hidden spreadsheet unsupported")
@@ -178,7 +179,7 @@ def _sheet(sheet: ET.Element, name: str) -> str:
         _q(TABLE, "name"), _q(TABLE, "style-name"), _q(TABLE, "visibility"),
     }:
         _fail(where, "unexpected sheet attributes")
-    width = len(TABLES[name + ".csv"])
+    width = len(columns)
     rows: list[list[str]] = []
     trailing_padding = False
     row_index = 1
@@ -197,7 +198,7 @@ def _sheet(sheet: ET.Element, name: str) -> str:
             continue
         if child.tag != _q(TABLE, "table-row"):
             _fail(where, "merged cells, table groups, database ranges or other data unsupported")
-        values, times = _row(child, name, row_index, rows[0] if rows else None)
+        values, times = _row(child, name, row_index, rows[0] if rows else None, columns)
         row_index += times
         if row_index > 1048577:
             _fail(where, "too many physical sheet rows")
@@ -215,7 +216,7 @@ def _sheet(sheet: ET.Element, name: str) -> str:
         rows.append(values)
     if not rows:
         _fail(where, "missing header")
-    if len(set(rows[0])) != width or set(rows[0]) != set(TABLES[name + ".csv"]):
+    if len(set(rows[0])) != width or set(rows[0]) != set(columns):
         _fail(where, "expected exactly the named CSV columns (any order)")
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
@@ -244,7 +245,7 @@ def _manifest(archive: zipfile.ZipFile, present: set[str]) -> None:
 
 
 def import_ods_workbook(value: object) -> dict:
-    """Validate a real ODS ZIP and import only the existing CSV schema 1.0."""
+    """Validate a real ODS ZIP and import legacy 1.0 or explicit 1.3."""
     if not isinstance(value, dict) or set(value) != {"filename", "projectName", "contentBase64"}:
         _fail("request", "expected exactly filename, projectName and contentBase64")
     filename, name, encoded = (value[k] for k in ("filename", "projectName", "contentBase64"))
@@ -301,17 +302,21 @@ def import_ods_workbook(value: object) -> dict:
             body = root.find(_q(OFFICE, "body"))
             if body is None or len(body) != 1 or body[0].tag != _q(OFFICE, "spreadsheet"):
                 _fail("content", "missing spreadsheet body")
-            found: dict[str, str] = {}
-            for table in body[0]:
+            tables = list(body[0])
+            names = []
+            for table in tables:
                 if table.tag != _q(TABLE, "table"):
                     _fail("content", "named ranges or unsupported spreadsheet objects")
                 name_of_sheet = table.get(_q(TABLE, "name"))
-                if name_of_sheet not in SHEETS or name_of_sheet in found:
+                if name_of_sheet not in SHEETS or name_of_sheet in names:
                     _fail("content", f"unknown/duplicate sheet {name_of_sheet!r}")
-                found[name_of_sheet] = _sheet(table, name_of_sheet)
-            if "Devices" not in found:
-                _fail("content", "Devices sheet required")
+                names.append(name_of_sheet)
+            schema_columns = columns_for_sheets(names)
+            found: dict[str, str] = {}
+            for table, name_of_sheet in zip(tables, names):
+                found[name_of_sheet] = _sheet(table, name_of_sheet,
+                                               schema_columns[name_of_sheet])
     except (zipfile.BadZipFile, EOFError, OSError):
         _fail("archive", "invalid ODS ZIP")
     sources = [{"name": SHEETS[sheet], "text": text} for sheet, text in found.items()]
-    return import_csv_tables({"projectName": name, "files": sources})
+    return import_spreadsheet_tables({"projectName": name, "files": sources})
