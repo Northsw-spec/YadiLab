@@ -492,6 +492,73 @@ def run():
                 assert hashlib.sha256((store/'xlsx-demo.yadilab').read_bytes()).hexdigest() == xlsx_sha
                 assert hashlib.sha256((store/'csv-demo.yadilab').read_bytes()).hexdigest() == csv_sha
 
+            # PR26: actual browser download from the local server, real ZIP
+            # persisted by Playwright, then uploaded through the same UI.
+            # A URL click is not evidence of a download unless bytes arrive.
+            if network_mode == 'DIRECT_HTTP':
+                template_hashes = {
+                    name: hashlib.sha256((store/(name+'.yadilab')).read_bytes()).hexdigest()
+                    for name in ('lab','csv-demo','xlsx-demo','ods-demo','v13-xlsx','v13-ods')
+                }
+                for ext, mime in (
+                    ('xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+                    ('ods','application/vnd.oasis.opendocument.spreadsheet'),
+                ):
+                    with page.expect_download(timeout=12000) as download_event:
+                        page.locator('#template-'+ext).click()
+                    download = download_event.value
+                    assert download.suggested_filename == 'network-schema13-demo.'+ext
+                    downloaded_file = store / ('downloaded-template.'+ext)
+                    download.save_as(str(downloaded_file))
+                    template_data = downloaded_file.read_bytes()
+                    assert template_data[:2] == b'PK'
+                    assert len(template_data) > 400
+                    assert hashlib.sha256(template_data).hexdigest() == hashlib.sha256(
+                        urlopen(base+'api/templates/'+ext).read()).hexdigest()
+
+                    with page.expect_response('**/api/import/'+ext) as template_import:
+                        page.locator('#import-file').set_input_files({
+                            'name':download.suggested_filename,
+                            'mimeType':mime,
+                            'buffer':template_data,
+                        })
+                    assert template_import.value.status == 200
+                    example = template_import.value.json()['project']
+                    assert example['schemaVersion'] == '1.3'
+                    assert len(example['nodes']) == 4
+                    assert example['nodes'][0]['id'] == 'demo-client'
+                    assert example['nodes'][0]['staticRoutes'][0]['id'] == 'demo-via-router'
+                    assert example['nodes'][1]['ports'][1]['vlan'] == {
+                        'mode':'trunk','allowedVlans':[10,20]}
+                    expect(page.locator('[data-node-id="demo-client"]')).to_have_count(1)
+                    expect(page.locator('[data-link-id="demo-link-trunk"]')).to_have_count(1)
+                    expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+                    assert not (store/('template-'+ext+'.yadilab')).exists()
+                    for name, old_hash in template_hashes.items():
+                        assert hashlib.sha256(
+                            (store/(name+'.yadilab')).read_bytes()).hexdigest() == old_hash
+                # Persist the imported ODS example only on explicit Save,
+                # then reopen real bytes; neither template download modifies
+                # any earlier .yadilab project.
+                page.locator('#project-filename').fill('template-ods')
+                page.locator('#project-filename').dispatch_event('change')
+                page.locator('#save-project').click()
+                expect(page.locator('#save-indicator')).to_contain_text(
+                    'Sparat · template-ods.yadilab', timeout=12000)
+                persisted = (store/'template-ods.yadilab').read_bytes()
+                assert json.loads(persisted) == example
+                persisted_sha = hashlib.sha256(persisted).hexdigest()
+                page.locator('#new-project').click()
+                page.locator('#saved-projects').select_option('template-ods')
+                page.locator('#open-project').click()
+                expect(page.locator('[data-node-id="demo-client"]')).to_have_count(1)
+                assert hashlib.sha256(
+                    (store/'template-ods.yadilab').read_bytes()).hexdigest() == persisted_sha
+                for name, old_hash in template_hashes.items():
+                    assert hashlib.sha256(
+                        (store/(name+'.yadilab')).read_bytes()).hexdigest() == old_hash
+                assert not errors, errors
+
             # Browser ARP diagnostics use real HTTP and unsaved current workspace.
             # Reopen the previous genuinely persisted VLAN 1.2 file, then edit
             # only browser memory to build two configured IPv4 endpoints.

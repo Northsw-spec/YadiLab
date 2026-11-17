@@ -36,7 +36,7 @@ def _read_table(name: str, text: str, columns: tuple[str, ...] | None = None) ->
         header = next(reader)
         expected = set(columns if columns is not None else TABLES[name])
         if len(header) != len(expected) or len(set(header)) != len(header) or set(header) != expected:
-            _invalid(name, f"expected exactly these columns (any order): {', '.join(TABLES[name])}")
+            _invalid(f"{name} header row 1", f"expected exactly these columns (any order): {', '.join(columns if columns is not None else TABLES[name])}")
         records = []
         for row in reader:
             line = reader.line_num

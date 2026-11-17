@@ -165,7 +165,7 @@ def _table(archive: zipfile.ZipFile, part: str, name: str,
         _fail(name, "missing header row")
     header = rows[0]
     if len(set(header)) != len(header) or set(header) != set(columns):
-        _fail(name, "expected exactly the named CSV columns (any order)")
+        _fail(f"{name}!1 (header)", "expected exactly the named columns (any order)")
     # Type-check data against the actual header's column order, independent
     # of cell XML formatting and implicit empty cells.
     # Numeric/bool verification above uses header[row 1]; for header itself

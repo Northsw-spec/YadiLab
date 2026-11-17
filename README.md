@@ -103,6 +103,14 @@ Longest-prefix match omfattar nu både `CONNECTED` och `STATIC`; lika specifika 
 
 Ännu inte implementerat: godtycklig kalkylbladsimport, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, extern nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
 
+## Importmallar och cellbaserad felrapportering (PR #26)
+
+Under **SPARADE PROJEKT** i Builder finns två nedladdningslänkar: **Excel-mall (.xlsx)** och **Calc-mall (.ods)**. Servern levererar faktiska kalkylblads- och OpenDocument-ZIP-filer från `GET /api/templates/xlsx` och `GET /api/templates/ods`; ingen arbetsfil skapas eller ändras på servern vid nedladdningen. Filerna innehåller sex blad enligt schema 1.3, med en liten **tydligt märkt DEMO-topologi**, explicita portar och länkar, MAC-adresser, access-/trunk-VLAN samt en statisk route. De är pedagogiska exempel, **inte fakta om användarens nätverk**. Byt ut demonstrationsuppgifterna innan mallen används som dokumentation. Filerna går att importera via den befintliga knappen **Importera**, men import och nedladdning sparar inte något projekt automatiskt.
+
+Fel i de versionshanterade fälten kopplas nu när källpositionen är entydig till arbetsbokens **faktiska** rad och kolumn, exempelvis `Interfaces!F2 (mac)`, `Interfaces!H3 (accessVlan)` eller `StaticRoutes!D2 (nextHop)`. Även omordnade kolumner får rätt referens. Fel i en enskild ODS-/XLSX-cell och felaktiga tabellrubriker visar blad och position. När ett fel saknar entydig källa behålls det ursprungliga valideringsmeddelandet i stället för en gissad cell.
+
+Se [mall- och felkontraktet](docs/SPREADSHEET_TEMPLATES.md).
+
 ## Versionshanterad XLSX-/ODS-import – MAC, VLAN och routes (PR #25)
 
 De ursprungliga fyra tabellerna fortsätter att importeras som **schema 1.0** utan förändring. Ett uttryckligt blad `Project` med kolumnen `schemaVersion` och en enda datarad `1.3` aktiverar det nya formatet. `Interfaces` har då kolumnerna `nodeId,id,name,enabled,ipv4,mac,vlanMode,accessVlan,allowedVlans`, och det valfria bladet `StaticRoutes` har `nodeId,id,destination,nextHop,outPort`. Alla käll-ID:n och länkändpunkter bevaras; MAC-, VLAN- och routedata valideras mot den **befintliga** kanoniska modellen. Felaktiga versioner, next-hop utanför rätt subnät och motsägelsefulla switchkonfigurationer avvisas utan dataförlust.

@@ -82,7 +82,7 @@ def import_spreadsheet_tables(value: object) -> dict:
         rows[filename] = _read_table(filename, source["text"], V13[filename])
     version = rows.get("Project.csv")
     if version != [{"schemaVersion": "1.3"}]:
-        _invalid("Project.csv", "expected exactly one schemaVersion row with '1.3'")
+        _invalid("Project!A2 (schemaVersion)", "expected exactly one schemaVersion row with '1.3'")
 
     # The legacy CSV importer remains the sole authority for devices, ports,
     # links, endpoints, zone IDs and ordinary types. Drop only versioned
