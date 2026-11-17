@@ -221,6 +221,10 @@ function renderInspector() {
       value.label = next.trim(); changed();
     }, {id:'node-label'})));
     box.append(field('Enhetstyp', dropdown(KINDS.map(v => ({value:v,label:v})), value.kind, next => {
+      if (next === 'switch' && value.ports.some(port => port.mac != null)) {
+        notify('Ta bort konfigurerade MAC-adresser innan enheten ändras till switch.', true);
+        renderInspector(); return;
+      }
       value.kind = next; changed();
     }, {id:'node-kind'})));
     box.append(field('Dokumenterad zon', dropdown([{value:'',label:'Ingen zon'}, ...project.zones.map(z => ({value:z.id,label:z.label}))], value.zoneId || '', next => {
@@ -251,6 +255,18 @@ function renderInspector() {
             changed();
           } catch (error) { notify(error.message, true); renderInspector(); }
         }, {dataset:{portIpv4:port.id},placeholder:'192.0.2.1/24'})),
+        value.kind === 'switch' ? null : field('MAC-adress (valfri, explicit)', input(port.mac || '', async next => {
+          const attempt = copy(project);
+          // A legacy 1.0 file is upgraded in memory only after deliberate editing.
+          attempt.schemaVersion = '1.1';
+          const portCopy = attempt.nodes.find(n => n.id === value.id).ports.find(p => p.id === port.id);
+          portCopy.mac = next.trim() || null;
+          try {
+            const normalized = await api('/api/validate', attempt);
+            project = normalized.project;
+            changed();
+          } catch (error) { notify(error.message, true); renderInspector(); }
+        }, {dataset:{portMac:port.id},placeholder:'02:00:00:00:00:0A'})),
         check('Port aktiverad', port.enabled, enabled => { port.enabled = enabled; changed(); }),
         button('Ta bort port', () => {
           if (occupied && !confirm('Porten har en ansluten länk. Ta bort BÅDE porten och den uttryckligen valda länken?')) return;

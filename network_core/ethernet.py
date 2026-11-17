@@ -2,7 +2,7 @@
 
 This is a deliberately narrow Layer-2 model. A caller supplies source and
 unicast/broadcast destination MACs, or a validated Ethernet II frame with an
-explicit session-only source interface MAC binding.
+explicit source interface MAC binding from project v1.1 or this session.
 Only switches learn and forward, over explicitly enabled links and ports.
 Endpoint arrival means a frame reached a port, NOT that a host accepted it.
 No IP, ARP, VLAN, STP, aging, FCS, or host NIC acceptance is implemented.
@@ -20,7 +20,7 @@ from .ethernet_frame import BROADCAST, EthernetFrame, normalize_mac
 class EthernetFabric:
     """One isolated, explicitly configured simulation session.
 
-    MAC state lives in this object only; it never modifies or saves the project.
+    Learned MAC tables live only in this object, never in the project.
     Create a new session after changes to ports, links or topology. Networks
     with active switch-to-switch loops are rejected rather than pretending STP.
     """
@@ -43,16 +43,25 @@ class EthernetFabric:
             self.wires[(a["node"], a["port"])] = (b["node"], b["port"], link["id"])
             self.wires[(b["node"], b["port"])] = (a["node"], a["port"], link["id"])
         self._reject_switch_loops()
-        # Explicit session-only NIC identities. No defaults, inference, or
-        # project mutation. Persisted MAC configuration requires its own
-        # separately versioned project-schema change.
+        # Explicit NIC identities from validated v1.1 ports or session bindings.
+        # Neither session nor switch learning ever mutates the saved project.
+        persisted = {
+            (node["id"], port["id"]): port["mac"]
+            for node in self.project["nodes"] if node["kind"] != "switch"
+            for port in node["ports"] if port.get("mac") is not None
+        }
         if interface_macs is None:
             interface_macs = {}
         if not isinstance(interface_macs, Mapping):
             raise ProjectValidationError("ethernet: interface_macs must be a mapping")
+        bindings = dict(persisted)
+        for endpoint, address in interface_macs.items():
+            if endpoint in persisted and normalize_mac(address, source=True) != persisted[endpoint]:
+                raise ProjectValidationError("ethernet: session MAC conflicts with persisted interface MAC")
+            bindings[endpoint] = address
         self._interface_macs: dict[tuple[str, str], str] = {}
         seen_macs: set[str] = set()
-        for endpoint, address in interface_macs.items():
+        for endpoint, address in bindings.items():
             if not isinstance(endpoint, tuple) or len(endpoint) != 2 or \
                     not all(isinstance(part, str) for part in endpoint):
                 raise ProjectValidationError("ethernet: MAC binding requires (node ID, port ID)")

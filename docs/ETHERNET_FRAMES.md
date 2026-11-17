@@ -12,7 +12,7 @@
 - `EthernetFabric(project, interface_macs=...)` kräver en mappning från deklarerade `(node_id, port_id)` till MAC, exempelvis `{('pc-a', 'eth0'): '02:00:00:00:00:0A'}`. Saknade, påhittade, duplicerade, multicast- och switchport-bindningar avvisas. Ingen standardadress hittas på.
 - `inject_frame(node_id, port_id, frame)` validerar att källportens MAC är uttryckligt bunden och exakt matchar ramens käll-MAC. Den återanvänder den befintliga deterministic MAC-forwardingmodellen.
 - Returnerade `transmissions` och `endpointArrivals` är **ramväg/portankomst**, inte mottagande NIC-acceptans, ARP, IP, ICMP eller ping. `frame` innehåller endast källa, destination, EtherType och serialiserad längd exklusive FCS.
-- Källprojektet och sparade `.yadilab`-filer ändras inte av detta steg. MAC-bindningar är flyktiga och finns enbart i sessionen. **Beständig MAC-konfiguration är inte implementerad.**
+- `EthernetFabric` skriver aldrig projektfiler. Explicita MAC-bindningar från portfältet `mac` i schema 1.1 kan sparas via separat Save/Open, medan sessionsbindningar och inlärda MAC-tabeller inte sparas. Se [MAC_CONFIG.md](MAC_CONFIG.md).
 
 ## Exempel
 

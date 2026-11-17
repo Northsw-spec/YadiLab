@@ -146,6 +146,11 @@ def run():
             page.locator('#new-port-name').fill('eth0')
             page.locator('#submit-port').click()
             expect(page.locator('[data-port-node="node-1"]')).to_have_count(1)
+            # Deliberate configuration: real validator and no implicit autosave.
+            page.locator('[data-port-mac="port-1"]').fill('02:00:00:00:00:0a')
+            page.locator('[data-port-mac="port-1"]').dispatch_event('change')
+            expect(page.locator('[data-port-mac="port-1"]')).to_have_value('02:00:00:00:00:0A')
+            assert not (store / 'lab.yadilab').exists()
 
             page.locator('#add-node').click()
             expect(page.locator('[data-node-id="node-2"]')).to_have_count(1)
@@ -198,6 +203,8 @@ def run():
             digest=hashlib.sha256(saved_data).hexdigest()
             parsed=json.loads(saved_data)
             assert len(parsed['nodes']) == 2 and len(parsed['links']) == 1
+            assert parsed['schemaVersion'] == '1.1'
+            assert parsed['nodes'][0]['ports'][0]['mac'] == '02:00:00:00:00:0A'
             assert parsed['links'][0]['a'] == {'node':'node-1','port':'port-1'}
             assert parsed['links'][0]['b'] == {'node':'node-2','port':'port-1'}
             assert parsed['links'][0]['enabled'] is True
@@ -222,6 +229,8 @@ def run():
             expect(page.locator('[data-node-id="node-1"]')).to_have_count(1)
             expect(page.locator('[data-node-id="node-2"]')).to_have_count(1)
             expect(page.locator('[data-link-id="link-1"]')).to_have_count(1)
+            page.locator('[data-item-type="node"][data-item-id="node-1"]').click()
+            expect(page.locator('[data-port-mac="port-1"]')).to_have_value('02:00:00:00:00:0A')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
 
             # Explicit export contains only the canonical document format.

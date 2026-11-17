@@ -1,6 +1,7 @@
 """Narrow RFC 826 Ethernet/IPv4 ARP model over explicit Layer-2 forwarding.
 
-ARP data and cache exist only in a simulation session. No project MAC inference,
+ARP messages and cache exist only in a simulation session. Configured v1.1
+project MACs can be used as explicit NIC identities. No MAC inference,
 router forwarding, IPv6, VLAN, proxy-ARP or host IP data-plane is implemented.
 """
 from __future__ import annotations
@@ -100,7 +101,7 @@ class ArpSession:
     reply. ARP cache is session-only and replies require return wire delivery.
     """
 
-    def __init__(self, project: dict, *, interface_macs: Mapping[tuple[str, str], str]):
+    def __init__(self, project: dict, *, interface_macs: Mapping[tuple[str, str], str] | None = None):
         self.fabric = EthernetFabric(project, interface_macs=interface_macs)
         self._macs = self.fabric.bound_macs()
         self._ips: dict[tuple[str, str], ipaddress.IPv4Interface] = {}
