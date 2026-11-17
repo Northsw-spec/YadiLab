@@ -78,6 +78,15 @@
           <button id="run-trace" class="btn btn-soft full" type="button">Spåra dokumenterad väg</button>
           <div id="trace-result" class="trace-result" aria-live="polite">Ingen spårning utförd.</div>
         </section>
+        <section class="trace-panel" aria-label="ARP-diagnostik">
+          <div class="eyebrow">LAYER 2 · ARP</div>
+          <h3>Simulera ARP-förfrågan</h3>
+          <p class="muted tiny">En isolerad körning över deklarerade kablar och VLAN. Inte ping eller IP-routing. Tabellerna sparas inte.</p>
+          <label for="arp-source">Källgränssnitt</label><select id="arp-source" class="control"></select>
+          <label for="arp-target-ip">Mål-IPv4</label><input id="arp-target-ip" class="control" type="text" placeholder="192.0.2.20" autocomplete="off">
+          <button id="run-arp" class="btn btn-soft full" type="button">Simulera ARP</button>
+          <div id="arp-result" class="trace-result" aria-live="polite">Ingen ARP-simulering utförd.</div>
+        </section>
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

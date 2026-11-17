@@ -25,7 +25,7 @@ Existing `ProjectStore` storage, optimistic SHA-256 concurrency, atomic writes, 
 
 `EthernetFabric(project)` detects explicit 1.2 switch-port VLAN configuration and uses it for access/trunk forwarding. `ArpSession(project)` uses the same mechanism for request/reply. The `vlan_ports` session argument can **supply missing port configurations**, but cannot contradict persisted switch-port configurations. When VLAN-aware, all active and connected switch ports must be configured, and incompatible switch-switch or endpoint-trunk links are rejected as before.
 
-Only config is persistent. Inferred/learned MAC tables, ARP cache, transmitted frames, session overrides and simulation diagnostics remain transient. **No IP-routing or ICMP/ping is claimed.** VLAN forwarding is still a Python API feature; the Builder edits configuration but does not run packet-level VLAN/ARP sessions or display Layer 2 diagnostics.
+Only config is persistent. Inferred/learned MAC tables, ARP cache, transmitted frames, session overrides and simulation diagnostics remain transient. **No IP-routing or ICMP/ping is claimed.** The Builder now supports one-shot ARP diagnostics using the same Python Ethernet/ARP implementation and returns observed wire traces, VLAN drops, and ephemeral learned tables. It does not expose a persistent forwarding session or an arbitrary Ethernet frame-injection interface.
 
 The strict four-table CSV importer still emits schema 1.0, without guessing VLANs or changing existing CSV columns.
 

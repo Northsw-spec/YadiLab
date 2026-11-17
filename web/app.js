@@ -48,6 +48,8 @@ let selection = null;
 let pendingPort = null;
 let traceResult = null;
 let highlightedLinks = [];
+let arpDiagnostic = null;
+let arpHighlightedLinks = [];
 let filename = 'lab';
 let savedName = null;
 let savedSha = null;
@@ -106,6 +108,8 @@ function updateSaveIndicator() {
 }
 function changed({keepTrace = false} = {}) {
   if (!keepTrace) {traceResult = null; highlightedLinks = [];}
+  // The previous packet trace and learned tables belong to an old snapshot.
+  arpDiagnostic = null; arpHighlightedLinks = [];
   render();
 }
 function select(type, id) { selection = {type, id}; pendingPort = null; render(); }
@@ -189,6 +193,56 @@ function updateTraceSelectors() {
     output.classList.add('fail');
     output.textContent = traceResult.status === 'NO_PATH' ? 'Ingen aktiverad dokumenterad grafväg. Kontrollera länkar och portar. Detta bevisar inte att IP-trafik misslyckas.' : traceResult.meaning;
   }
+}
+
+function renderArpDiagnostics() {
+  const selector = $('arp-source');
+  const previous = selector.value;
+  const interfaces = project.nodes.filter(node => node.kind !== 'switch')
+    .flatMap(node => node.ports.map(port => ({
+      value: JSON.stringify([node.id, port.id]),
+      label: `${node.label} / ${port.name} (${node.id}/${port.id})`,
+    })));
+  selector.replaceChildren(...interfaces.map(item => el('option', {value:item.value}, item.label)));
+  if (interfaces.some(item => item.value === previous)) selector.value = previous;
+  $('run-arp').disabled = interfaces.length === 0;
+
+  const output = $('arp-result');
+  output.classList.remove('ok', 'fail');
+  if (!arpDiagnostic) {
+    output.textContent = 'Ingen aktuell ARP-simulering. Varje körning startar med tomma MAC- och ARP-tabeller.';
+    return;
+  }
+  if (arpDiagnostic.error) {
+    output.classList.add('fail');
+    output.textContent = `ARP-simulering avvisad: ${arpDiagnostic.error}\nIngen ARP-upplösning bevisad.`;
+    return;
+  }
+  const {result, macTables, arpTable} = arpDiagnostic;
+  if (result.status === 'RESOLVED') output.classList.add('ok');
+  else output.classList.add('fail');
+  const traces = (name, transmissions) => `${name}: ${transmissions.length} fysisk(a) överföring(ar)\n`
+    + (transmissions.length ? transmissions.map(t =>
+        `  ${t.linkId}: ${t.from.node}/${t.from.port} → ${t.to.node}/${t.to.port}`
+        + (t.vlanId == null ? '' : ` · VLAN ${t.vlanId}${t.tagged ? ' (taggad)' : ' (otaggad)'}`)
+      ).join('\n') : '  Inga');
+  const drops = ['requestVlanDrops', 'replyVlanDrops'].flatMap(key =>
+    (result[key] || []).map(item => `  ${key}: ${item.switch}/${item.port} · ${item.reason} · VLAN ${item.vlanId ?? 'otaggad'}`));
+  const tables = macTables.flatMap(table => [
+    `  ${table.switchId}${table.vlanId == null ? ' (otaggad)' : ` VLAN ${table.vlanId}`}:`,
+    ...Object.entries(table.entries).map(([mac, port]) => `    ${mac} → ${port}`),
+  ]);
+  const cache = Object.entries(arpTable).map(([ip, mac]) => `  ${ip} → ${mac}`);
+  output.textContent = [
+    `ARP-status: ${result.status}`,
+    result.meaning,
+    traces('Förfrågan', result.requestTransmissions),
+    traces('Svar', result.replyTransmissions),
+    'VLAN-droppar:\n' + (drops.length ? drops.join('\n') : '  Inga observerade'),
+    'Inlärda switch-MAC-tabeller:\n' + (tables.length ? tables.join('\n') : '  Inga inlärda poster'),
+    'ARP-cache på avsändarporten:\n' + (cache.length ? cache.join('\n') : '  Tom'),
+    'Endast denna tillfälliga simulering. Inte ping, IP-routing eller verklig NIC-acceptans.',
+  ].join('\n\n');
 }
 
 function renderInspector() {
@@ -377,9 +431,10 @@ function render() {
   $('empty-state').hidden = project.nodes.length > 0;
   $('canvas-hint').textContent = pendingPort ? `Vald port: ${pendingPort.node}/${pendingPort.port}. Klicka en andra ledig port eller samma port för att avbryta.`
     : 'Dra enheter för att placera dem. Klicka två lediga portcirklar för att skapa en länk.';
-  canvas.setData(project, selection, pendingPort, highlightedLinks);
+  canvas.setData(project, selection, pendingPort, arpDiagnostic ? arpHighlightedLinks : highlightedLinks);
   renderInspector();
   updateTraceSelectors();
+  renderArpDiagnostics();
   updateSaveIndicator();
   } finally {
     rendering = false;
@@ -405,6 +460,7 @@ function confirmDiscard() {
 function resetProject(value = blank(), pristineBlank = false) {
   project = value;
   delete $('trace-target').dataset.userSelected;
+  arpDiagnostic = null; arpHighlightedLinks = [];
   selection = null;
   pendingPort = null;
   filename = 'lab'; savedName = null; savedSha = null;
@@ -455,6 +511,7 @@ async function openProject() {
     savedSha = loaded.sha256;
     savedSnapshot = JSON.stringify(project);
     selection = null; pendingPort = null; traceResult = null; highlightedLinks = [];
+    arpDiagnostic = null; arpHighlightedLinks = [];
     render(); canvas.fit();
     notify(`Öppnade verklig projektfil: ${loaded.filename}.yadilab · SHA-256 ${loaded.sha256.slice(0,14)}…`);
   } catch (error) { notify(`Kunde inte öppna: ${error.message}`,true); }
@@ -506,6 +563,34 @@ async function exportProject() {
     notify('Export/nedladdning initierad. Webbläsarens faktiska skrivning till disk är inte verifierad.');
   } catch (error) { notify(`Export avvisad: ${error.message}`,true); }
 }
+async function runArp() {
+  const selected = $('arp-source').value;
+  const targetIpv4 = $('arp-target-ip').value.trim();
+  if (!selected) return;
+  if (!targetIpv4) {
+    arpDiagnostic = {error:'Ange mål-IPv4 uttryckligen.'};
+    arpHighlightedLinks = [];
+    render();
+    return;
+  }
+  const [sourceNode, sourcePort] = JSON.parse(selected);
+  const snapshot = JSON.stringify(project);
+  try {
+    const result = await api('/api/diagnostics/arp',
+      {project, sourceNode, sourcePort, targetIpv4});
+    if (snapshot !== JSON.stringify(project)) return; // Never show a stale trace.
+    arpDiagnostic = result;
+    arpHighlightedLinks = [...new Set([
+      ...result.result.requestTransmissions, ...result.result.replyTransmissions,
+    ].map(t => t.linkId))];
+  } catch (error) {
+    if (snapshot !== JSON.stringify(project)) return;
+    arpDiagnostic = {error: error.message};
+    arpHighlightedLinks = [];
+  }
+  render();
+}
+
 async function runTrace() {
   const source = $('trace-source').value, target = $('trace-target').value;
   if (!source || !target) return;
@@ -535,6 +620,16 @@ $('import-file').addEventListener('change', async event => {
 });
 $('export-project').addEventListener('click', exportProject);
 $('run-trace').addEventListener('click', runTrace);
+$('run-arp').addEventListener('click', runArp);
+$('arp-source').addEventListener('change', () => {
+  arpDiagnostic = null; arpHighlightedLinks = []; renderArpDiagnostics();
+  canvas.setData(project, selection, pendingPort, highlightedLinks);
+});
+$('arp-target-ip').addEventListener('input', () => {
+  if (!arpDiagnostic) return;
+  arpDiagnostic = null; arpHighlightedLinks = []; renderArpDiagnostics();
+  canvas.setData(project, selection, pendingPort, highlightedLinks);
+});
 $('trace-target').addEventListener('change', () => { $('trace-target').dataset.userSelected = 'true'; });
 $('zoom-in').addEventListener('click', () => canvas.zoom(1.2));
 $('zoom-out').addEventListener('click', () => canvas.zoom(1 / 1.2));

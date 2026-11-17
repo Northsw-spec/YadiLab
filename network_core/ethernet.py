@@ -192,6 +192,27 @@ class EthernetFabric:
         """Return a detached snapshot of explicit session NIC identity bindings."""
         return dict(self._interface_macs)
 
+    def learned_mac_tables(self) -> list[dict]:
+        """Only entries learned by actual frames in THIS session, never a guess.
+
+        VLAN mode returns one record per nonempty switch/VLAN table;
+        legacy mode reports the switch's unsegmented table as VLAN null.
+        """
+        snapshots = []
+        for node in self.project["nodes"]:
+            if node["kind"] != "switch":
+                continue
+            switch_id = node["id"]
+            table = self._tables[switch_id]
+            if self._vlan_enabled:
+                for vlan_id in sorted({vlan for vlan, _ in table}):
+                    snapshots.append({"switchId": switch_id, "vlanId": vlan_id,
+                                      "entries": self.mac_table(switch_id, vlan_id)})
+            elif table:
+                snapshots.append({"switchId": switch_id, "vlanId": None,
+                                  "entries": self.mac_table(switch_id)})
+        return snapshots
+
     def inject_frame(self, node_id: str, port_id: str, frame: EthernetFrame) -> dict:
         """Forward a validated Ethernet II frame from an explicitly bound NIC.
 
