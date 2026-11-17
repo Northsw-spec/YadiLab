@@ -26,7 +26,7 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 | `storage.py` | Verkliga filer, SHA-256, förväntad föregående version | Autosave, tyst overwrite |
 | `csv_import.py` | Explicit fyrtabells-CSV till verifierad kanonisk modell | Implicita kablar, heuristisk kolumnmappning, filskrivning |
 | `arp.py` | Explicit Ethernet/IPv4 ARP-request/reply över befintlig `EthernetFabric`, flyktig cache och avvisning av okänt | Ingen IP-routing, ping, proxy-ARP, VLAN eller UI-integrering |
-| `ethernet.py` | Flyktig MAC-inlärning, explicit v1.1-port-MAC och Ethernet-forwarding på aktiva kablar | ARP, VLAN, ping, IP, STP, NIC-acceptans eller lagring av sessionstillstånd |
+| `ethernet.py` | Flyktig MAC-inlärning, explicit v1.1-port-MAC samt optional VLAN-medveten forwarding per Python-session på deklarerade kablar | ARP-protokoll, ping, IP, STP, NIC-acceptans eller lagring av VLAN-/sessionstillstånd |
 | `server.py` | Lokal UI, API, validering | Tolka källdata som topologi |
 | `web/model.js` | Explicit UI-modell, enhets- och portkommandon | Adressbaserad länkförutsägelse |
 | `web/canvas.js` | SVG-geometri och direktträff på portpunkter | Ändra noders eller länkars identitet |
