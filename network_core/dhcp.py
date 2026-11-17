@@ -455,6 +455,9 @@ class DhcpSession:
             _fail("lease has already been timestamped")
         lease["startedAtSeconds"] = clock_seconds
         lease["expiresAtSeconds"] = clock_seconds + lease["leaseSeconds"]
+        lease["t1AtSeconds"] = clock_seconds + (lease["leaseSeconds"] + 1) // 2
+        lease["t2AtSeconds"] = clock_seconds + (7 * lease["leaseSeconds"] + 7) // 8
+        lease["renewalCount"] = 0
         return dict(lease)
 
     def expire_leases(self, clock_seconds: int) -> list[dict]:
@@ -473,6 +476,124 @@ class DhcpSession:
         for lease in expired:
             del self._leases[lease["ipv4"]]
         return expired
+
+    def bound_lease(self, client_node: str, client_port: str) -> dict:
+        """Snapshot only an existing, ACK-confirmed lease of a declared client."""
+        if not isinstance(client_node, str) or not isinstance(client_port, str):
+            _fail("renewal requires the explicit client node and port")
+        for lease in self._leases.values():
+            if lease["clientNode"] == client_node and lease["clientPort"] == client_port:
+                return dict(lease)
+        _fail("client has no active BOUND lease to renew")
+
+    def renew(self, client_node: str, client_port: str,
+              server_node: str, server_port: str, phase: str,
+              transaction_id: int) -> dict:
+        """One RFC 2131 RENEWING (T1) or REBINDING (T2) REQUEST/ACK attempt.
+
+        No synthetic approval: the assigned IPv4's ciaddr travels as real
+        serialized IPv4/UDP/BOOTP bytes through the current EthernetFabric.
+        Both selected endpoints must actually receive the correct frame.
+        No mutation of the canonical NIC/IP or extension after a lost ACK.
+        """
+        if phase not in ("RENEWING", "REBINDING"):
+            _fail("renewal requires RENEWING or REBINDING phase")
+        lease = self.bound_lease(client_node, client_port)
+        if "expiresAtSeconds" not in lease:
+            _fail("renewal requires a timed BOUND session lease")
+        if lease["serverNode"] != server_node or lease["serverPort"] != server_port:
+            _fail("renewal server must match the BOUND lease's selected server")
+        client = client_node, client_port
+        server = server_node, server_port
+        macs = self.fabric.bound_macs()
+        if (macs.get(client) != lease["clientMac"] or server not in macs or
+                str(ipaddress.IPv4Interface(self.fabric.ports[server_node][server_port]
+                                            ["ipv4"]).ip) != lease["serverIdentifier"]):
+            _fail("renewal server/client identity changed since DORA")
+        client_mac, server_mac = macs[client], macs[server]
+        assigned_ip = lease["ipv4"]
+        server_ip = lease["serverIdentifier"]
+        broadcast = phase == "REBINDING"
+        request = DhcpMessage(
+            _REQUEST, transaction_id, client_mac, client_address=assigned_ip)
+        source_frame = _checked_frame(
+            request, client_mac, assigned_ip,
+            "255.255.255.255" if broadcast else server_ip,
+            BROADCAST if broadcast else server_mac)
+        # The known server MAC can only be used for T1 on the same declared
+        # Ethernet/VLAN domain; IP routing and relay are not fabricated here.
+        outgoing = self.fabric.inject_frame(*client, source_frame)
+        received = {"node": server_node, "port": server_port} in outgoing["endpointArrivals"]
+        result = {
+            "status": "REQUEST_NOT_RECEIVED",
+            "meaning": "DHCPREQUEST did not reach the selected server; existing lease remains unchanged.",
+            "phase": phase,
+            "transactionId": transaction_id,
+            "ipv4": assigned_ip,
+            "request": {
+                "transmissions": outgoing["transmissions"],
+                "vlanDrops": outgoing.get("vlanDrops", []),
+                "receivedAtServer": received,
+                "ipDestination": "255.255.255.255" if broadcast else server_ip,
+                "ethernetDestination": BROADCAST if broadcast else server_mac,
+            },
+            "ack": {"transmissions": [], "vlanDrops": [], "receivedAtClient": False},
+            "leaseRenewed": False,
+            "lease": dict(lease),
+            "macTables": self.fabric.learned_mac_tables(),
+            "ephemeral": True,
+        }
+        if not received:
+            return result
+        ack = DhcpMessage(
+            _ACK, transaction_id, client_mac,
+            server_identifier=server_ip, subnet_mask=lease["subnetMask"],
+            lease_seconds=lease["leaseSeconds"], client_address=assigned_ip)
+        response_frame = _checked_frame(
+            ack, server_mac, server_ip, assigned_ip, client_mac)
+        if (ack.transaction_id != request.transaction_id or
+                ack.client_mac != request.client_mac or
+                ack.client_address != request.client_address or
+                ack.server_identifier != server_ip):
+            _fail("renewal ACK does not match original REQUEST and selected server")
+        response = self.fabric.inject_frame(*server, response_frame)
+        accepted = {"node": client_node, "port": client_port} in response["endpointArrivals"]
+        result["ack"] = {
+            "transmissions": response["transmissions"],
+            "vlanDrops": response.get("vlanDrops", []),
+            "receivedAtClient": accepted,
+        }
+        if not accepted:
+            result["status"] = "ACK_NOT_RECEIVED"
+            result["meaning"] = "DHCPACK did not reach original client; lease duration and deadlines are unchanged."
+        else:
+            result["status"] = "ACK_RECEIVED"
+            result["meaning"] = (
+                "Correct renewal REQUEST and ACK traversed declared Layer-2 fabric; "
+                "the client retains its existing simulated address."
+            )
+            result["leaseRenewed"] = True
+        result["macTables"] = self.fabric.learned_mac_tables()
+        return result
+
+    def commit_renewal(self, ipv4: str, clock_seconds: int, transaction_id: int) -> dict:
+        """Reset an existing BOUND lease's virtual lifetime after verified ACK."""
+        if type(clock_seconds) is not int or clock_seconds < 0:
+            _fail("renewal requires a valid virtual clock")
+        if type(transaction_id) is not int or not 1 <= transaction_id <= 0xFFFFFFFF:
+            _fail("renewal transaction ID must be an integer 1..4294967295")
+        lease = self._leases.get(ipv4)
+        if lease is None or "expiresAtSeconds" not in lease:
+            _fail("cannot renew a nonexistent or untimed lease")
+        if clock_seconds >= lease["expiresAtSeconds"]:
+            _fail("expired leases must use a new DORA allocation")
+        lease["startedAtSeconds"] = clock_seconds
+        lease["expiresAtSeconds"] = clock_seconds + lease["leaseSeconds"]
+        lease["t1AtSeconds"] = clock_seconds + (lease["leaseSeconds"] + 1) // 2
+        lease["t2AtSeconds"] = clock_seconds + (7 * lease["leaseSeconds"] + 7) // 8
+        lease["transactionId"] = transaction_id
+        lease["renewalCount"] = lease.get("renewalCount", 0) + 1
+        return dict(lease)
 
     def run(self, client_node: str, client_port: str, server_node: str,
             server_port: str, pool_start: str, pool_end: str,
