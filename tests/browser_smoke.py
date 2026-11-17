@@ -208,7 +208,41 @@ def run():
             expect(page.locator('#trace-result')).to_contain_text('Ingen aktiverad dokumenterad grafväg')
             page.locator('#inspector input[type="checkbox"]').check()
 
-            # Save real bytes under local app data directory.
+            # A delayed Save acknowledgment must not restore an older DOM
+            # snapshot over edits made after clicking Save. The HTTP server
+            # really writes the staged file before we release its response.
+            page.locator('[data-item-type="node"][data-item-id="node-1"]').click()
+            page.locator('#node-label').fill('Client Alpha at Save')
+            page.locator('#node-label').dispatch_event('change')
+            page.evaluate("""() => {
+              window.__unwrappedFetch = window.fetch;
+              window.__releaseSave = null;
+              window.fetch = async (...args) => {
+                const response = await window.__unwrappedFetch(...args);
+                if (args[0] === '/api/save') {
+                  return new Promise(resolve => {
+                    window.__releaseSave = () => resolve(response);
+                  });
+                }
+                return response;
+              };
+            }""")
+            page.locator('#save-project').click()
+            page.wait_for_function("typeof window.__releaseSave === 'function'")
+            expect(page.locator('#save-project')).to_be_disabled()
+            initial_disk = json.loads((store / 'lab.yadilab').read_bytes())
+            assert initial_disk['nodes'][0]['label'] == 'Client Alpha at Save'
+            page.locator('#node-label').fill('Client Alpha after Save click')
+            page.locator('#node-label').dispatch_event('change')
+            expect(page.locator('#node-label')).to_have_value('Client Alpha after Save click')
+            page.evaluate('window.__releaseSave()')
+            expect(page.locator('#save-project')).to_be_enabled()
+            expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+            expect(page.locator('#node-label')).to_have_value('Client Alpha after Save click')
+            assert json.loads((store / 'lab.yadilab').read_bytes()) == initial_disk
+            page.evaluate('window.fetch = window.__unwrappedFetch')
+
+            # A new explicit Save writes the newer state, never autosave.
             page.locator('#save-project').click()
             expect(page.locator('#save-indicator')).to_contain_text('Sparat · lab.yadilab',timeout=12000)
             saved_file=store / 'lab.yadilab'
@@ -251,6 +285,36 @@ def run():
             expect(page.locator('[data-port-vlan="port-1"]')).to_have_value('access:10')
             expect(page.locator('[data-port-vlan="port-2"]')).to_have_value('trunk:10,20')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # A stale Open result must not overwrite a workspace replaced
+            # while the real server read was in flight.
+            page.evaluate("""() => {
+              window.__unwrappedFetch = window.fetch;
+              window.__releaseOpen = null;
+              window.fetch = async (...args) => {
+                const response = await window.__unwrappedFetch(...args);
+                if (args[0] === '/api/projects/lab') {
+                  return new Promise(resolve => {
+                    window.__releaseOpen = () => resolve(response);
+                  });
+                }
+                return response;
+              };
+            }""")
+            page.locator('#saved-projects').select_option('lab')
+            page.locator('#open-project').click()
+            page.wait_for_function("typeof window.__releaseOpen === 'function'")
+            page.locator('#new-project').click()
+            expect(page.locator('#empty-state')).to_be_visible()
+            page.evaluate('window.__releaseOpen()')
+            expect(page.locator('#toast')).to_contain_text('Öppningen avbröts')
+            expect(page.locator('#empty-state')).to_be_visible()
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            page.evaluate('window.fetch = window.__unwrappedFetch')
+            page.locator('#saved-projects').select_option('lab')
+            page.locator('#open-project').click()
+            expect(page.locator('#save-indicator')).to_contain_text('Sparat · lab.yadilab')
+            expect(page.locator('[data-link-id="link-1"]')).to_have_count(1)
 
             # Explicit export contains only the canonical document format.
             with page.expect_download(timeout=12000) as download_event:
