@@ -174,6 +174,43 @@
           <div class="eyebrow">SIMULERADE LEASES (ENDAST MINNE)</div>
           <div id="dora-session-leases" class="trace-result" aria-live="polite">Ingen aktiv lease-tabell.</div>
         </section>
+        <section class="trace-panel" aria-label="Interaktiv DHCP-felsökning">
+          <div class="eyebrow">FELSÖKNINGSLABB · PROCESS OF ELIMINATION</div>
+          <h3>Varför kan klienten inte förnya sin DHCP-lease?</h3>
+          <p class="muted tiny">Utgå från valda klient-, server- och poolvärden ovan. Labbet kontrollerar först ett faktiskt fungerande DHCPACK, flyttar den virtuella klockan till T1 och injicerar ett dolt fel. Du ser aldrig facit förrän du har undersökt nätet, diagnostiserat och återställt det. Allt sker i sessionens arbetsminne.</p>
+          <div class="session-actions">
+            <button id="investigation-start" type="button" class="btn btn-soft">Starta dolt felsökningsfall</button>
+            <button id="investigation-stop" type="button" class="btn btn-outline" disabled>Avsluta övning</button>
+          </div>
+          <div id="investigation-status" class="small-muted" role="status">Ingen felsökningsövning startad.</div>
+          <div class="eyebrow">1 · GÖR EGNA OBSERVATIONER</div>
+          <label for="investigation-probe">Undersökning</label>
+          <select id="investigation-probe" class="control">
+            <option value="lease">Kontrollera klientens lease och T1/T2</option>
+            <option value="renew">Skicka riktigt DHCPREQUEST och observera resultat</option>
+            <option value="link">Mät faktisk kabel-/länkstatus</option>
+            <option value="port">Kontrollera switchportens administrativa status</option>
+            <option value="vlan">Kontrollera dokumenterat mot observerat access-VLAN</option>
+          </select>
+          <label for="investigation-link">Kabel att mäta</label>
+          <select id="investigation-link" class="control"></select>
+          <label for="investigation-port">Switchport att undersöka</label>
+          <select id="investigation-port" class="control"></select>
+          <button id="investigation-run-probe" type="button" class="btn btn-outline full" disabled>Genomför observation</button>
+          <div id="investigation-observations" class="trace-result" aria-live="polite">Inga observationer. Kontrollera först klientens lease och försök därefter förnya DHCP.</div>
+          <div class="eyebrow">2 · PRÖVA EN HYPOTES</div>
+          <label for="investigation-diagnosis">Vilken felkategori stöds av observationerna?</label>
+          <select id="investigation-diagnosis" class="control">
+            <option value="CABLE_DOWN">Fysiskt kabelavbrott</option>
+            <option value="PORT_SHUTDOWN">Administrativt avstängd switchport</option>
+            <option value="VLAN_MISMATCH">Fel VLAN på accessport</option>
+          </select>
+          <button id="investigation-submit" type="button" class="btn btn-soft full" disabled>Pröva diagnos</button>
+          <div id="investigation-verdict" class="trace-result" aria-live="polite">Diagnos kan prövas efter ett verkligt DHCP-försök och två andra slags undersökningar.</div>
+          <div class="eyebrow">3 · VERIFIERA REPARATIONEN</div>
+          <button id="investigation-repair" type="button" class="btn btn-outline full" disabled>Återställ identifierat fel och testa riktig DHCPACK</button>
+          <div id="investigation-recovery" class="trace-result" aria-live="polite">Ingen reparation utförd. Resultatet är inte verifierat.</div>
+        </section>
         <section class="trace-panel" aria-label="Beständig Layer 2-session">
           <div class="eyebrow">LAYER 2 · SESSION</div>
           <h3>Stegvis nätverkslabb</h3>
