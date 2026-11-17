@@ -20,6 +20,7 @@ from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
 from .ipv4 import IPv4Trace
 from .icmp_ping import EchoExchange
+from .troubleshooting import compare_link_fault
 from .storage import ProjectConflictError, ProjectStore
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -109,6 +110,20 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict) or set(body) != {"project", "source", "target"}:
                     raise ProjectValidationError("trace: expected project, source, target")
                 self._json(200, topology_trace(body["project"], body["source"], body["target"]))
+            elif path == "/api/troubleshoot/link":
+                required = {"project", "sourceNode", "sourcePort", "destinationIpv4",
+                            "ttl", "identifier", "sequence", "linkId"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "troubleshoot: expected project, sourceNode, sourcePort, "
+                        "destinationIpv4, ttl, identifier, sequence, linkId"
+                    )
+                # Three isolated genuine Echo exchanges; neither user document
+                # nor on-disk store can be modified by the comparison.
+                self._json(200, compare_link_fault(
+                    body["project"], body["sourceNode"], body["sourcePort"],
+                    body["destinationIpv4"], body["ttl"], body["identifier"],
+                    body["sequence"], body["linkId"]))
             elif path == "/api/icmp/echo":
                 required = {"project", "sourceNode", "sourcePort", "destinationIpv4",
                             "ttl", "identifier", "sequence"}

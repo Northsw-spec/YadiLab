@@ -27,13 +27,14 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 | `csv_import.py` | Explicit fyrtabells-CSV till verifierad kanonisk modell | Implicita kablar, heuristisk kolumnmappning, filskrivning |
 | `arp.py` | Explicit Ethernet/IPv4 ARP-request/reply över `EthernetFabric` med sparade 1.2-VLAN eller sessions-VLAN, flyktig cache och enskild HTTP/UI-diagnostik | Ingen IP-routing, ping, proxy-ARP eller varaktig ARP-session i UI |
 | `ethernet.py` | Flyktig MAC-inlärning, explicit v1.1-port-MAC samt VLAN-forwarding på deklarerade kablar med 1.2-konfiguration eller sessionstillägg | ARP-protokoll, ping, IP, STP, NIC-acceptans eller lagring av inlärda tabeller |
-| `server.py` | Lokal UI, API, validering, ARP, sessioner, routingtabell, IPv4- och ICMP Echo-diagnostik | Tolka källdata som topologi, spara diagnostik eller påstå extern nätverksreachability |
+| `server.py` | Lokal UI, API, validering, ARP, sessioner, routingtabell, IPv4-/ICMP Echo-diagnostik och temporär kabelbrottsjämförelse | Tolka källdata som topologi, spara diagnostik eller påstå extern nätverksreachability |
 | `simulation.py` | Begränsat processlokalt sessionsregister som återanvänder en `ArpSession`/`EthernetFabric` mellan ARP- och Ethernetoperationer och validerar oförändrat projekt | Beständig session, IP-routing, ICMP eller delad projektmodell |
 | `routing.py` | Read-only IPv4-tabell per nod med connected och explicit statiska routes, on-link next-hop och deterministisk longest-prefix match | IP-paketframföring sker inte här; ingen metric eller ECMP |
 | `ipv4_packet.py` | Validerat minimalt RFC 791-datagram, headerchecksumma, TTL, experimentellt protokoll 253 och ICMP-protokoll 1 | IPv4-options, fragmentering, transport |
 | `icmp.py` | Strikt RFC 792 Echo Request/Reply typ 8/0 och typ 0/0, checksumma, ID, sekvens och payload | Andra ICMP-typer, timeoutmätning, applikationsstack |
 | `icmp_ping.py` | Riktig tur-och-retur-bunden ICMP Echo och routerursprungliga felpaket över samma `IPv4Trace` med befintlig ARP-/Ethernetmotor | Automatiska gateways, brandväggsregler, RTT, fler ICMP-felkoder |
 | `icmp_errors.py` | RFC 792 typ 11/kod 0 och typ 3/kod 0, strikta bytes, originalcitat, checksumma och skydd mot rekursiva ICMP-fel | Andra ICMP-fel, godtycklig quoted payload eller obehörig generering |
+| `troubleshooting.py` | Tre oberoende Echo-utbyten på kanoniska kopior: fungerande referens, exakt en avstängd deklarerad kabel, verifierad återställning | Ändra faktiskt arbetsdokument, automatiska reparationer, felförslag utan positiv referens, nya protokollmotorer |
 | `ipv4.py` | Enspårig IPv4-leverans över samma ARP- och Ethernetmotor, explicit next-hop per routesteg, TTL per transitrouter och matchad mottagarport | Returtrafik orkestreras separat i `icmp_ping.py`; inga ICMP-fel, NAT, ACL eller fragmentering |
 | `web/model.js` | Explicit UI-modell, enhets- och portkommandon | Adressbaserad länkförutsägelse |
 | `web/canvas.js` | SVG-geometri och direktträff på portpunkter | Ändra noders eller länkars identitet |

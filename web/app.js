@@ -59,6 +59,7 @@ let sessionHighlightedLinks = [];
 let routeLookup = null;
 let ipv4Diagnostic = null;
 let pingDiagnostic = null;
+let troubleDiagnostic = null;
 let filename = 'lab';
 let savedName = null;
 let savedSha = null;
@@ -76,6 +77,7 @@ const canvas = new TopologyCanvas($('topology'), {
       routeLookup = null;
       ipv4Diagnostic = null;
       pingDiagnostic = null;
+      troubleDiagnostic = null;
       invalidateSimulationSession();
       renderSessionDiagnostics();
       canvas.setData(project, selection, pendingPort, highlightedLinks);
@@ -125,6 +127,7 @@ function changed({keepTrace = false} = {}) {
   routeLookup = null;
   ipv4Diagnostic = null;
   pingDiagnostic = null;
+  troubleDiagnostic = null;
   // Any network/document change invalidates sessions bound to the old snapshot.
   invalidateSimulationSession();
   arpDiagnostic = null; arpHighlightedLinks = [];
@@ -383,6 +386,60 @@ function renderRouteLookup() {
       'Lika specifika kandidatvägar, inget antaget beslut:\n' + candidates.map(describe).join('\n') :
       'Ingen matchande route.',
     'Ingen faktisk paketöverföring eller ARP-förfrågan utfördes. Grafväg, VLAN, länkstatus och NIC-acceptans är inte verifierade.',
+  ].join('\n\n');
+}
+
+function renderTroubleshooting() {
+  const sourceSelect = $('trouble-source');
+  const previousSource = sourceSelect.value;
+  const sources = project.nodes.filter(n => n.kind !== 'switch')
+    .flatMap(n => n.ports.map(p => ({
+      value:JSON.stringify([n.id,p.id]),
+      label:`${n.label} / ${p.name} (${n.id}/${p.id})`,
+    })));
+  sourceSelect.replaceChildren(...sources.map(i => el('option',{value:i.value},i.label)));
+  if (sources.some(i => i.value === previousSource)) sourceSelect.value = previousSource;
+
+  const linkSelect = $('trouble-link');
+  const previousLink = linkSelect.value;
+  const links = project.links.filter(l => l.enabled);
+  linkSelect.replaceChildren(...links.map(l => el('option',{value:l.id},
+    `${l.id} (${l.a.node}/${l.a.port} ↔ ${l.b.node}/${l.b.port})`)));
+  if (links.some(l => l.id === previousLink)) linkSelect.value = previousLink;
+  $('run-troubleshoot').disabled = !sources.length || !links.length;
+
+  const output = $('trouble-result');
+  output.classList.remove('ok','fail');
+  if (!troubleDiagnostic) {
+    output.textContent = 'Inga jämförda ICMP Echo-spår. Resultatet är endast en förhandsvisning; inget projekt ändras.';
+    return;
+  }
+  if (troubleDiagnostic.error) {
+    output.classList.add('fail');
+    output.textContent = `Felsökningsjämförelse avvisad: ${troubleDiagnostic.error}`;
+    return;
+  }
+  const d = troubleDiagnostic;
+  if (d.status === 'FAULT_CONFIRMED') output.classList.add('ok');
+  else output.classList.add('fail');
+  const detail = (label, trial, wires) => {
+    const request = trial.request?.status || 'INGEN';
+    const reply = trial.reply?.status || 'INGET';
+    const ars = trial.request?.steps?.map(step=>step.arp.status).join(', ') || 'inga';
+    return `${label}: ${trial.status} · request ${request}, reply ${reply}, ARP ${ars}`
+      + `\n  Verkligt observerade kablar: ${wires.join(', ') || 'inga'}`;
+  };
+  output.textContent = [
+    `Felsökningsstatus: ${d.status}`,
+    d.meaning,
+    `Avgränsat fel: ${d.fault.linkId} · enabled true → false (endast temporär kopia)`,
+    detail('Referens',d.baseline,d.observedLinkIds.baseline),
+    detail('Kabel avstängd',d.faulted,d.observedLinkIds.faulted),
+    detail('Återställd kabel',d.restored,d.observedLinkIds.restored),
+    `Felkedja verifierad: ${d.verifiedFault ? 'JA' : 'NEJ'}`,
+    `Återställning efter fel verifierad: ${d.verifiedRecovery ? 'JA' : 'NEJ'}`,
+    `Föreslagen åtgärd: aktivera kabel ${d.repair.linkId} om det är denna som faktiskt är avstängd.`,
+    'Åtgärden tillämpas INTE på arbetsytan. Ingen autosave, uppmätt RTT eller extern trafikkontroll.',
   ].join('\n\n');
 }
 
@@ -783,6 +840,7 @@ function render() {
   renderRouteLookup();
   renderIPv4Trace();
   renderPing();
+  renderTroubleshooting();
   updateSaveIndicator();
   } finally {
     rendering = false;
@@ -857,6 +915,7 @@ async function openProject() {
     routeLookup = null;
     ipv4Diagnostic = null;
     pingDiagnostic = null;
+    troubleDiagnostic = null;
     project = loaded.project;
     filename = loaded.filename;
     savedName = loaded.filename;
@@ -1043,6 +1102,38 @@ async function stopSimulationSession() {
   render();
 }
 
+async function runTroubleshooting() {
+  const selected = $('trouble-source').value;
+  const linkId = $('trouble-link').value;
+  if (!selected || !linkId) return;
+  const [sourceNode,sourcePort] = JSON.parse(selected);
+  const destinationIpv4 = $('trouble-destination').value.trim();
+  const ttlText = $('trouble-ttl').value.trim();
+  if (!destinationIpv4 || !/^[0-9]+$/.test(ttlText) ||
+      Number(ttlText) < 1 || Number(ttlText) > 255) {
+    troubleDiagnostic = {error:'Ange destination och TTL 1–255 samt välj en aktiv deklarerad kabel.'};
+    renderTroubleshooting();
+    return;
+  }
+  const ttl = Number(ttlText);
+  const snapshot = JSON.stringify(project);
+  const inputs = [selected,linkId,destinationIpv4,ttlText].join('|');
+  const stillCurrent = () => snapshot === JSON.stringify(project) &&
+    [ $('trouble-source').value,$('trouble-link').value,
+      $('trouble-destination').value.trim(),$('trouble-ttl').value.trim()
+    ].join('|') === inputs;
+  try {
+    const result = await api('/api/troubleshoot/link',
+      {project,sourceNode,sourcePort,destinationIpv4,ttl,identifier:1,sequence:1,linkId});
+    if (!stillCurrent()) return;
+    troubleDiagnostic = result;
+  } catch (error) {
+    if (!stillCurrent()) return;
+    troubleDiagnostic = {error:error.message};
+  }
+  renderTroubleshooting();
+}
+
 async function runPing() {
   const selected = $('ping-source').value;
   if (!selected) return;
@@ -1162,6 +1253,12 @@ $('run-trace').addEventListener('click', runTrace);
 $('run-route-lookup').addEventListener('click', runRouteLookup);
 $('run-ipv4-trace').addEventListener('click', runIPv4Trace);
 $('run-ping').addEventListener('click', runPing);
+$('run-troubleshoot').addEventListener('click', runTroubleshooting);
+for (const id of ['trouble-source','trouble-link','trouble-destination','trouble-ttl']) {
+  $(id).addEventListener(id === 'trouble-source' || id === 'trouble-link' ? 'change' : 'input', () => {
+    troubleDiagnostic = null; renderTroubleshooting();
+  });
+}
 for (const id of ['ping-source','ping-destination','ping-ttl','ping-identifier','ping-sequence']) {
   $(id).addEventListener(id === 'ping-source' ? 'change' : 'input', () => {
     pingDiagnostic = null; renderPing();

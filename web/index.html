@@ -144,6 +144,21 @@
           <button id="run-ping" class="btn btn-soft full" type="button">Skicka ICMP Echo</button>
           <div id="ping-result" class="trace-result" aria-live="polite">Ingen Echo-förfrågan har skickats.</div>
         </section>
+        <section class="trace-panel" aria-label="Kontrollerad felsökningsövning">
+          <div class="eyebrow">FELSÖKNING · KONTROLLERAT FEL</div>
+          <h3>Jämför kabelbrott och återställning</h3>
+          <p class="muted tiny">Tre oberoende riktiga simulerade ICMP Echo-försök: referens, exakt en avstängd deklarerad kabel, och återställd kabel. Testet ändrar inte arbetsytan eller sparad fil.</p>
+          <label for="trouble-source">Källgränssnitt</label>
+          <select id="trouble-source" class="control"></select>
+          <label for="trouble-destination">Destinations-IPv4</label>
+          <input id="trouble-destination" class="control" type="text" autocomplete="off" placeholder="192.0.2.20">
+          <label for="trouble-link">Kabel att stänga av tillfälligt</label>
+          <select id="trouble-link" class="control"></select>
+          <label for="trouble-ttl">TTL per riktning (1–255)</label>
+          <input id="trouble-ttl" class="control" type="number" min="1" max="255" step="1" value="5">
+          <button id="run-troubleshoot" class="btn btn-soft full" type="button">Verifiera fel och återställning</button>
+          <div id="trouble-result" class="trace-result" aria-live="polite">Ingen kontrollerad felsökningsjämförelse utförd.</div>
+        </section>
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
