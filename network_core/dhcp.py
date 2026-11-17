@@ -59,11 +59,12 @@ def _mask(value: str) -> str:
 
 @dataclass(frozen=True)
 class DhcpMessage:
-    """Strict selecting-state DHCP broadcast payload with BOOTP broadcast flag.
+    """Strict RFC 2131 selecting-state DORA and restricted T1/T2 renewals.
 
-    Supports types 1/2/3/5 only. DHCPREQUEST carries options 50 and 54,
-    while DHCPOFFER/ACK carry yiaddr, options 1, 51 and 54. No relay,
-    renewal, client identifiers, option overload or actual host IP writes.
+    SELECTING requests include options 50+54 with ciaddr=0 and broadcast
+    flags. RENEWING/REBINDING requests use ciaddr, no options 50/54 and
+    clear broadcast flag. Renewal ACKs have ciaddr, yiaddr=0 and option 54.
+    This intentionally excludes relay, option overload, NAK and real NIC writes.
     """
     message_type: int
     transaction_id: int
@@ -73,6 +74,7 @@ class DhcpMessage:
     subnet_mask: str | None = None
     lease_seconds: int | None = None
     requested_address: str | None = None
+    client_address: str | None = None
 
     def __post_init__(self):
         if type(self.message_type) is not int or self.message_type not in (
@@ -81,27 +83,43 @@ class DhcpMessage:
         if type(self.transaction_id) is not int or not 1 <= self.transaction_id <= 0xFFFFFFFF:
             _fail("transaction ID must be an integer 1..4294967295")
         object.__setattr__(self, "client_mac", normalize_mac(self.client_mac, source=True))
+        if self.client_address is not None:
+            if self.message_type not in (_REQUEST, _ACK):
+                _fail("ciaddr is only supported for renewal REQUEST/ACK")
+            object.__setattr__(self, "client_address",
+                               _address(self.client_address, "ciaddr"))
         if self.message_type == _DISCOVER:
             if any(x is not None for x in (
                     self.offered_address, self.server_identifier, self.subnet_mask,
-                    self.lease_seconds, self.requested_address)):
+                    self.lease_seconds, self.requested_address, self.client_address)):
                 _fail("DISCOVER cannot contain offer or request options")
         elif self.message_type == _REQUEST:
-            if (self.offered_address is not None or self.subnet_mask is not None
-                    or self.lease_seconds is not None
-                    or self.requested_address is None or self.server_identifier is None):
-                _fail("REQUEST requires only requested IPv4 and server identifier")
-            object.__setattr__(self, "requested_address",
-                               _address(self.requested_address, "requested IPv4"))
-            object.__setattr__(self, "server_identifier",
-                               _address(self.server_identifier, "server identifier"))
+            if self.offered_address is not None or self.subnet_mask is not None or self.lease_seconds is not None:
+                _fail("REQUEST cannot contain offer fields")
+            if self.client_address is not None:
+                if self.requested_address is not None or self.server_identifier is not None:
+                    _fail("renewal REQUEST uses ciaddr and forbids options 50/54")
+            else:
+                if self.requested_address is None or self.server_identifier is None:
+                    _fail("SELECTING REQUEST requires requested IPv4 and server identifier")
+                object.__setattr__(self, "requested_address",
+                                   _address(self.requested_address, "requested IPv4"))
+                object.__setattr__(self, "server_identifier",
+                                   _address(self.server_identifier, "server identifier"))
         else:
-            if (self.requested_address is not None or any(x is None for x in (
-                    self.offered_address, self.server_identifier,
-                    self.subnet_mask, self.lease_seconds))):
+            if (self.requested_address is not None
+                    or self.message_type == _OFFER and self.client_address is not None):
+                _fail("OFFER/ACK incompatible requested IP or ciaddr")
+            if (self.message_type == _ACK and self.client_address is not None
+                    and self.offered_address is not None):
+                _fail("renewal ACK must not set yiaddr")
+            if (self.client_address is None and self.offered_address is None
+                    or self.server_identifier is None or self.subnet_mask is None
+                    or self.lease_seconds is None):
                 _fail("OFFER/ACK require address, server identifier, subnet mask and lease")
-            object.__setattr__(self, "offered_address",
-                               _address(self.offered_address, "offered IPv4"))
+            if self.offered_address is not None:
+                object.__setattr__(self, "offered_address",
+                                   _address(self.offered_address, "offered IPv4"))
             object.__setattr__(self, "server_identifier",
                                _address(self.server_identifier, "server identifier"))
             object.__setattr__(self, "subnet_mask", _mask(self.subnet_mask))
@@ -112,9 +130,12 @@ class DhcpMessage:
         client = bytes.fromhex(self.client_mac.replace(":", ""))
         yiaddr = (ipaddress.IPv4Address(self.offered_address).packed
                   if self.message_type in (_OFFER, _ACK) else _ZERO_IP)
+        renewed = self.client_address is not None
         header = _BOOTP.pack(
             1 if self.message_type in (_DISCOVER, _REQUEST) else 2, 1, 6, 0,
-            self.transaction_id, 0, 0x8000, _ZERO_IP, yiaddr, _ZERO_IP,
+            self.transaction_id, 0, 0 if renewed else 0x8000,
+            ipaddress.IPv4Address(self.client_address).packed if renewed else _ZERO_IP,
+            yiaddr, _ZERO_IP,
             _ZERO_IP, client.ljust(16, b"\x00"), bytes(64), bytes(128),
         )
         options = bytes((53, 1, self.message_type))
@@ -122,7 +143,7 @@ class DhcpMessage:
             options += (bytes((54, 4)) + ipaddress.IPv4Address(self.server_identifier).packed
                         + bytes((1, 4)) + ipaddress.IPv4Address(self.subnet_mask).packed
                         + bytes((51, 4)) + self.lease_seconds.to_bytes(4, "big"))
-        elif self.message_type == _REQUEST:
+        elif self.message_type == _REQUEST and not renewed:
             options += (bytes((50, 4)) + ipaddress.IPv4Address(self.requested_address).packed
                         + bytes((54, 4)) + ipaddress.IPv4Address(self.server_identifier).packed)
         # DHCP's documented minimum IP UDP payload is 300 bytes.
@@ -134,8 +155,10 @@ class DhcpMessage:
             _fail("DHCP payload must be 300..1472 bytes")
         (op, hardware, hlen, hops, xid, secs, flags, ci, yi, si, gi, ch,
          sname, file_name) = _BOOTP.unpack(payload[:236])
-        if ((hardware, hlen, hops, secs, flags) != (1, 6, 0, 0, 0x8000)
-                or ci != _ZERO_IP or si != _ZERO_IP or gi != _ZERO_IP
+        renewal = ci != _ZERO_IP
+        expected_flags = 0 if renewal else 0x8000
+        if ((hardware, hlen, hops, secs, flags) != (1, 6, 0, 0, expected_flags)
+                or si != _ZERO_IP or gi != _ZERO_IP
                 or any(ch[6:]) or any(sname) or any(file_name)
                 or payload[236:240] != _COOKIE):
             _fail("unsupported BOOTP fields, hardware, relay or magic cookie")
@@ -175,16 +198,22 @@ class DhcpMessage:
         if kind not in allowed:
             _fail("unsupported DHCP message type")
         expected_op, expected_options = allowed[kind]
+        if renewal:
+            if kind not in (_REQUEST, _ACK):
+                _fail("only REQUEST/ACK may carry nonzero ciaddr")
+            expected_options = {53} if kind == _REQUEST else {53, 54, 1, 51}
         if (op != expected_op or set(options) != expected_options or
-                (kind in (_DISCOVER, _REQUEST) and yi != _ZERO_IP)):
+                (kind in (_DISCOVER, _REQUEST) and yi != _ZERO_IP) or
+                (renewal and yi != _ZERO_IP)):
             _fail("BOOTP operation or DHCP options disagree")
         return cls(
             kind, xid, ch[:6].hex(":"),
-            str(ipaddress.IPv4Address(yi)) if kind in (_OFFER, _ACK) else None,
-            str(ipaddress.IPv4Address(options[54])) if kind != _DISCOVER else None,
-            str(ipaddress.IPv4Address(options[1])) if kind in (_OFFER, _ACK) else None,
-            int.from_bytes(options[51], "big") if kind in (_OFFER, _ACK) else None,
-            str(ipaddress.IPv4Address(options[50])) if kind == _REQUEST else None,
+            str(ipaddress.IPv4Address(yi)) if kind in (_OFFER, _ACK) and not renewal else None,
+            str(ipaddress.IPv4Address(options[54])) if 54 in options else None,
+            str(ipaddress.IPv4Address(options[1])) if 1 in options else None,
+            int.from_bytes(options[51], "big") if 51 in options else None,
+            str(ipaddress.IPv4Address(options[50])) if 50 in options else None,
+            str(ipaddress.IPv4Address(ci)) if renewal else None,
         )
 
 
@@ -192,11 +221,12 @@ def _sum_even(value: bytes) -> int:
     return checksum(value if len(value) % 2 == 0 else value + b"\x00")
 
 
-def _datagram(message: DhcpMessage, source: str) -> bytes:
-    # DHCP bootstrapping is the only explicitly allowed 0.0.0.0/broadcast
-    # IPv4 use. Normal IPv4Trace's unicast routing rules remain unchanged.
+def _datagram(message: DhcpMessage, source: str,
+              destination: str = "255.255.255.255") -> bytes:
+    # Only DHCP-specific bootstrap + renewal traffic. General IPv4Trace
+    # routing/unicast behavior is not changed by this strict packet codec.
     src = ipaddress.IPv4Address(source).packed
-    dst = ipaddress.IPv4Address("255.255.255.255").packed
+    dst = ipaddress.IPv4Address(destination).packed
     source_port, destination_port = ((68, 67) if message.message_type in (_DISCOVER, _REQUEST)
                                      else (67, 68))
     payload = message.serialize()
@@ -212,17 +242,17 @@ def _datagram(message: DhcpMessage, source: str) -> bytes:
 
 
 def _decode_datagram(frame: EthernetFrame) -> tuple[str, DhcpMessage]:
-    if not isinstance(frame, EthernetFrame) or frame.destination != BROADCAST or (
+    if not isinstance(frame, EthernetFrame) or (
             frame.ether_type != _ETHER_IPV4 or frame.vlan_id is not None):
-        _fail("expected untagged Ethernet IPv4 limited broadcast")
+        _fail("expected untagged Ethernet IPv4 DHCP")
     raw = frame.payload
     if len(raw) < 28:
         _fail("truncated IPv4/UDP datagram")
     version, tos, total, identification, flags, ttl, protocol, crc, src, dst = _IPV4.unpack(raw[:20])
     if ((version, tos, identification, flags, ttl, protocol) != (0x45, 0, 0, 0, 64, 17)
-            or dst != b"\xff" * 4 or not 28 <= total <= len(raw)
+            or not 28 <= total <= len(raw)
             or any(raw[total:]) or checksum(raw[:20]) != 0):
-        _fail("invalid limited broadcast IPv4 header, checksum or padding")
+        _fail("invalid DHCP IPv4 header, checksum or padding")
     src_port, dst_port, udp_len, udp_crc = _UDP.unpack(raw[20:28])
     if udp_len != total - 20 or not udp_crc:
         _fail("invalid UDP length or missing checksum")
@@ -232,14 +262,29 @@ def _decode_datagram(frame: EthernetFrame) -> tuple[str, DhcpMessage]:
     message = DhcpMessage.parse(raw[28:total])
     client_message = message.message_type in (_DISCOVER, _REQUEST)
     expected_ports = (68, 67) if client_message else (67, 68)
-    if (src_port, dst_port) != expected_ports or (client_message and src != _ZERO_IP):
+    renewing = message.client_address is not None
+    ip_source = str(ipaddress.IPv4Address(src))
+    ip_destination = str(ipaddress.IPv4Address(dst))
+    if (src_port, dst_port) != expected_ports or
+            (client_message and ip_source != (
+                message.client_address if renewing else "0.0.0.0"))):
         _fail("DHCP message type, IPv4 source or UDP ports mismatch")
-    if not client_message and (
-            str(ipaddress.IPv4Address(src)) != message.server_identifier):
+    if not client_message and ip_source != message.server_identifier:
         _fail("DHCP server IPv4 source differs from server identifier")
     if client_message and frame.source != message.client_mac:
         _fail("DHCP client Ethernet MAC differs from BOOTP chaddr")
-    return str(ipaddress.IPv4Address(src)), message
+    if renewing:
+        if client_message:
+            # T1 unicast (IP destination explicit server) or T2 broadcast.
+            if (ip_destination == "255.255.255.255") != (frame.destination == BROADCAST):
+                _fail("renewal request IP/Ethernet broadcast disagreement")
+            if ip_destination != "255.255.255.255":
+                _address(ip_destination, "renewal server destination")
+        elif ip_destination != message.client_address or frame.destination != message.client_mac:
+            _fail("renewal ACK must unicast to ciaddr and BOOTP chaddr")
+    elif ip_destination != "255.255.255.255" or frame.destination != BROADCAST:
+        _fail("bootstrap DHCP requires limited broadcast")
+    return ip_source, message
 
 
 def discover_offer(project: object, client_node: str, client_port: str,
@@ -338,9 +383,13 @@ def _discover_offer(fabric: EthernetFabric, client_node: str, client_port: str,
     return finish("OFFER_RECEIVED", second)
 
 
-def _checked_frame(message: DhcpMessage, sender_mac: str, source_ip: str) -> EthernetFrame:
-    """Encode and independently check the DHCP, UDP and IPv4 wire bytes."""
-    frame = EthernetFrame(BROADCAST, sender_mac, _ETHER_IPV4, _datagram(message, source_ip))
+def _checked_frame(message: DhcpMessage, sender_mac: str, source_ip: str,
+                   destination_ip: str = "255.255.255.255",
+                   destination_mac: str = BROADCAST) -> EthernetFrame:
+    """Encode and independently check complete DHCP + UDP/IPv4 + Ethernet bytes."""
+    frame = EthernetFrame(
+        destination_mac, sender_mac, _ETHER_IPV4,
+        _datagram(message, source_ip, destination_ip))
     checked = EthernetFrame.parse(frame.serialize())
     if _decode_datagram(checked) != (source_ip, message):
         _fail("DHCP wire encode/decode mismatch")
