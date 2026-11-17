@@ -43,7 +43,11 @@ Detta är **inte** en färdig Ethernet-/ARP-/IP-simulator och har **ännu ingen 
 
 Den fristående Layer 2-motorn kan nu serialisera och tolka väldefinierade Ethernet II-ramar utan FCS, med strikt EtherType- och MAC-validering. En simuleringssession kan få **uttryckliga port-MAC-bindningar** och avvisar ramkällor utan sådan bindning eller med fel källadress. MAC-tabeller lärs fortfarande in av verkligt simulerade inkommande ramar, inte av IP-adresser eller påhittade enheter.
 
-**Begränsning:** MAC-bindningarna lagras endast i simuleringssessionen, inte i projektfilen. GUI, ARP, VLAN, IP och ping stöds ännu inte av motorn. Se [Ethernet II-kontrakt](docs/ETHERNET_FRAMES.md) och [forwardingkontrakt](docs/ETHERNET_FORWARDING.md).
+**Begränsning:** MAC-bindningarna lagras endast i simuleringssessionen, inte i projektfilen. GUI, VLAN, IP och ping stöds ännu inte av forwardingmotorn. Separat och strikt ARP-session stöds enbart via Python-API; se nästa avsnitt. Se [Ethernet II-kontrakt](docs/ETHERNET_FRAMES.md) och [forwardingkontrakt](docs/ETHERNET_FORWARDING.md).
+
+## Isolerad ARP-fråga och svar (endast Python)
+
+Den separata modulen `network_core/arp.py` modellerar ARP-meddelanden enligt Ethernet/IPv4-formatet och kör en uttrycklig **request → broadcast-forwarding → reply → ARP-cache** över redan deklarerade och aktiva länkar. Både IPv4-gränssnitt och MAC-bindningar måste anges uttryckligen. Resultaten gäller **bara den begränsade simuleringssessionen** och är inte ping, IP-routing, VLAN eller verklig nätverksreachability. Modulen är ännu inte integrerad i UI eller beständig projektlagring. Se [ARP-kontraktet](docs/ARP.md).
 
 ## Avsiktligt INTE implementerat
 
