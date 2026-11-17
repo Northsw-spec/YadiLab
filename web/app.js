@@ -508,6 +508,142 @@ function renderDoraDiagnostics() {
   output.textContent = resultLines.join('\n\n');
 }
 
+function investigationDescription(probe, observation) {
+  if (probe === 'lease') {
+    return 'LEASE: ' + observation.status + ' · IPv4 ' + observation.ipv4
+      + ' · t=' + observation.clockSeconds + ' s'
+      + ' · T1 ' + observation.t1AtSeconds + ' s · T2 '
+      + observation.t2AtSeconds + ' s · kvar ' + observation.remainingSeconds + ' s';
+  }
+  if (probe === 'renew') {
+    return 'DHCPREQUEST: ' + observation.status + ' · fas ' + observation.phase
+      + '\n  REQUEST nådde vald server: ' + (observation.requestReachedServer ? 'ja' : 'nej')
+      + '\n  DHCPACK nådde klienten: ' + (observation.ackReachedClient ? 'ja' : 'nej')
+      + '\n  Simulerade kablar: ' + (observation.transmissions.map(t => t.linkId).join(', ') || 'inga')
+      + '\n  VLAN-droppar: ' + (observation.vlanDrops.length
+        ? observation.vlanDrops.map(d => d.reason + ' vid ' + d.switch + '/' + d.port).join(', ')
+        : 'inga observerade')
+      + '\n  Lease förnyad: ' + (observation.leaseRenewed ? 'ja' : 'nej');
+  }
+  if (probe === 'link') {
+    return 'LÄNKMÄTNING ' + observation.linkId + ': '
+      + observation.observedCarrier + ' · dokumenterat aktiv: '
+      + (observation.documentedActive ? 'ja' : 'nej')
+      + '\n  ' + observation.endpoints.map(x => x.node + '/' + x.port).join(' ↔ ');
+  }
+  if (probe === 'port') {
+    return 'SWITCHPORT ' + observation.nodeId + '/' + observation.portId
+      + ' · administrativ status: ' + observation.observedAdmin
+      + ' · operativ länk: ' + observation.observedCarrier;
+  }
+  if (probe === 'vlan') {
+    return 'ACCESS-VLAN ' + observation.nodeId + '/' + observation.portId
+      + ' · dokumenterat VLAN ' + observation.documentedVlan
+      + ' · observerat VLAN ' + observation.observedVlan;
+  }
+  return 'Okänd observation';
+}
+
+function renderInvestigation() {
+  const active = investigationId !== null;
+  const busy = investigationBusy;
+  const startValues = doraSessionInput();
+  $('investigation-start').disabled = active || busy
+    || !startValues[0] || !startValues[1] || !startValues[2] || !startValues[3];
+  $('investigation-stop').disabled = !active || busy;
+  const links = project.links.filter(link => link.enabled
+    && [link.a, link.b].every(endpoint => {
+      const node = project.nodes.find(n => n.id === endpoint.node);
+      return node?.ports.some(p => p.id === endpoint.port && p.enabled);
+    }));
+  const linkSelector = $('investigation-link');
+  const previousLink = linkSelector.value;
+  linkSelector.replaceChildren(...links.map(link =>
+    el('option', {value:link.id}, link.id + ' · '
+      + link.a.node + '/' + link.a.port + ' ↔ ' + link.b.node + '/' + link.b.port)));
+  if (links.some(l => l.id === previousLink)) linkSelector.value = previousLink;
+  const switches = project.nodes.filter(n => n.kind === 'switch')
+    .flatMap(n => n.ports.filter(p => p.enabled && links.some(l =>
+      (l.a.node === n.id && l.a.port === p.id)
+      || (l.b.node === n.id && l.b.port === p.id)))
+      .map(p => ({nodeId:n.id, portId:p.id})));
+  const portSelector = $('investigation-port');
+  const previousPort = portSelector.value;
+  portSelector.replaceChildren(...switches.map(p => el('option',
+    {value:JSON.stringify([p.nodeId, p.portId])}, p.nodeId + '/' + p.portId)));
+  if (switches.some(p => JSON.stringify([p.nodeId, p.portId]) === previousPort)) {
+    portSelector.value = previousPort;
+  }
+  const selectedProbe = $('investigation-probe').value;
+  const needsLink = selectedProbe === 'link';
+  const needsPort = selectedProbe === 'port' || selectedProbe === 'vlan';
+  linkSelector.disabled = !active || busy || !needsLink;
+  portSelector.disabled = !active || busy || !needsPort;
+  $('investigation-probe').disabled = !active || busy;
+  $('investigation-run-probe').disabled = !active || busy
+    || (needsLink && !linkSelector.value) || (needsPort && !portSelector.value)
+    || Boolean(investigationState?.repaired);
+  const observed = new Set(investigationState?.probesPerformed ?? []);
+  $('investigation-submit').disabled = !active || busy
+    || Boolean(investigationState?.repaired) || Boolean(investigationState?.diagnosed)
+    || !observed.has('renew') || [...observed].filter(k => k !== 'renew').length < 2;
+  $('investigation-diagnosis').disabled = !active || busy || Boolean(investigationState?.diagnosed);
+  $('investigation-repair').disabled = !active || busy
+    || !investigationState?.diagnosed || Boolean(investigationState?.repaired);
+  const status = $('investigation-status');
+  status.textContent = investigationBusy
+    ? 'Undersökning pågår…'
+    : investigationError ? 'Felsökningslabb: ' + investigationError
+    : active
+      ? 'Aktiv övning · ' + investigationState.clientNode + '/' + investigationState.clientPort
+        + ' · simulerad tid ' + investigationState.clockSeconds + ' s'
+        + ' · tidigare DHCP-lease ' + investigationState.leaseIpv4
+        + ' · ' + investigationState.remainingSeconds + ' s kvar'
+        + ' · ' + investigationState.observations + ' observation(er)'
+      : 'Ingen felsökningsövning. Starta från ett dokumenterat DHCP-nät.';
+  const log = $('investigation-observations');
+  log.classList.remove('ok', 'fail');
+  log.textContent = investigationLog.length
+    ? investigationLog.map((x, i) => (i + 1) + '. '
+        + (x.error ? 'MÄTNING AVVISAD: ' + x.error :
+          investigationDescription(x.probe, x.observation))).join('\n\n')
+    : 'Inga observationer. Börja gärna med lease, skicka sedan DHCPREQUEST och undersök de möjliga felvägarna.';
+  const verdict = $('investigation-verdict');
+  verdict.classList.remove('ok', 'fail');
+  if (investigationVerdict?.error) {
+    verdict.classList.add('fail');
+    verdict.textContent = investigationVerdict.error;
+  } else if (investigationVerdict) {
+    verdict.classList.add(investigationVerdict.correct ? 'ok' : 'fail');
+    verdict.textContent = investigationVerdict.correct
+      ? 'DIAGNOS BEKRÄFTAD. Du kan nu återställa den identifierade felkategorin '
+        + 'och testa om ett faktiskt DHCPACK når klienten.'
+      : 'HYPOTES AVVISAD. ' + investigationVerdict.feedback
+        + ' Det verkliga felet avslöjas inte.';
+  } else {
+    verdict.textContent = 'Pröva en hypotes först efter ett faktiskt DHCPREQUEST och '
+      + 'minst två andra olika slags observationer.';
+  }
+  const recovery = $('investigation-recovery');
+  recovery.classList.remove('ok', 'fail');
+  if (investigationRecovery?.error) {
+    recovery.classList.add('fail');
+    recovery.textContent = 'Åtgärd avvisad: ' + investigationRecovery.error;
+  } else if (investigationRecovery) {
+    recovery.classList.add(investigationRecovery.status === 'RECOVERED' ? 'ok' : 'fail');
+    recovery.textContent = 'RESULTAT: ' + investigationRecovery.status
+      + '\nREQUEST nådde servern: ' + (investigationRecovery.requestReachedServer ? 'ja' : 'nej')
+      + '\nACK nådde klienten: ' + (investigationRecovery.ackReachedClient ? 'ja' : 'nej')
+      + '\nNy simulerad slutsekund: ' + investigationRecovery.expiresAtSeconds
+      + (investigationRecovery.status === 'RECOVERED'
+        ? '\nBekräftat övningsfel: ' + investigationRecovery.cause
+          + ' · identifierad dokumenterad målpunkt: ' + JSON.stringify(investigationRecovery.repair)
+        : '\nIngen verifierad DHCP-reparation. Återställning av annan okänd orsak påstås inte.');
+  } else {
+    recovery.textContent = 'Ingen reparation. Återställning kräver bekräftad diagnos och verklig DHCPACK.';
+  }
+}
+
 function renderDoraSession() {
   const active = doraSessionId !== null;
   const clients = dhcpPortChoices('client');
