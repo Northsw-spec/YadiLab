@@ -115,6 +115,18 @@
           <button id="run-route-lookup" class="btn btn-soft full" type="button">Undersök routingtabell</button>
           <div id="route-result" class="trace-result" aria-live="polite">Ingen routingtabell har undersökts.</div>
         </section>
+        <section class="trace-panel" aria-label="IPv4-paketspårning">
+          <div class="eyebrow">LAYER 3 · IPv4 DATAGRAM</div>
+          <h3>Spåra IPv4-datagram</h3>
+          <p class="muted tiny">Ett experimentellt IPv4-datagram skickas genom explicit routing, ARP, kablar och VLAN. Ingen ping eller ICMP-reply. Varje körning har tomma ARP-/MAC-tabeller.</p>
+          <label for="ipv4-source">Källgränssnitt</label><select id="ipv4-source" class="control"></select>
+          <label for="ipv4-destination">Destinations-IPv4</label>
+          <input id="ipv4-destination" class="control" type="text" autocomplete="off" placeholder="203.0.113.20">
+          <label for="ipv4-ttl">Start-TTL (1–255)</label>
+          <input id="ipv4-ttl" class="control" type="number" min="1" max="255" step="1" value="4">
+          <button id="run-ipv4-trace" type="button" class="btn btn-soft full">Simulera IPv4-paket</button>
+          <div id="ipv4-result" class="trace-result" aria-live="polite">Inget IPv4-datagram har skickats.</div>
+        </section>
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

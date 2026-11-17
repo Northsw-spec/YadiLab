@@ -533,6 +533,38 @@ def run():
             expect(page.locator('#route-result')).to_contain_text('Routingstatus: MATCH')
             expect(page.locator('#route-result')).to_contain_text('STATIC')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # PR17: actual IPv4 datagram bytes, ARP and Ethernet on the real
+            # documented VLAN 10. A /24-connected peer can receive TTL=1.
+            page.locator('#ipv4-source').select_option(source_option)
+            page.locator('#ipv4-destination').fill('192.0.2.20')
+            page.locator('#ipv4-ttl').fill('1')
+            with page.expect_response('**/api/ipv4/trace') as delivered:
+                page.locator('#run-ipv4-trace').click()
+            assert delivered.value.status == 200
+            assert delivered.value.json()['status'] == 'DELIVERED'
+            expect(page.locator('#ipv4-result')).to_contain_text('IPv4-status: DELIVERED')
+            expect(page.locator('#ipv4-result')).to_contain_text('Mottagande port: node-3/port-1')
+            expect(page.locator('#ipv4-result')).to_contain_text('IPv4-ramar: 2')
+            expect(page.locator('#ipv4-result')).to_contain_text('Ingen ICMP Echo/Time Exceeded')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # Static next-hop is declared, but nobody at 192.0.2.1 is on
+            # the actual wires; no fabricated L3 delivery.
+            page.locator('#ipv4-destination').fill('203.0.113.10')
+            page.locator('#ipv4-ttl').fill('4')
+            with page.expect_response('**/api/ipv4/trace') as not_reached:
+                page.locator('#run-ipv4-trace').click()
+            assert not_reached.value.status == 200
+            assert not_reached.value.json()['status'] == 'ARP_FAILED'
+            expect(page.locator('#ipv4-result')).to_contain_text('IPv4-status: ARP_FAILED')
+            expect(page.locator('#ipv4-result')).to_contain_text('IPv4-ramar: 0')
+            page.locator('#ipv4-ttl').fill('0')
+            with page.expect_response('**/api/ipv4/trace') as invalid_ttl:
+                page.locator('#run-ipv4-trace').click()
+            assert invalid_ttl.value.status == 422
+            expect(page.locator('#ipv4-result')).to_contain_text('IPv4-simulering avvisad')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')

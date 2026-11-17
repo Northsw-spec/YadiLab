@@ -57,6 +57,7 @@ let sessionOperationCount = 0;
 let sessionDiagnostic = null;
 let sessionHighlightedLinks = [];
 let routeLookup = null;
+let ipv4Diagnostic = null;
 let filename = 'lab';
 let savedName = null;
 let savedSha = null;
@@ -72,6 +73,7 @@ const canvas = new TopologyCanvas($('topology'), {
       node.y = Math.max(-100000, Math.min(100000, y));
       traceResult = null; highlightedLinks = [];
       routeLookup = null;
+      ipv4Diagnostic = null;
       invalidateSimulationSession();
       renderSessionDiagnostics();
       canvas.setData(project, selection, pendingPort, highlightedLinks);
@@ -119,6 +121,7 @@ function updateSaveIndicator() {
 function changed({keepTrace = false} = {}) {
   if (!keepTrace) {traceResult = null; highlightedLinks = [];}
   routeLookup = null;
+  ipv4Diagnostic = null;
   // Any network/document change invalidates sessions bound to the old snapshot.
   invalidateSimulationSession();
   arpDiagnostic = null; arpHighlightedLinks = [];
@@ -378,6 +381,58 @@ function renderRouteLookup() {
       'Ingen matchande route.',
     'Ingen faktisk paketöverföring eller ARP-förfrågan utfördes. Grafväg, VLAN, länkstatus och NIC-acceptans är inte verifierade.',
   ].join('\n\n');
+}
+
+function renderIPv4Trace() {
+  const select = $('ipv4-source');
+  const previous = select.value;
+  const sources = project.nodes.filter(n => n.kind !== 'switch')
+    .flatMap(n => n.ports.map(p => ({
+      value:JSON.stringify([n.id,p.id]),
+      label:`${n.label} / ${p.name} (${n.id}/${p.id})`,
+    })));
+  select.replaceChildren(...sources.map(i => el('option',{value:i.value},i.label)));
+  if (sources.some(i => i.value === previous)) select.value = previous;
+  $('run-ipv4-trace').disabled = !sources.length;
+
+  const output = $('ipv4-result');
+  output.classList.remove('ok', 'fail');
+  if (!ipv4Diagnostic) {
+    output.textContent = 'Ingen aktuell IPv4-simulering. Paketet skickas bara på uttrycklig begäran.';
+    return;
+  }
+  if (ipv4Diagnostic.error) {
+    output.classList.add('fail');
+    output.textContent = `IPv4-simulering avvisad: ${ipv4Diagnostic.error}\nIngen leverans är verifierad.`;
+    return;
+  }
+  const r = ipv4Diagnostic;
+  output.classList.add(r.status === 'DELIVERED' ? 'ok' : 'fail');
+  const lines = [
+    `IPv4-status: ${r.status}`,
+    r.meaning,
+    `IP ${r.sourceIpv4} → ${r.destinationIpv4}; TTL ${r.initialTtl} → ${r.finalTtl}`,
+    r.receiver ? `Mottagande port: ${r.receiver.node}/${r.receiver.port}` : 'Ingen verifierad mottagande IPv4-port.',
+  ];
+  for (const [i, step] of r.steps.entries()) {
+    lines.push(`Hopp ${i+1}: ${step.node}/${step.outPort}, TTL ${step.ttlSent}`);
+    lines.push(`  ${step.route.type} ${step.route.destination}`
+      + ` · next-hop ${step.nextHopIpv4}`
+      + (step.route.routeId ? ` · ${step.route.routeId}` : ''));
+    lines.push(`  ARP: ${step.arp.status}, ${step.arp.resolvedMac || 'MAC ej upplöst'}`);
+    const a = [...step.arp.requestTransmissions, ...step.arp.replyTransmissions];
+    lines.push(`  ARP på kablar: ${a.map(t=>t.linkId).join(', ') || 'inga'}`);
+    lines.push(`  IPv4-ramar: ${step.ipv4Transmissions.length}`);
+    for (const wire of step.ipv4Transmissions) lines.push(
+      `    ${wire.linkId}: ${wire.from.node}/${wire.from.port} → ${wire.to.node}/${wire.to.port}`
+      + (wire.vlanId == null ? '' : ` · VLAN ${wire.vlanId}`));
+    const drops = [...(step.arp.requestVlanDrops || []),
+      ...(step.arp.replyVlanDrops || []), ...step.vlanDrops];
+    for (const drop of drops) lines.push(
+      `  VLAN-drop: ${drop.switch}/${drop.port} ${drop.reason}`);
+  }
+  lines.push('Ingen ICMP Echo/Time Exceeded, IP-tjänst, returväg eller applikationsleverans simuleras.');
+  output.textContent = lines.join('\n');
 }
 
 function renderInspector() {
@@ -652,6 +707,7 @@ function render() {
   renderArpDiagnostics();
   renderSessionDiagnostics();
   renderRouteLookup();
+  renderIPv4Trace();
   updateSaveIndicator();
   } finally {
     rendering = false;
@@ -724,6 +780,7 @@ async function openProject() {
     const loaded = await api(`/api/projects/${encodeURIComponent(slug)}`);
     invalidateSimulationSession();
     routeLookup = null;
+    ipv4Diagnostic = null;
     project = loaded.project;
     filename = loaded.filename;
     savedName = loaded.filename;
@@ -910,6 +967,34 @@ async function stopSimulationSession() {
   render();
 }
 
+async function runIPv4Trace() {
+  const selected = $('ipv4-source').value;
+  if (!selected) return;
+  const [sourceNode,sourcePort] = JSON.parse(selected);
+  const destinationIpv4 = $('ipv4-destination').value.trim();
+  const rawTTL = $('ipv4-ttl').value.trim();
+  if (!destinationIpv4 || !/^[0-9]+$/.test(rawTTL)) {
+    ipv4Diagnostic = {error:'Ange uttrycklig destinations-IPv4 och heltals-TTL 1–255.'};
+    renderIPv4Trace();
+    return;
+  }
+  const ttl = Number(rawTTL);
+  const snapshot = JSON.stringify(project);
+  try {
+    const result = await api('/api/ipv4/trace',
+      {project, sourceNode, sourcePort, destinationIpv4, ttl});
+    if (snapshot !== JSON.stringify(project) ||
+        $('ipv4-source').value !== selected ||
+        $('ipv4-destination').value.trim() !== destinationIpv4 ||
+        $('ipv4-ttl').value.trim() !== rawTTL) return;
+    ipv4Diagnostic = result;
+  } catch (error) {
+    if (snapshot !== JSON.stringify(project)) return;
+    ipv4Diagnostic = {error:error.message};
+  }
+  renderIPv4Trace();
+}
+
 async function runRouteLookup() {
   const nodeId = $('route-source').value;
   const destinationIpv4 = $('route-destination-ip').value.trim();
@@ -965,6 +1050,12 @@ $('import-file').addEventListener('change', async event => {
 $('export-project').addEventListener('click', exportProject);
 $('run-trace').addEventListener('click', runTrace);
 $('run-route-lookup').addEventListener('click', runRouteLookup);
+$('run-ipv4-trace').addEventListener('click', runIPv4Trace);
+for (const id of ['ipv4-source','ipv4-destination','ipv4-ttl']) {
+  $(id).addEventListener(id === 'ipv4-source' ? 'change' : 'input', () => {
+    ipv4Diagnostic = null; renderIPv4Trace();
+  });
+}
 $('route-source').addEventListener('change', () => {
   routeLookup = null; renderRouteLookup();
 });
