@@ -100,7 +100,7 @@ class ConnectedRoutingTable:
             "candidates": candidates,
             "meaning": {
                 "MATCH": "Most specific active configured IPv4 prefix selected. Static next-hop is configured, not resolved. No packet, ARP, Ethernet or IP reachability simulated.",
-                "NO_ROUTE": "No active connected or explicitly configured static IPv4 route matches this destination.",
+                "NO_ROUTE": "No configured active connected or explicit static IPv4 route matches this destination.",
                 "AMBIGUOUS": "Multiple equally specific configured IPv4 routes match; no interface, route preference or metric is assumed.",
             }[status],
         }
