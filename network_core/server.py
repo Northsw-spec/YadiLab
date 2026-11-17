@@ -16,6 +16,7 @@ from . import __version__, config
 from .model import ProjectValidationError, topology_trace, validate_project
 from .csv_import import import_csv_tables
 from .arp import ArpSession
+from .simulation import SimulationRegistry
 from .storage import ProjectConflictError, ProjectStore
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -27,6 +28,7 @@ class LabHTTPServer(ThreadingHTTPServer):
 
     def __init__(self, address: tuple[str, int], store: ProjectStore):
         self.store = store
+        self.simulations = SimulationRegistry()
         super().__init__(address, Handler)
 
 
@@ -117,6 +119,28 @@ class Handler(BaseHTTPRequestHandler):
                     "macTables": session.fabric.learned_mac_tables(),
                     "ephemeral": True,
                 })
+            elif path == "/api/simulation/start":
+                if not isinstance(body, dict) or set(body) != {"project"}:
+                    raise ProjectValidationError("simulation start: expected project")
+                self._json(200, self.server.simulations.start(body["project"]))
+            elif path == "/api/simulation/run":
+                required = {"sessionId", "project", "operation", "sourceNode", "sourcePort", "target"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError("simulation run: expected sessionId, project, operation, sourceNode, sourcePort, target")
+                if not all(isinstance(body[k], str) for k in
+                           ("sessionId", "operation", "sourceNode", "sourcePort", "target")):
+                    raise ProjectValidationError("simulation run: source/target/operation/sessionId must be strings")
+                self._json(200, self.server.simulations.run(
+                    body["sessionId"], body["project"], body["operation"],
+                    body["sourceNode"], body["sourcePort"], body["target"]))
+            elif path == "/api/simulation/reset":
+                if not isinstance(body, dict) or set(body) != {"sessionId", "project"}:
+                    raise ProjectValidationError("simulation reset: expected sessionId and project")
+                self._json(200, self.server.simulations.reset(body["sessionId"], body["project"]))
+            elif path == "/api/simulation/stop":
+                if not isinstance(body, dict) or set(body) != {"sessionId"}:
+                    raise ProjectValidationError("simulation stop: expected sessionId")
+                self._json(200, self.server.simulations.stop(body["sessionId"]))
             elif path == "/api/save":
                 if not isinstance(body, dict) or set(body) != {"filename", "project", "expectedSha256"}:
                     raise ProjectValidationError("save: expected filename, project, expectedSha256")

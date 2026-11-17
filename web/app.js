@@ -50,6 +50,12 @@ let traceResult = null;
 let highlightedLinks = [];
 let arpDiagnostic = null;
 let arpHighlightedLinks = [];
+let sessionId = null;
+let sessionGeneration = 0;
+let sessionBusy = false;
+let sessionOperationCount = 0;
+let sessionDiagnostic = null;
+let sessionHighlightedLinks = [];
 let filename = 'lab';
 let savedName = null;
 let savedSha = null;
@@ -64,6 +70,8 @@ const canvas = new TopologyCanvas($('topology'), {
       node.x = Math.max(-100000, Math.min(100000, x));
       node.y = Math.max(-100000, Math.min(100000, y));
       traceResult = null; highlightedLinks = [];
+      invalidateSimulationSession();
+      renderSessionDiagnostics();
       canvas.setData(project, selection, pendingPort, highlightedLinks);
       updateSaveIndicator();
     }
@@ -108,9 +116,24 @@ function updateSaveIndicator() {
 }
 function changed({keepTrace = false} = {}) {
   if (!keepTrace) {traceResult = null; highlightedLinks = [];}
-  // The previous packet trace and learned tables belong to an old snapshot.
+  // Any network/document change invalidates sessions bound to the old snapshot.
+  invalidateSimulationSession();
   arpDiagnostic = null; arpHighlightedLinks = [];
   render();
+}
+
+function invalidateSimulationSession() {
+  sessionGeneration += 1;
+  const previous = sessionId;
+  sessionId = null;
+  sessionBusy = false;
+  sessionOperationCount = 0;
+  sessionDiagnostic = null;
+  sessionHighlightedLinks = [];
+  if (previous) {
+    // Best-effort release only; the server still rejects any stale project.
+    void api('/api/simulation/stop', {sessionId: previous}).catch(() => {});
+  }
 }
 function select(type, id) { selection = {type, id}; pendingPort = null; render(); }
 function getSelected() {
@@ -242,6 +265,75 @@ function renderArpDiagnostics() {
     'Inlärda switch-MAC-tabeller:\n' + (tables.length ? tables.join('\n') : '  Inga inlärda poster'),
     'ARP-cache på avsändarporten:\n' + (cache.length ? cache.join('\n') : '  Tom'),
     'Endast denna tillfälliga simulering. Inte ping, IP-routing eller verklig NIC-acceptans.',
+  ].join('\n\n');
+}
+
+function renderSessionDiagnostics() {
+  const field = $('session-source');
+  const previous = field.value;
+  const sources = project.nodes.filter(n => n.kind !== 'switch')
+    .flatMap(n => n.ports.map(p => ({
+      value: JSON.stringify([n.id, p.id]),
+      label: `${n.label} / ${p.name} (${n.id}/${p.id})`,
+    })));
+  field.replaceChildren(...sources.map(s => el('option', {value:s.value}, s.label)));
+  if (sources.some(s => s.value === previous)) field.value = previous;
+
+  const active = sessionId !== null;
+  $('session-start').disabled = active || sessionBusy || sources.length === 0;
+  $('session-reset').disabled = !active || sessionBusy;
+  $('session-stop').disabled = !active || sessionBusy;
+  $('session-arp').disabled = !active || sessionBusy || sources.length === 0;
+  $('session-ethernet').disabled = !active || sessionBusy || sources.length === 0;
+  $('session-status').textContent = sessionBusy ? 'Kör sessionoperation…' :
+    active ? `Aktiv session · ${sessionOperationCount} operation(er) · tillfälligt arbetsminne` :
+    'Ingen aktiv session. Ändrad topologi, port eller projekt avslutar sessionen.';
+
+  const output = $('session-result');
+  output.classList.remove('ok', 'fail');
+  if (!sessionDiagnostic) {
+    output.textContent = active
+      ? 'Sessionen är aktiv. Inga operationer utförda sedan senaste nollställning.'
+      : 'Starta en session. Ingen ARP- eller Ethernetram skickas automatiskt.';
+    return;
+  }
+  if (sessionDiagnostic.error) {
+    output.classList.add('fail');
+    output.textContent = `Sessionoperation avvisad: ${sessionDiagnostic.error}\nIngen ny lyckad kommunikation är bevisad.`;
+    return;
+  }
+  const {data, sourceNode, sourcePort, target} = sessionDiagnostic;
+  const r = data.result;
+  const arp = data.operation === 'arp';
+  if (r.status === 'NO_REPLY' || r.status === 'NO_ACTIVE_LINK' || r.status === 'UNKNOWN')
+    output.classList.add('fail');
+  else output.classList.add('ok');
+  const transmissions = arp
+    ? [...r.requestTransmissions, ...r.replyTransmissions]
+    : r.transmissions;
+  const drops = arp
+    ? [...(r.requestVlanDrops || []), ...(r.replyVlanDrops || [])]
+    : (r.vlanDrops || []);
+  const switchTables = data.macTables.flatMap(t => [
+    `  ${t.switchId}${t.vlanId == null ? ' (utan VLAN)' : ` VLAN ${t.vlanId}`}:`,
+    ...Object.entries(t.entries).map(([mac, port]) => `    ${mac} → ${port}`),
+  ]);
+  const arpEntries = Object.entries(data.arpTable)
+    .map(([ip, mac]) => `  ${ip} → ${mac}`);
+  const wireLines = transmissions.map(t =>
+    `  ${t.linkId}: ${t.from.node}/${t.from.port} → ${t.to.node}/${t.to.port}`
+    + (t.vlanId == null ? '' : ` · VLAN ${t.vlanId}${t.tagged ? ' (taggad)' : ' (otaggad)'}`));
+  const dropLines = drops.map(d => `  ${d.switch}/${d.port}: ${d.reason} VLAN ${d.vlanId ?? 'otaggad'}`);
+  output.textContent = [
+    `Operation ${data.operationCount}: ${arp ? 'ARP' : 'Ethernet II'} ${sourceNode}/${sourcePort} → ${target}`,
+    `Status: ${r.status}`,
+    r.meaning,
+    `Faktiska överföringar: ${transmissions.length}\n${wireLines.join('\n') || '  Inga'}`,
+    `VLAN-droppar:\n${dropLines.join('\n') || '  Inga observerade'}`,
+    `Inlärda MAC-tabeller:\n${switchTables.join('\n') || '  Inga inlärda poster'}`,
+    `ARP-cache på vald källport:\n${arpEntries.join('\n') || '  Tom'}`,
+    arp ? 'ARP-upplösning är inte IP-reachability eller ping.' :
+      'Ethernet II använder ett opakt test-EtherType 0x88B5. Ankomst bevisar inte att en NIC accepterar ramen.',
   ].join('\n\n');
 }
 
@@ -431,10 +523,13 @@ function render() {
   $('empty-state').hidden = project.nodes.length > 0;
   $('canvas-hint').textContent = pendingPort ? `Vald port: ${pendingPort.node}/${pendingPort.port}. Klicka en andra ledig port eller samma port för att avbryta.`
     : 'Dra enheter för att placera dem. Klicka två lediga portcirklar för att skapa en länk.';
-  canvas.setData(project, selection, pendingPort, arpDiagnostic ? arpHighlightedLinks : highlightedLinks);
+  canvas.setData(project, selection, pendingPort,
+    sessionDiagnostic?.data ? sessionHighlightedLinks :
+    arpDiagnostic ? arpHighlightedLinks : highlightedLinks);
   renderInspector();
   updateTraceSelectors();
   renderArpDiagnostics();
+  renderSessionDiagnostics();
   updateSaveIndicator();
   } finally {
     rendering = false;
@@ -505,6 +600,7 @@ async function openProject() {
   if (!confirmDiscard()) return;
   try {
     const loaded = await api(`/api/projects/${encodeURIComponent(slug)}`);
+    invalidateSimulationSession();
     project = loaded.project;
     filename = loaded.filename;
     savedName = loaded.filename;
@@ -591,6 +687,106 @@ async function runArp() {
   render();
 }
 
+async function startSimulationSession() {
+  if (sessionId || sessionBusy) return;
+  const generation = sessionGeneration;
+  const snapshot = JSON.stringify(project);
+  sessionBusy = true;
+  renderSessionDiagnostics();
+  try {
+    const response = await api('/api/simulation/start', {project});
+    if (generation !== sessionGeneration || snapshot !== JSON.stringify(project)) {
+      void api('/api/simulation/stop', {sessionId:response.sessionId}).catch(() => {});
+      return;
+    }
+    sessionId = response.sessionId;
+    sessionOperationCount = response.operationCount;
+    sessionDiagnostic = null;
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    sessionDiagnostic = {error:error.message};
+  } finally {
+    if (generation === sessionGeneration) {
+      sessionBusy = false;
+      render();
+    }
+  }
+}
+
+async function runSimulationOperation(operation) {
+  if (!sessionId || sessionBusy) return;
+  const selected = $('session-source').value;
+  if (!selected) return;
+  const [sourceNode, sourcePort] = JSON.parse(selected);
+  const target = $(operation === 'arp' ? 'session-ip' : 'session-mac').value.trim();
+  if (!target) {
+    sessionDiagnostic = {error:'Ange måladressen uttryckligen.'};
+    renderSessionDiagnostics();
+    return;
+  }
+  const id = sessionId, generation = sessionGeneration;
+  const snapshot = JSON.stringify(project);
+  sessionBusy = true;
+  renderSessionDiagnostics();
+  try {
+    const data = await api('/api/simulation/run', {
+      sessionId:id, project, operation, sourceNode, sourcePort, target,
+    });
+    if (generation !== sessionGeneration || snapshot !== JSON.stringify(project) ||
+        id !== sessionId) return;
+    sessionOperationCount = data.operationCount;
+    sessionDiagnostic = {data, sourceNode, sourcePort, target};
+    const r = data.result;
+    const transmissions = operation === 'arp'
+      ? [...r.requestTransmissions, ...r.replyTransmissions]
+      : r.transmissions;
+    sessionHighlightedLinks = [...new Set(transmissions.map(t => t.linkId))];
+  } catch (error) {
+    if (generation !== sessionGeneration || id !== sessionId) return;
+    sessionDiagnostic = {error:error.message};
+    sessionHighlightedLinks = [];
+    if (/unknown or expired session|project changed since session/.test(error.message)) {
+      invalidateSimulationSession();
+      sessionDiagnostic = {error:error.message};
+    }
+  } finally {
+    if (generation === sessionGeneration) {
+      sessionBusy = false;
+      render();
+    } else if (sessionId === null) {
+      render();
+    }
+  }
+}
+
+async function resetSimulationSession() {
+  if (!sessionId || sessionBusy) return;
+  const id = sessionId, generation = sessionGeneration;
+  sessionBusy = true;
+  renderSessionDiagnostics();
+  try {
+    const result = await api('/api/simulation/reset', {sessionId:id, project});
+    if (generation !== sessionGeneration || id !== sessionId) return;
+    sessionOperationCount = result.operationCount;
+    sessionDiagnostic = null;
+    sessionHighlightedLinks = [];
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    sessionDiagnostic = {error:error.message};
+  } finally {
+    if (generation === sessionGeneration) {
+      sessionBusy = false;
+      render();
+    }
+  }
+}
+
+async function stopSimulationSession() {
+  if (!sessionId || sessionBusy) return;
+  invalidateSimulationSession();
+  render();
+}
+
 async function runTrace() {
   const source = $('trace-source').value, target = $('trace-target').value;
   if (!source || !target) return;
@@ -621,6 +817,11 @@ $('import-file').addEventListener('change', async event => {
 $('export-project').addEventListener('click', exportProject);
 $('run-trace').addEventListener('click', runTrace);
 $('run-arp').addEventListener('click', runArp);
+$('session-start').addEventListener('click', startSimulationSession);
+$('session-arp').addEventListener('click', () => runSimulationOperation('arp'));
+$('session-ethernet').addEventListener('click', () => runSimulationOperation('ethernet'));
+$('session-reset').addEventListener('click', resetSimulationSession);
+$('session-stop').addEventListener('click', stopSimulationSession);
 $('arp-source').addEventListener('change', () => {
   arpDiagnostic = null; arpHighlightedLinks = []; renderArpDiagnostics();
   canvas.setData(project, selection, pendingPort, highlightedLinks);

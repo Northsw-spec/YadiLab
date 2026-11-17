@@ -12,6 +12,10 @@ Användaren väljer ett uttryckligen deklarerat icke-switchgränssnitt och fylle
 
 Builder visar status (`RESOLVED`, `NO_REPLY`, `UNKNOWN`, `NO_ACTIVE_LINK`), faktiska request-/reply-transmissioner, VLAN-droppar och inlärda switch-MAC-/ARP-tabeller. Endast faktiskt traverserade länkar markeras. Vid invalid projekt, felaktig IPv4 eller saknad explicit MAC/IP visas ett avvisningsfel, aldrig ett fabricerat svar. Ändrad dokumentation rensar tidigare diagnostik. Ett `RESOLVED`-resultat visar en lyckad simulerad ARP-utväxling, **inte** ping, IP-routing eller NIC-acceptans. Det finns fortfarande ingen beständig ARP-session eller interaktiv flerpaketssimulering.
 
+### Fortsatta sessioner med bevarad inlärning
+
+Den tidigare `/api/diagnostics/arp` fortsätter avsiktligt att skapa en ny, isolerad session per anrop. För **stegvis felsökning** tillhandahåller `/api/simulation/start`, `/api/simulation/run`, `/api/simulation/reset` och `/api/simulation/stop` en uttryckligen startad, tillfällig session som delar exakt samma `ArpSession` och `EthernetFabric` under flera ARP-/Ethernetoperationer. Detta möjliggör observerbara cacheträffar och switch-MAC-inlärning utan dubbla forwardingmotorer. HTTP-servern avvisar ändrat projekt, okända sessioner och ogiltiga operationer; klienten avslutar sessionen när dokumentationen redigeras. Se [SIMULATION_SESSION.md](SIMULATION_SESSION.md) för kontrakt, begränsningar och felutfall.
+
 ### Sanningsgränser och negativa beteenden
 
 - `RESOLVED` betyder att denna **begränsade simulerade ARP-utväxling** fick ett svar över deklarerade Ethernetlänkar, inte att IP-paket eller ping kan nå destinationen.
