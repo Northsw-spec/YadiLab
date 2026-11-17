@@ -374,6 +374,79 @@ och sparade projektfiler påverkas inte. Simulatorn modellerar
 inte verklig hårdvarustatus, STP, automatisk reparation eller
 routad DHCP.
 
+## Bevisstyrd felsökningsövning med dolt DHCP-fel (PR #38)
+
+Fem API-operationer på `/api/dhcp/investigation/` tillhandahåller
+en separat processlokal övning: `start`, `probe`, `diagnose`,
+`repair`, `stop`. Övningen **återanvänder exakt samma**
+`DhcpLabSession`, `DhcpSession`, `EthernetFabric`, klocka,
+BOOTP/DHCP-bytekodning och paketleverans som DHCP-labbet. Ingen ny
+parallell forwarding-motor eller syntetisk positiv reachability införs.
+
+**Start** kräver exakt `project`, `clientNode`, `clientPort`,
+`serverNode`, `serverPort`, `poolStart`, `poolEnd`,
+`leaseSeconds` (heltal 60..604800). Ett verkligt bekräftat DORA-ACK
+måste nå ursprunglig klient, annars avvisas scenariot med HTTP 422.
+Efter ACK flyttas sessionens virtuella tid uttryckligen till T1 och
+**ett** sessionlokalt fel injiceras utifrån enbart **existerande**
+dokumenterade länkar, switchportar och konfigurerade VLAN. Urvalet
+bland tillämpliga kandidater är internt och avslöjas aldrig i `start`
+eller i sessionsstatus. Det dolda DHCP-session-ID:t lämnas inte ut;
+det särskilda, opaka `sessionId` ger endast åtkomst till övnings-API:t.
+Det finns ingen användarstyrd parameter för att välja felet.
+
+**Probe** kräver exakt
+`{"sessionId":"...","project":{},"probe":"renew","target":{}}`.
+Tillåtna `probe`-värden och exakta `target`-former är:
+
+- `lease`, `renew`: `{}` (ingen fri målangivelse)
+- `link`: `{"linkId":"<kanoniskt kabel-ID>"}`
+- `port`, `vlan`: `{"nodeId":"<switch>","portId":"<port>"}`
+
+`lease` returnerar den **faktiskt bevarade** BOUND-leasen och
+dess T1/T2/sluttid utan feltyp. `renew` skickar ett **riktigt**
+DHCPREQUEST via sessionens EthernetFabric och returnerar
+`status`, mottagning vid serverport, mottagning av ACK vid
+klientport, verkliga transmittans-ID:n och VLAN-drops.
+`link` returnerar kanoniska länkändpunkter, dokumenterat
+aktiv länk och **observerad operativ** länkstatus i sessionens
+fysiska wires. `port` returnerar simulerad administrativ
+och operativ status för en ursprungligen aktiv, deklarerad
+switchport. `vlan` returnerar **dokumenterat** och i simuleringen
+**observerat** access-VLAN för en dokumenterad switchaccessport.
+Varken en enstaka `DOWN`-observation eller en pakethändelse
+anses ensam bevisa fysisk rotorsak.
+
+**Diagnose** kräver exakt `sessionId`, `project`, `diagnosis`.
+Tillåtna slutsatser: `CABLE_DOWN`, `PORT_SHUTDOWN`, `VLAN_MISMATCH`.
+Backend kräver minst ett observerat `renew` och minst två
+**olika** andra probe-kategorier. Maximalt tre hypotesförsök.
+Felaktig hypotes avslöjar inte felet; efter korrekt diagnos
+sätts en separat reparationsflagga.
+
+**Repair** kräver exakt `sessionId` och `project`. Endast en
+korrekt diagnos kan utlösa den av användaren explicit beställda
+återställningen. Motorn tar bort enbart det **interna övningsfelet**
+och kör en ny verklig T1-DHCPREQUEST/ACK. `RECOVERED` betyder
+att REQUEST nådde rätt server och ACK faktiskt nådde ursprunglig
+klient, varpå befintlig lease fick ny sluttid. Utan korrekt ACK
+returneras `NOT_VERIFIED` och ingen lyckad reparation påstås.
+Först efter en verkligt lyckad reparation får klienten se orsak
+och specifik simulerad målpunkt.
+
+**Stop** kräver exakt `sessionId` och förstör övningen. Projektets
+snapshot-signatur kontrolleras vid varje probe/diagnose/repair.
+En projektändring i Builder stoppar övningen och en fullständig
+serveromstart tappar sessionen. Högst 16 samtidiga övningar och
+48 observationer per övning (utöver övrig DHCP-sessionsbudget).
+Felaktiga parametrar avvisas med HTTP 422 utan att lägga
+till observationer. Ingen övningsinformation sparas till disk.
+Övningen simulerar enbart **ett dolt T1-renewalfel** åt gången,
+utan automatiska DHCP-retries, T2 eller expiration i själva
+övningsscenariot, utan verklig OS-/NIC-konfiguration eller
+routade/relay-trafikflöden. Alla mätningar gäller
+`source: "SIMULATED"` och får inte presenteras som verklig telemetri.
+
 ## Avsiktliga begränsningar
 
 - Den simulerade leasen existerar endast i minnet. **Klientportens
