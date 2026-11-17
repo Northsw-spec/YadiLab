@@ -104,6 +104,17 @@
           <button id="session-ethernet" class="btn btn-outline full" type="button" disabled>Skicka Ethernetram i session</button>
           <div id="session-result" class="trace-result" aria-live="polite">Starta en session. Inga ramar eller ARP-förfrågningar skickas automatiskt.</div>
         </section>
+        <section class="trace-panel" aria-label="Konfigurerad IPv4-routingtabell">
+          <div class="eyebrow">LAYER 3 · ROUTE LOOKUP</div>
+          <h3>Direktanslutna IPv4-prefix</h3>
+          <p class="muted tiny">Visar bara konfigurerade connected routes och longest-prefix match. Inte paketforwarding, nästa hopp, ping eller IP-reachability.</p>
+          <label for="route-source">Enhetens routingtabell</label>
+          <select id="route-source" class="control"></select>
+          <label for="route-destination-ip">Destinations-IPv4</label>
+          <input id="route-destination-ip" class="control" type="text" autocomplete="off" placeholder="192.0.2.25">
+          <button id="run-route-lookup" class="btn btn-soft full" type="button">Undersök routingtabell</button>
+          <div id="route-result" class="trace-result" aria-live="polite">Ingen routingtabell har undersökts.</div>
+        </section>
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

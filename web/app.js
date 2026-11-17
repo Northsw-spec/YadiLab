@@ -56,6 +56,7 @@ let sessionBusy = false;
 let sessionOperationCount = 0;
 let sessionDiagnostic = null;
 let sessionHighlightedLinks = [];
+let routeLookup = null;
 let filename = 'lab';
 let savedName = null;
 let savedSha = null;
@@ -70,6 +71,7 @@ const canvas = new TopologyCanvas($('topology'), {
       node.x = Math.max(-100000, Math.min(100000, x));
       node.y = Math.max(-100000, Math.min(100000, y));
       traceResult = null; highlightedLinks = [];
+      routeLookup = null;
       invalidateSimulationSession();
       renderSessionDiagnostics();
       canvas.setData(project, selection, pendingPort, highlightedLinks);
@@ -116,6 +118,7 @@ function updateSaveIndicator() {
 }
 function changed({keepTrace = false} = {}) {
   if (!keepTrace) {traceResult = null; highlightedLinks = [];}
+  routeLookup = null;
   // Any network/document change invalidates sessions bound to the old snapshot.
   invalidateSimulationSession();
   arpDiagnostic = null; arpHighlightedLinks = [];
@@ -337,6 +340,46 @@ function renderSessionDiagnostics() {
   ].join('\n\n');
 }
 
+function renderRouteLookup() {
+  const selector = $('route-source');
+  const previous = selector.value;
+  const nodes = project.nodes.filter(node => node.kind !== 'switch');
+  selector.replaceChildren(...nodes.map(node =>
+    el('option', {value:node.id}, `${node.label} (${node.id})`)));
+  if (nodes.some(n => n.id === previous)) selector.value = previous;
+  $('run-route-lookup').disabled = !nodes.length;
+
+  const output = $('route-result');
+  output.classList.remove('ok', 'fail');
+  if (!routeLookup) {
+    output.textContent = 'Ingen aktuell route lookup. Tabellen är konfigurerad information, inte simulerad IP-leverans.';
+    return;
+  }
+  if (routeLookup.error) {
+    output.classList.add('fail');
+    output.textContent = `Route lookup avvisad: ${routeLookup.error}\nIngen IP-leverans har simulerats.`;
+    return;
+  }
+  const {status, sourceNode, destinationIpv4, routes, candidates, selectedRoute, meaning} = routeLookup;
+  if (status === 'MATCH') output.classList.add('ok');
+  else output.classList.add('fail');
+  const describe = route =>
+    `  ${route.destination} · ${route.type} · ${route.outInterface.node}/${route.outInterface.port}`
+    + ` · lokal IP ${route.sourceIpv4} · next-hop: ${route.nextHop ?? 'ingen (on-link)'}`;
+  output.textContent = [
+    `Routingstatus: ${status}`,
+    `Enhet: ${sourceNode} · Destination: ${destinationIpv4}`,
+    meaning,
+    'Konfigurerade connected routes:\n' + (routes.length ? routes.map(describe).join('\n') : '  Inga'),
+    status === 'MATCH' ?
+      'Vald längsta prefixmatchning:\n' + describe(selectedRoute) :
+      status === 'AMBIGUOUS' ?
+      'Lika specifika kandidatvägar, inget antaget beslut:\n' + candidates.map(describe).join('\n') :
+      'Ingen matchande route.',
+    'Ingen faktisk paketöverföring eller ARP-förfrågan utfördes. Grafväg, VLAN, länkstatus och NIC-acceptans är inte verifierade.',
+  ].join('\n\n');
+}
+
 function renderInspector() {
   const box = $('inspector');
   box.replaceChildren();
@@ -530,6 +573,7 @@ function render() {
   updateTraceSelectors();
   renderArpDiagnostics();
   renderSessionDiagnostics();
+  renderRouteLookup();
   updateSaveIndicator();
   } finally {
     rendering = false;
@@ -601,6 +645,7 @@ async function openProject() {
   try {
     const loaded = await api(`/api/projects/${encodeURIComponent(slug)}`);
     invalidateSimulationSession();
+    routeLookup = null;
     project = loaded.project;
     filename = loaded.filename;
     savedName = loaded.filename;
@@ -787,6 +832,31 @@ async function stopSimulationSession() {
   render();
 }
 
+async function runRouteLookup() {
+  const nodeId = $('route-source').value;
+  const destinationIpv4 = $('route-destination-ip').value.trim();
+  if (!nodeId) return;
+  if (!destinationIpv4) {
+    routeLookup = {error:'Ange destinations-IPv4 uttryckligen.'};
+    renderRouteLookup();
+    return;
+  }
+  const snapshot = JSON.stringify(project);
+  try {
+    const response = await api('/api/routing/connected', {project, nodeId, destinationIpv4});
+    if (snapshot !== JSON.stringify(project)) return;
+    if ($('route-source').value !== nodeId ||
+        $('route-destination-ip').value.trim() !== destinationIpv4) return;
+    routeLookup = response;
+  } catch (error) {
+    if (snapshot !== JSON.stringify(project)) return;
+    if ($('route-source').value !== nodeId ||
+        $('route-destination-ip').value.trim() !== destinationIpv4) return;
+    routeLookup = {error:error.message};
+  }
+  renderRouteLookup();
+}
+
 async function runTrace() {
   const source = $('trace-source').value, target = $('trace-target').value;
   if (!source || !target) return;
@@ -816,6 +886,13 @@ $('import-file').addEventListener('change', async event => {
 });
 $('export-project').addEventListener('click', exportProject);
 $('run-trace').addEventListener('click', runTrace);
+$('run-route-lookup').addEventListener('click', runRouteLookup);
+$('route-source').addEventListener('change', () => {
+  routeLookup = null; renderRouteLookup();
+});
+$('route-destination-ip').addEventListener('input', () => {
+  routeLookup = null; renderRouteLookup();
+});
 $('run-arp').addEventListener('click', runArp);
 $('session-start').addEventListener('click', startSimulationSession);
 $('session-arp').addEventListener('click', () => runSimulationOperation('arp'));

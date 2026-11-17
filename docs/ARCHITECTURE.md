@@ -27,15 +27,16 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 | `csv_import.py` | Explicit fyrtabells-CSV till verifierad kanonisk modell | Implicita kablar, heuristisk kolumnmappning, filskrivning |
 | `arp.py` | Explicit Ethernet/IPv4 ARP-request/reply över `EthernetFabric` med sparade 1.2-VLAN eller sessions-VLAN, flyktig cache och enskild HTTP/UI-diagnostik | Ingen IP-routing, ping, proxy-ARP eller varaktig ARP-session i UI |
 | `ethernet.py` | Flyktig MAC-inlärning, explicit v1.1-port-MAC samt VLAN-forwarding på deklarerade kablar med 1.2-konfiguration eller sessionstillägg | ARP-protokoll, ping, IP, STP, NIC-acceptans eller lagring av inlärda tabeller |
-| `server.py` | Lokal UI, API, validering, engångs-ARP och explicit sessionshantering via serverns minnesregister | Tolka källdata som topologi, spara diagnostik eller simulera IP-paket |
+| `server.py` | Lokal UI, API, validering, engångs-ARP, sessioner och read-only connected-routingfrågor | Tolka källdata som topologi, spara diagnostik eller simulera IP-paket |
 | `simulation.py` | Begränsat processlokalt sessionsregister som återanvänder en `ArpSession`/`EthernetFabric` mellan ARP- och Ethernetoperationer och validerar oförändrat projekt | Beständig session, IP-routing, ICMP eller delad projektmodell |
+| `routing.py` | Read-only connected-route-tabell per nod över deklarerade, aktiverade IPv4-gränssnitt; deterministisk longest-prefix match | Statiska routes, gateway, next-hop, paketforwarding, ICMP eller fysisk reachability |
 | `web/model.js` | Explicit UI-modell, enhets- och portkommandon | Adressbaserad länkförutsägelse |
 | `web/canvas.js` | SVG-geometri och direktträff på portpunkter | Ändra noders eller länkars identitet |
-| `web/app.js` | Användarinteraktion, fel, Save/Open | Simulering av nätverksprotokoll |
+| `web/app.js` | Användarinteraktion, read-only routingtabell/lookup, fel, Save/Open | Egen implementation av Layer 2/Layer 3-protokoll |
 
 ## Testkontrakt
 
-- **31 enhetstester:** schema, negativ input, 47/46/15-identiteter, grafspårning, felinjicering, riktiga filbytes, hash, atomär uppdatering, konflikter och HTTP.
+- **Regressionssvit:** schema, negativ input, 47/46/15-identiteter, grafspårning, L2, sessionsbaserad ARP/MAC, read-only route lookup, riktiga filbytes, hash, atomär uppdatering, konflikter och HTTP.
 - **Chromiumacceptans:** skapa enheter och portar, skapa exakt en deklarerad kabel, verifiera SVG-portändpunkter, inaktivera kabel, spara, stäng programprocess och browser, öppna igen, kontrollera SHA-256 och exakt projektinnehåll. Direkt webbläsarnätverk eller uttryckligt märkt testbro enligt miljön.
 - Tester får inte påstå att simuleringsprotokoll fungerar när den funktionen inte finns.
 

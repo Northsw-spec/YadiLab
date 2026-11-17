@@ -421,6 +421,41 @@ def run():
             expect(page.locator('#session-status')).to_contain_text('Ingen aktiv session')
             assert page.locator('#session-ethernet').is_disabled()
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # First Layer 3 step: real connected-route lookup, NOT ping or
+            # network forwarding. Uses explicit host IPv4/CIDR only.
+            assert 'node-2' not in page.locator('#route-source option').evaluate_all(
+                '(options) => options.map(option => option.value)')
+            page.locator('#route-source').select_option('node-1')
+            page.locator('#route-destination-ip').fill('192.0.2.20')
+            with page.expect_response('**/api/routing/connected') as lookup:
+                page.locator('#run-route-lookup').click()
+            assert lookup.value.status == 200
+            expect(page.locator('#route-result')).to_contain_text('Routingstatus: MATCH')
+            expect(page.locator('#route-result')).to_contain_text('192.0.2.0/24')
+            expect(page.locator('#route-result')).to_contain_text('node-1/port-1')
+            expect(page.locator('#route-result')).to_contain_text('Ingen faktisk paketöverföring')
+
+            page.locator('#route-destination-ip').fill('198.51.100.55')
+            with page.expect_response('**/api/routing/connected') as lookup:
+                page.locator('#run-route-lookup').click()
+            assert lookup.value.status == 200
+            expect(page.locator('#route-result')).to_contain_text('Routingstatus: NO_ROUTE')
+            page.locator('#route-destination-ip').fill('2001:db8::1')
+            with page.expect_response('**/api/routing/connected') as invalid:
+                page.locator('#run-route-lookup').click()
+            assert invalid.value.status == 422
+            expect(page.locator('#route-result')).to_contain_text('Route lookup avvisad')
+
+            # Disabled interface removes its connected prefix. No hidden
+            # cable traversal, no simulation success and NO auto-save.
+            page.locator('#route-destination-ip').fill('192.0.2.20')
+            page.locator('[data-item-type="node"][data-item-id="node-1"]').click()
+            page.locator('#inspector input[type="checkbox"]').uncheck()
+            expect(page.locator('#route-result')).to_contain_text('Ingen aktuell route lookup')
+            page.locator('#run-route-lookup').click()
+            expect(page.locator('#route-result')).to_contain_text('Routingstatus: NO_ROUTE')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
