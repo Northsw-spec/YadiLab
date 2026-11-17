@@ -1028,25 +1028,26 @@ async function importProjects(files) {
         sources.push({name: file.name, text: await decodeUtf8(file)});
       }
       result = await api('/api/import/csv', {projectName, files: sources});
-    } else if (files.length === 1 && files[0].name.toLowerCase().endsWith('.xlsx')) {
+    } else if (files.length === 1 && /\.(xlsx|ods)$/.test(files[0].name.toLowerCase())) {
       const workbook = files[0];
+      const isOds = workbook.name.toLowerCase().endsWith('.ods');
       if (workbook.size > 5 * 1024 * 1024) {
-        throw new Error('XLSX-arbetsboken är större än 5 MiB.');
+        throw new Error('Arbetsboken är större än 5 MiB.');
       }
-      const projectName = prompt('Projektnamn för XLSX-importen:', project.name);
+      const projectName = prompt((isOds ? 'Projektnamn för ODS-importen:' : 'Projektnamn för XLSX-importen:'), project.name);
       if (projectName === null) return;
       const bytes = new Uint8Array(await workbook.arrayBuffer());
       let binary = '';
       for (let offset = 0; offset < bytes.length; offset += 32768) {
         binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
       }
-      result = await api('/api/import/xlsx',
+      result = await api(isOds ? '/api/import/ods' : '/api/import/xlsx',
         {filename:workbook.name, projectName, contentBase64:btoa(binary)});
     } else if (files.length === 1 && ['.json', '.yadilab'].some(extension => files[0].name.toLowerCase().endsWith(extension))) {
       if (files[0].size > 8 * 1024 * 1024) throw new Error('Filen är större än 8 MiB.');
       result = await api('/api/validate', JSON.parse(await decodeUtf8(files[0])));
     } else {
-      throw new Error('Välj en .json/.yadilab, en .xlsx med namngivna blad, eller explicita CSV-tabeller: Devices.csv, Interfaces.csv, Links.csv och eventuellt Zones.csv.');
+      throw new Error('Välj en .json/.yadilab, en .xlsx/.ods med namngivna blad, eller explicita CSV-tabeller: Devices.csv, Interfaces.csv, Links.csv och eventuellt Zones.csv.');
     }
     // Validate completely before asking to replace the current workspace.
     // Cancel or invalid CSV/XLSX must not disturb unsaved edits or disk bytes.

@@ -101,7 +101,13 @@ Longest-prefix match omfattar nu både `CONNECTED` och `STATIC`; lika specifika 
 
 **Topologisk grafväg är inte ping, IP-routing, VLAN-medveten reachability, brandväggslogik eller ett bevis på nätverksanslutning.** Första versionens grafspårning traverserar dokumentationsgrafen, inte verkliga protokoll.
 
-Ännu inte implementerat: ODS-import eller godtyckliga kalkylbladsformat, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, extern nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+Ännu inte implementerat: godtycklig kalkylbladsimport, schema-1.3 MAC/VLAN/route-kolumner i kalkylblad, DHCP, DNS, brandväggsregler, ACL, fysisk kabeltyp, extern nätverksemulering, automatisk ELK-layout, portöverlappskontroll, multi-user, produktionsinstallatör och omfattande tillgänglighetsverifiering. Ingen funktion visar påhittade enheter eller kablar. Inga gamla simuleringsmotorer har förts över utan bevis.
+
+## Import av strikt ODS-dokumentation (PR #24)
+
+Builder kan nu importera **en riktig OpenDocument Spreadsheet-fil (`.ods`)** med tabellerna `Devices` (obligatorisk), `Interfaces`, `Links` och `Zones` (valfria). Tabellen använder **samma exakta kolumner** som CSV och XLSX, oberoende av tabell-/kolumnordning. ODS-formatet granskas med korrekt ZIP-`mimetype`, ODF-manifest, `content.xml` och strikta ODF-celltyper. Det accepterar explicita strängar, numeriska `x`/`y`-värden, booleska `enabled`-fält och tillåter tomt, upprepat fyllnadsmaterial i slutet av en tabell.
+
+Formler, främmande tabeller, okända fält, dolda eller filtrerade rader/kolumner, makron, externa objekt, felaktiga referenser, sammanslagna celler och godtyckliga kalkylbladsformat avvisas. ODS-importen återanvänder `import_csv_tables` och importerar enbart **schema 1.0**, inte MAC/VLAN/routes. Builder frågar uttryckligen innan arbetsytan ersätts och skriver ingen fil utan separat **Save**. Se [ODS-kontraktet](docs/ODS_IMPORT.md).
 
 ## Import av strikt XLSX-dokumentation (PR #23)
 
@@ -124,7 +130,7 @@ Det är ett **definierat CSV-utbytesformat**, inte en generell importerare för 
 
 `kind` är `host`, `switch`, `router` eller `firewall`. `x` och `y` är uttryckligen angivna presentationskoordinater. `zoneId` och `ipv4` kan lämnas tomma (motsvarar null); övriga värden krävs. `enabled` måste vara exakt `true` eller `false`. Länkar skapas **enbart** från `Links.csv` med ändpunkter som deklarerats i `Interfaces.csv`.
 
-Okända fält, odeklarerade portar, ogiltiga referenser och malformed CSV avvisas helt. Exempel finns i `examples/csv/`. ODS och godtyckliga Excel-/CSV-format stöds inte ännu.
+Okända fält, odeklarerade portar, ogiltiga referenser och malformed CSV avvisas helt. Exempel finns i `examples/csv/`. ODS och XLSX stöds nu i det **specifika fyrtabellsformatet**, men godtyckliga Excel-/ODS-/CSV-format stöds inte.
 
 ## Filformat
 
