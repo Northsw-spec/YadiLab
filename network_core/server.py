@@ -215,12 +215,22 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/dhcp/investigation/start":
                 required = {"project", "clientNode", "clientPort", "serverNode",
                             "serverPort", "poolStart", "poolEnd", "leaseSeconds"}
-                if not isinstance(body, dict) or set(body) != required:
-                    raise ProjectValidationError("investigation start: expected exact client/server, pool, leaseSeconds and project")
+                if not isinstance(body, dict) or set(body) not in (
+                        required, required | {"difficulty"}):
+                    raise ProjectValidationError(
+                        "investigation start: expected client/server, pool, leaseSeconds, project and optional difficulty")
                 self._json(200, self.server.investigations.start(
                     body["project"], body["clientNode"], body["clientPort"],
                     body["serverNode"], body["serverPort"], body["poolStart"],
-                    body["poolEnd"], body["leaseSeconds"]))
+                    body["poolEnd"], body["leaseSeconds"],
+                    body.get("difficulty", "T1_ONLY")))
+            elif path == "/api/dhcp/investigation/advance":
+                if not isinstance(body, dict) or set(body) != {
+                        "sessionId", "project", "seconds"}:
+                    raise ProjectValidationError(
+                        "investigation advance: expected sessionId, project, seconds")
+                self._json(200, self.server.investigations.advance(
+                    body["sessionId"], body["project"], body["seconds"]))
             elif path == "/api/dhcp/investigation/probe":
                 required = {"sessionId", "project", "probe", "target"}
                 if not isinstance(body, dict) or set(body) != required:
