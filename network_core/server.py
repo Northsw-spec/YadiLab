@@ -21,7 +21,7 @@ from .ods_import import import_ods_workbook
 from .spreadsheet_templates import template_bytes
 from .spreadsheet_export import export_workbook
 from .arp import ArpSession
-from .dhcp import discover_offer
+from .dhcp import discover_offer, simulate_dora
 from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
 from .ipv4 import IPv4Trace
@@ -208,6 +208,20 @@ class Handler(BaseHTTPRequestHandler):
                 # graph paths, cached MAC/ARP entries, or invent IP forwarding.
                 self._json(200, ConnectedRoutingTable(body["project"], body["nodeId"])
                            .lookup(body["destinationIpv4"]))
+            elif path == "/api/dhcp/dora":
+                required = {"project", "clientNode", "clientPort", "serverNode",
+                            "serverPort", "poolStart", "poolEnd", "transactionId", "leaseSeconds"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "dhcp dora: expected project, clientNode, clientPort, serverNode, "
+                        "serverPort, poolStart, poolEnd, transactionId, leaseSeconds")
+                # One isolated DORA session. Only a successful observed ACK
+                # creates an in-memory simulated BOUND lease; no saved project
+                # or host NIC configuration is modified.
+                self._json(200, simulate_dora(
+                    body["project"], body["clientNode"], body["clientPort"],
+                    body["serverNode"], body["serverPort"], body["poolStart"],
+                    body["poolEnd"], body["transactionId"], body["leaseSeconds"]))
             elif path == "/api/dhcp/discover-offer":
                 required = {"project", "clientNode", "clientPort", "serverNode",
                             "serverPort", "proposedIpv4", "transactionId", "leaseSeconds"}
