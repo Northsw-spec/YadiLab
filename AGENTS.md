@@ -7,7 +7,7 @@
 - Undvik parallella arkitekturer. En kanonisk dokumentationsmodell och en presentationsväg.
 - Körbar nytta prioriteras över mängden kod, projektbeteckningar eller antalet passerade kontroller.
 
-- **Produktnamn:** `APP_NAME` i `network_core/config.py` är den enda deklarationen av appens visningsnamn. Repositorynamnet är inte appnamnet. HTML, fönstertitel, loggar, hälsosvar och terminal måste härleda namnet härifrån. Alla klass-, funktions-, paket- och filnamn måste vara generiska.
+- **Produktnamn:** `APP_NAME` i `network_core/config.py` är den enda deklarationen av appens visningsnamn. Repositorynamnet är inte appnamnet. HTML, fönstertitel, loggar, hälsosvar och terminal måste härleda namnet härifrån. Alla klass-, funktions-, paket- och filnamn måste vara generiska. Ingen gammal produktidentitet får förekomma i källtext, dokumentation eller testfixturer utöver den bibehållna, tekniska filändelsen för projektformatet. `tests/test_naming_contract.py` måste passera.
 
 ## Oförhandlingsbara funktionella invariants
 
