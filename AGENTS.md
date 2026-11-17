@@ -29,7 +29,7 @@
 - Gör så små verifierbara ändringar som möjligt. Ha bara en aktiv utvecklingsgren/PR.
 - Kör `python3 -m unittest discover -s tests -p 'test_*.py' -v`, `npm run check` och `python3 tests/browser_smoke.py` före kodleverans när miljön tillåter.
 - Om webbläsaren blockerar lokal HTTP kan browser_smoke använda sin uttryckligt märkta bro, men det är **inte** bevis för normal direkt HTTP i den miljön.
-- Föreslå aldrig merge av ej verifierad kod. Gör ingen merge utan användarens godkännande.
+- **Stående användargodkännande för automatisk merge:** Merga varje färdig och avgränsad PR automatiskt via GitHubs normala mergeflöde när den exakta PR-HEAD har PASS på alla obligatoriska CI-kontroller, negativa/funktionella tester är verifierade, PR är konfliktfri och mergebar, inga blockerande reviews finns och `main` fortfarande är förväntad bas. Använd squash när lämpligt. Begär inte nytt mergegodkännande per PR. **Merga aldrig** vid FAIL/PENDING/okänd CI-status, konflikter, oklara ändringar, obehörighet eller när branchskydd skulle behöva kringgås. Rapportera hindret i stället. Automatiken innebär ett beslut vid varje körning, inte ett påstående om obevakad bakgrundskörning.
 
 ## Explicit CSV-import
 
