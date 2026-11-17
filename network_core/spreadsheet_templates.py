@@ -44,6 +44,21 @@ SAMPLE = {
     ],
 }
 MIME_ODS = "application/vnd.oasis.opendocument.spreadsheet"
+# ZIP's default writestr(name, ...) inserts the current wall-clock timestamp.
+# Fixed metadata makes identical template/export content byte-identical, even
+# across the two-second ZIP timestamp boundary or a full process restart.
+_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+
+
+def _zip_member(archive: zipfile.ZipFile, name: str, content: bytes,
+                compression: int = zipfile.ZIP_DEFLATED) -> None:
+    info = zipfile.ZipInfo(name, date_time=_ZIP_TIMESTAMP)
+    info.compress_type = compression
+    info.create_system = 3
+    info.external_attr = 0o600 << 16
+    archive.writestr(info, content)
+
+
 ODS_NAMESPACES = (
     'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
     'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
@@ -133,7 +148,7 @@ def _xlsx(records_by_sheet=None, contract=None) -> bytes:
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as z:
         for name, contents in members.items():
-            z.writestr(name, contents)
+            _zip_member(z, name, contents)
     return out.getvalue()
 
 
@@ -185,10 +200,9 @@ def _ods(records_by_sheet=None, contract=None) -> bytes:
     )
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w") as z:
-        z.writestr("mimetype", MIME_ODS.encode("ascii"), compress_type=zipfile.ZIP_STORED)
-        z.writestr("content.xml", content.encode("utf-8"), compress_type=zipfile.ZIP_DEFLATED)
-        z.writestr("META-INF/manifest.xml", manifest.encode("utf-8"),
-                   compress_type=zipfile.ZIP_DEFLATED)
+        _zip_member(z, "mimetype", MIME_ODS.encode("ascii"), zipfile.ZIP_STORED)
+        _zip_member(z, "content.xml", content.encode("utf-8"))
+        _zip_member(z, "META-INF/manifest.xml", manifest.encode("utf-8"))
     return out.getvalue()
 
 

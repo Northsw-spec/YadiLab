@@ -148,17 +148,60 @@ engångsanrop till `/api/dhcp/dora` påverkar inte någon session.
 
 **Ingen session sparas** till projektfilen. Leases gäller bara den
 aktuella serverprocessens simulerade arbetsminne; de försvinner
-vid omstart, och inget faktiskt nät verifieras. RFC-leasetid är
-fortfarande endast ett *föreslaget värde*, inte en tidsstyrd
-nedräkning eller förnyelsemekanism.
+vid omstart, och inget faktiskt nät verifieras. En uttryckligt framflyttad
+virtuell klocka hanterar nu expiration, men ingen verklig
+tidsbaserad nedräkning eller RFC-förnyelsemekanism finns.
+
+## Virtuell DHCP-sessionstid och expiration (PR #34)
+
+`POST /api/dhcp/session/advance` kräver **exakt** dessa nycklar:
+
+```json
+{"sessionId":"<opaque ID från start>","project":{},"seconds":60}
+```
+
+`project` måste vara exakt samma kanoniska projektsnapshot som
+sessionen startades med. `seconds` måste vara ett äkta heltal mellan
+**1 och 604800**, aldrig bool, sträng, 0 eller negativt. Det finns
+även ett totalgränsvärde `clockSeconds <= 315360000`.
+En godkänd framflyttning räknas som en av de 256 operationerna.
+Felaktig indata, förbrukad operationsbudget, överskriden tidsgräns,
+okänd session eller ändrat projekt avvisas med HTTP 422 och lämnar
+klocka/leases orörda.
+
+Sessionens klocka börjar på **0** och kan endast öka uttryckligen.
+En `ACK_RECEIVED` får en tidsstämpel först efter att ACK är verifierad
+på den valda klientporten:
+
+- `startedAtSeconds = clockSeconds`
+- `expiresAtSeconds = startedAtSeconds + leaseSeconds`
+- `remainingSeconds = expiresAtSeconds - clockSeconds`
+
+När `clockSeconds < expiresAtSeconds` förblir leasen BOUND. På det
+exakta gränsvärdet, och därefter, försvinner den ur aktiva leases och
+returneras enbart som en **EXPIRED-händelse** i `expiredLeases`
+för det tidssteg då den upphörde. Responsen inkluderar även det
+uppdaterade virtuella klockvärdet, aktuell BOUND-tabell och oförändrade
+kanoniska projektfakta. Frigjorda adresser väljs på nytt först efter
+en separat faktisk DORA-simulering. Den nya leasen får sin egen
+ACK-tidpunkt; det är inte T1/T2-renewal.
+
+Builder visar simuleringstid, kvarvarande tid för varje aktiv lease,
+exakt expiration och återanvändning. Knappen
+**Flytta fram DHCP-klockan** är inaktiv när ingen session finns.
+Nollställning tömmer tabeller och sätter klockan till 0.
+Ingen synk mot OS-klocka, sömn, timer, schemalagt jobb eller bakgrundsarbetare
+får förändra sessionen. Engångs-DORA har fortfarande ingen
+beständig klocka eller expiration; endast den uttryckliga sessionen har det.
 
 ## Avsiktliga begränsningar
 
 - Den simulerade leasen existerar endast i minnet. **Klientportens
   kanoniska IPv4-fält är fortfarande `null` och sparas inte.**
   Detta ändrar inte IP-sändning/ARP/routing i befintliga labbar.
-- Ingen beständig lease-databas, lease-klocka, förnyelse,
-  expiration, release, DECLINE, NAK, återförsök eller DHCP-relay.
+- Ingen beständig lease-databas, förnyelse (T1/T2),
+  release, DECLINE, NAK, återförsök eller DHCP-relay.
+  Expiration stöds **endast** via uttrycklig virtuell tidsframflyttning.
 - Ingen ARP-probe eller observation från ett riktigt nät.
   Att ingen dokumenterad enhet använder en adress **bevisar inte**
   att den är ledig i ett verkligt nät.

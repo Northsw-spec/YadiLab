@@ -621,6 +621,55 @@ def run():
             expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('192.0.2.70')
             expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('192.0.2.71')
             assert 'client-3/eth0' not in dhcp_page.locator('#dora-session-leases').inner_text()
+
+            # PR34: explicit simulated time, never real-time waiting.
+            # Leases remain BOUND at t=3599, then expire exactly at 3600.
+            expect(dhcp_page.locator('#dora-session-status')).to_contain_text('simulerad tid 0 s')
+            dhcp_page.locator('#dora-session-advance-seconds').fill('0')
+            dhcp_page.locator('#dora-session-advance').click()
+            expect(dhcp_page.locator('#dora-session-clock-result')).to_contain_text(
+                'Tidshopp avvisat')
+            expect(dhcp_page.locator('#dora-session-status')).to_contain_text('simulerad tid 0 s')
+            dhcp_page.locator('#dora-session-advance-seconds').fill('3599')
+            with dhcp_page.expect_response('**/api/dhcp/session/advance') as clock_3599:
+                dhcp_page.locator('#dora-session-advance').click()
+            almost_expired = clock_3599.value.json()
+            assert clock_3599.value.status == 200
+            assert almost_expired['clockSeconds'] == 3599
+            assert almost_expired['expiredLeases'] == []
+            assert almost_expired['leaseCount'] == 2
+            assert [v['remainingSeconds'] for v in almost_expired['leases']] == [1, 1]
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('kvar 1 s')
+            dhcp_page.locator('#dora-session-advance-seconds').fill('1')
+            with dhcp_page.expect_response('**/api/dhcp/session/advance') as clock_3600:
+                dhcp_page.locator('#dora-session-advance').click()
+            now_expired = clock_3600.value.json()
+            assert now_expired['clockSeconds'] == 3600
+            assert now_expired['leaseCount'] == 0
+            assert len(now_expired['expiredLeases']) == 2
+            assert {v['ipv4'] for v in now_expired['expiredLeases']} == {
+                '192.0.2.70', '192.0.2.71'}
+            expect(dhcp_page.locator('#dora-session-status')).to_contain_text('simulerad tid 3600 s')
+            expect(dhcp_page.locator('#dora-session-clock-result')).to_contain_text(
+                'EXPIRED: client/eth0')
+            expect(dhcp_page.locator('#dora-session-clock-result')).to_contain_text(
+                'EXPIRED: client-2/eth0')
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text(
+                'Inga BOUND-leases')
+            # The same exact pool is now eligible for a genuinely new DORA.
+            with dhcp_page.expect_response('**/api/dhcp/session/run') as reused_after_expiry:
+                dhcp_page.locator('#dora-session-run').click()
+            reused = reused_after_expiry.value.json()
+            assert reused['result']['status'] == 'ACK_RECEIVED'
+            assert reused['result']['lease']['ipv4'] == '192.0.2.70'
+            assert reused['result']['lease']['startedAtSeconds'] == 3600
+            assert reused['result']['lease']['expiresAtSeconds'] == 7200
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text(
+                'client-3/eth0')
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text(
+                'kvar 3600 s')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
             with dhcp_page.expect_response('**/api/dhcp/session/reset') as multi_reset:
                 dhcp_page.locator('#dora-session-reset').click()
             assert multi_reset.value.status == 200

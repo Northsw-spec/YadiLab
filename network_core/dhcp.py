@@ -395,6 +395,36 @@ class DhcpSession:
         """Detached snapshots, not a live lease database."""
         return [dict(self._leases[address]) for address in sorted(self._leases)]
 
+    def timestamp_lease(self, ipv4: str, clock_seconds: int) -> dict:
+        """Attach virtual time only to an ACK-confirmed in-memory BOUND lease."""
+        if type(clock_seconds) is not int or clock_seconds < 0:
+            _fail("DHCP virtual clock must be a nonnegative integer")
+        if ipv4 not in self._leases:
+            _fail("only an ACK-confirmed BOUND lease can receive a timestamp")
+        lease = self._leases[ipv4]
+        if "expiresAtSeconds" in lease:
+            _fail("lease has already been timestamped")
+        lease["startedAtSeconds"] = clock_seconds
+        lease["expiresAtSeconds"] = clock_seconds + lease["leaseSeconds"]
+        return dict(lease)
+
+    def expire_leases(self, clock_seconds: int) -> list[dict]:
+        """Remove leases whose explicit expiry is at/before the virtual clock.
+
+        Untimed leases from the standalone DORA API are deliberately untouched.
+        Expired entries are detached, truthful historical events, not active leases.
+        """
+        if type(clock_seconds) is not int or clock_seconds < 0:
+            _fail("DHCP virtual clock must be a nonnegative integer")
+        expired = []
+        for address in sorted(self._leases):
+            lease = self._leases[address]
+            if "expiresAtSeconds" in lease and lease["expiresAtSeconds"] <= clock_seconds:
+                expired.append({**lease, "state": "EXPIRED", "remainingSeconds": 0})
+        for lease in expired:
+            del self._leases[lease["ipv4"]]
+        return expired
+
     def run(self, client_node: str, client_port: str, server_node: str,
             server_port: str, pool_start: str, pool_end: str,
             transaction_id: int, lease_seconds: int) -> dict:
