@@ -42,7 +42,9 @@ class SessionCableFaultTests(unittest.TestCase):
         self.assertFalse(t1["result"]["leaseRenewed"])
         self.assertEqual(t1["result"]["ack"]["transmissions"], [])
         self.assertEqual([x["linkId"] for x in t1["result"]["request"]["transmissions"]],
-                         ["to-client"])
+                         ["to-client", "wire-2", "wire-3"])
+        self.assertNotIn("to-server",
+                         [x["linkId"] for x in t1["result"]["request"]["transmissions"]])
         self.assertEqual(t1["leases"][0]["expiresAtSeconds"], 60)
         self.assertEqual(t1["leases"][0]["remainingSeconds"], 30)
         registry.advance(sid, project, 23)
@@ -84,7 +86,8 @@ class SessionCableFaultTests(unittest.TestCase):
         self.assertTrue(renewed["result"]["ack"]["receivedAtClient"])
         self.assertEqual(renewed["result"]["phase"], "REBINDING")
         self.assertEqual([t["linkId"] for t in renewed["result"]["request"]["transmissions"]],
-                         ["to-client", "to-server"])
+                         ["to-client", "to-server", "wire-2", "wire-3"])
+        self.assertTrue(renewed["result"]["request"]["receivedAtServer"])
         self.assertEqual(renewed["leases"][0]["startedAtSeconds"], 53)
         self.assertEqual(renewed["leases"][0]["expiresAtSeconds"], 113)
         self.assertEqual(renewed["leases"][0]["renewalCount"], 1)
