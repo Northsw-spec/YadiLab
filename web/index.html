@@ -87,6 +87,23 @@
           <button id="run-arp" class="btn btn-soft full" type="button">Simulera ARP</button>
           <div id="arp-result" class="trace-result" aria-live="polite">Ingen ARP-simulering utförd.</div>
         </section>
+        <section class="trace-panel" aria-label="Beständig Layer 2-session">
+          <div class="eyebrow">LAYER 2 · SESSION</div>
+          <h3>Stegvis nätverkslabb</h3>
+          <p class="muted tiny">Behåller inlärda MAC-/ARP-tabeller mellan operationer så länge projektet är oförändrat. Sessionen är endast i serverns arbetsminne, aldrig i projektfilen.</p>
+          <div class="session-actions">
+            <button id="session-start" type="button" class="btn btn-soft">Starta session</button>
+            <button id="session-reset" type="button" class="btn btn-outline" disabled>Nollställ tabeller</button>
+            <button id="session-stop" type="button" class="btn btn-outline" disabled>Avsluta</button>
+          </div>
+          <div id="session-status" class="small-muted" role="status">Ingen aktiv session.</div>
+          <label for="session-source">Källgränssnitt</label><select id="session-source" class="control"></select>
+          <label for="session-ip">ARP: mål-IPv4</label><input id="session-ip" class="control" type="text" autocomplete="off" placeholder="192.0.2.20">
+          <button id="session-arp" class="btn btn-outline full" type="button" disabled>Skicka ARP i session</button>
+          <label for="session-mac">Ethernet: destinations-MAC</label><input id="session-mac" class="control" type="text" autocomplete="off" placeholder="FF:FF:FF:FF:FF:FF">
+          <button id="session-ethernet" class="btn btn-outline full" type="button" disabled>Skicka Ethernetram i session</button>
+          <div id="session-result" class="trace-result" aria-live="polite">Starta en session. Inga ramar eller ARP-förfrågningar skickas automatiskt.</div>
+        </section>
       </aside>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

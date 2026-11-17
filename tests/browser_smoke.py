@@ -369,6 +369,58 @@ def run():
             expect(page.locator('#arp-result')).to_contain_text('ARP-cache på avsändarporten:')
             expect(page.locator('#arp-result')).to_contain_text('Tom')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # Explicit memory-backed Layer-2 session over REAL local HTTP.
+            # VLAN 20 first isolates the two clients despite matching IPv4 /24.
+            page.locator('#session-source').select_option(source_option)
+            page.locator('#session-ip').fill('192.0.2.20')
+            page.locator('#session-mac').fill('02:00:00:00:00:0B')
+            page.locator('#session-start').click()
+            expect(page.locator('#session-status')).to_contain_text('Aktiv session')
+            assert page.locator('#session-start').is_disabled()
+            page.locator('#session-arp').click()
+            expect(page.locator('#session-result')).to_contain_text('Status: NO_REPLY')
+            expect(page.locator('#session-result')).to_contain_text('ARP-cache på vald källport:')
+            expect(page.locator('#session-result')).to_contain_text('Tom')
+            expect(page.locator('#session-status')).to_contain_text('1 operation')
+
+            # Changing the documented VLAN revokes the active session.
+            page.locator('[data-item-type="node"][data-item-id="node-2"]').click()
+            page.locator('[data-port-vlan="port-2"]').fill('access:10')
+            with page.expect_response('**/api/validate') as validation:
+                page.locator('[data-port-vlan="port-2"]').dispatch_event('change')
+            assert validation.value.status == 200
+            expect(page.locator('#session-status')).to_contain_text('Ingen aktiv session')
+            assert page.locator('#session-arp').is_disabled()
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # New session: real ARP learns return path, second run is CACHE_HIT
+            # without any fabricated transmissions; opaque Ethernet reuses
+            # the same switch MAC state.
+            page.locator('#session-start').click()
+            expect(page.locator('#session-status')).to_contain_text('Aktiv session')
+            page.locator('#session-arp').click()
+            expect(page.locator('#session-result')).to_contain_text('Status: RESOLVED')
+            expect(page.locator('#session-result')).to_contain_text('192.0.2.20 → 02:00:00:00:00:0B')
+            expect(page.locator('#session-result')).to_contain_text('VLAN 10')
+            page.locator('#session-arp').click()
+            expect(page.locator('#session-result')).to_contain_text('Status: CACHE_HIT')
+            expect(page.locator('#session-result')).to_contain_text('Faktiska överföringar: 0')
+            page.locator('#session-ethernet').click()
+            expect(page.locator('#session-result')).to_contain_text('Status: SIMULATED')
+            expect(page.locator('#session-result')).to_contain_text('0x88B5')
+            expect(page.locator('#session-result')).to_contain_text('Inlärda MAC-tabeller:')
+            expect(page.locator('#session-status')).to_contain_text('3 operation')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            page.locator('#session-reset').click()
+            expect(page.locator('#session-status')).to_contain_text('0 operation')
+            expect(page.locator('#session-result')).to_contain_text('Inga operationer utförda')
+            page.locator('#session-arp').click()
+            expect(page.locator('#session-result')).to_contain_text('Status: RESOLVED')
+            page.locator('#session-stop').click()
+            expect(page.locator('#session-status')).to_contain_text('Ingen aktiv session')
+            assert page.locator('#session-ethernet').is_disabled()
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
