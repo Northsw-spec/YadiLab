@@ -1155,7 +1155,9 @@ function icmpInvestigationDescription(item) {
   if (item.probe === 'port') {
     return 'PORT ' + o.nodeId + '/' + o.portId
       + ': dokumenterat admin ' + (o.documentedEnabled ? 'UP' : 'DOWN')
-      + ' · simulerat admin ' + (o.observedEnabled ? 'UP' : 'DOWN');
+      + ' · simulerat admin ' + (o.observedEnabled ? 'UP' : 'DOWN')
+      + '\nIPv4/CIDR dokumenterat: ' + (o.documentedIpv4 ?? 'ej konfigurerat')
+      + ' · simulerat: ' + (o.observedIpv4 ?? 'ej konfigurerat');
   }
   if (item.probe === 'vlan') {
     return 'SWITCH VLAN ' + o.nodeId + '/' + o.portId
@@ -1249,7 +1251,7 @@ function renderIcmpInvestigation() {
     ? icmpInvestigationLog.map((x, i) =>
       (i + 1) + '. ' + icmpInvestigationDescription(x)).join('\n\n')
     : 'Börja med IP-uppgifter. Skicka sedan verklig ICMP och kontrollera routingtabeller '
-      + 'samt länk/VLAN för att utesluta fel. DHCP-ursprung är okänt i modellen.';
+      + 'samt länk, port/IPv4 och VLAN för att utesluta fel. DHCP-ursprung är okänt i modellen.';
   const verdict = $('icmp-investigation-verdict');
   verdict.classList.remove('ok', 'fail');
   if (icmpInvestigationVerdict?.error) {

@@ -55,6 +55,8 @@ class IcmpInvestigationTests(unittest.TestCase):
                 self.assertIn(link["observedEnabled"], (True, False))
                 port = case.probe("port", {"nodeId": "sw-left", "portId": "a"})["observation"]
                 self.assertTrue(port["documentedEnabled"])
+                self.assertIsNone(port["documentedIpv4"])
+                self.assertIsNone(port["observedIpv4"])
                 self.assertEqual(port["source"], "SIMULATED_CONFIG")
                 vlan = case.probe("vlan", {"nodeId": "sw-left", "portId": "a"})["observation"]
                 self.assertEqual(vlan["documentedVlan"], {"mode": "access", "vlan": 10})
@@ -103,6 +105,38 @@ class IcmpInvestigationTests(unittest.TestCase):
         self.assertEqual(restored["repair"]["scope"], "PREVIEW_ONLY")
         self.assertTrue(restored["replyMatched"])
 
+    def test_hidden_ipv4_prefix_fault_uses_documented_peer_and_real_echo(self):
+        case = scenario("IPV4_PREFIX_MISMATCH")
+        fault = case._fault
+        self.assertEqual(fault["type"], "IPV4_PREFIX_CHANGED")
+        self.assertEqual(fault["nodeId"], "r")
+        self.assertIn(fault["portId"], ("wan", "lan"))
+        observed = case.probe("port", {
+            "nodeId": fault["nodeId"], "portId": fault["portId"],
+        })["observation"]
+        self.assertEqual(observed["source"], "SIMULATED_CONFIG")
+        self.assertTrue(observed["documentedEnabled"])
+        self.assertEqual(observed["documentedIpv4"].split("/")[0],
+                         observed["observedIpv4"].split("/")[0])
+        self.assertNotEqual(observed["documentedIpv4"], observed["observedIpv4"])
+        self.assertNotIn("IPV4_PREFIX_MISMATCH", json.dumps(case.state()))
+        original = deepcopy(case.project)
+        failed = case.probe("ping", {})["observation"]
+        self.assertNotEqual(failed["status"], "REPLIED")
+        self.assertFalse(failed["replyMatched"])
+        case.probe("route", {"nodeId": "r", "destinationIpv4": "203.0.113.20"})
+        self.assertTrue(case.state()["canDiagnose"])
+        self.assertFalse(case.diagnose("STATIC_ROUTE_MISSING")["correct"])
+        self.assertTrue(case.diagnose("IPV4_PREFIX_MISMATCH")["correct"])
+        recovery = case.repair()
+        self.assertEqual(recovery["status"], "RECOVERED")
+        self.assertEqual(recovery["repair"]["action"], "RESTORE_IPV4")
+        self.assertEqual(recovery["repair"]["expectedIpv4"],
+                         observed["documentedIpv4"])
+        self.assertEqual(recovery["repair"]["scope"], "PREVIEW_ONLY")
+        self.assertTrue(recovery["replyMatched"])
+        self.assertEqual(case.project, original)
+
     def test_lookup_reverse_route_proves_reply_failure_not_fake_ping_pass(self):
         case = scenario("STATIC_ROUTE_MISSING")
         fault = case._fault
@@ -139,6 +173,8 @@ class IcmpInvestigationTests(unittest.TestCase):
             ("port", {"nodeId": True, "portId": "a"}),
             ("port", {"nodeId": "sw-left", "portId": "missing"}),
             ("port", {"nodeId": "sw-left", "portId": "a", "extra": 1}),
+            ("port", {"nodeId": "r", "portId": "missing"}),
+            ("port", {"nodeId": "r", "portId": None}),
             ("vlan", {"nodeId": "a", "portId": "eth0"}),
             ("vlan", {"nodeId": "sw-left", "portId": "missing"}),
             ("vlan", {"nodeId": "sw-left"}),
@@ -268,6 +304,13 @@ class IcmpInvestigationHttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(port_status["observation"]["documentedEnabled"])
         self.assertEqual(port_status["observation"]["source"], "SIMULATED_CONFIG")
+        status, router_ipv4 = call("probe", probe="port", target={
+            "nodeId": "r", "portId": "lan",
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(router_ipv4["observation"]["documentedIpv4"],
+                         "203.0.113.1/24")
+        self.assertEqual(router_ipv4["observation"]["source"], "SIMULATED_CONFIG")
         self.assertEqual(call("repair")[0], 422)
         self.assertEqual(call("diagnose", diagnosis="STATIC_ROUTE_MISSING")[1]["correct"],
                          False)

@@ -1,4 +1,4 @@
-# ICMP/IPv4: dolt fel och evidensstyrd felsökningsövning (PR #40)
+# ICMP/IPv4: dolt fel och evidensstyrd felsökningsövning
 
 ## Funktionellt kontrakt
 
@@ -11,8 +11,16 @@ Utan en sådan faktiskt verifierad referens avvisas övningen med HTTP 422.
 
 Endast fel från existerande dokumenterad konfigurering erbjuds:
 `LINK_DISABLED`, `PORT_DISABLED` (på använd, aktiverad switchport),
-`ACCESS_VLAN_CHANGED` och `STATIC_ROUTE_REMOVED`. Motorn bygger kandidater utifrån baslinjens
+`ACCESS_VLAN_CHANGED`, `STATIC_ROUTE_REMOVED` och `IPV4_PREFIX_CHANGED`.
+Motorn bygger kandidater utifrån baslinjens
 faktiskt använda kablar, aktiva switchportar och dokumenterade switch-VLAN/statiska routes.
+Prefixfel får bara väljas på ett uttryckligt aktivt IPv4-gränssnitt
+längs en faktiskt observerad ICMP-paketväg. Kandidaten väljer den
+minsta snävare nätmask (högst /30) som gör att minst en tidigare
+on-link peer med dokumenterad IPv4 faller utanför gränssnittets
+subnät. Om masken ogiltiggör en statisk next-hop eller inte bryter ett
+verkligt simulerat Echo Request/Reply avvisas kandidaten. IP-adressen
+ändras inte och inga nya gateways, routes eller kablar uppfinns.
 En kandidat accepteras bara om den existerande `compare_fault`
 bekräftar en lyckad baslinje, misslyckad paketleverans med just det
 felet och återställd verklig Echo-kommunikation i en **oberoende
@@ -58,7 +66,7 @@ eller simulerad felpunkt exponeras.
 | `ping` | `{}` | Riktigt ICMP Echo: Request/Reply-status, riktiga route- och ARP-steg, VLAN-drops och faktiskt använda kablar |
 | `route` | `{"nodeId":"a","destinationIpv4":"203.0.113.20"}` | Aktuell route lookup på vald explicit host/router, längsta prefix och eventuellt `NO_ROUTE` |
 | `link` | `{"linkId":"la"}` | Dokumenterat jämfört med simulerat länktillstånd och deklarerade ändpunkter |
-| `port` | `{"nodeId":"sw-left","portId":"a"}` | Dokumenterat kontra simulerat administrativt portläge (inte fysisk carrier-telemetri) |
+| `port` | `{"nodeId":"sw-left","portId":"a"}` | Dokumenterat kontra simulerat administrativt portläge och IPv4/CIDR (eller null för port utan IP); inte live-telemetri |
 | `vlan` | `{"nodeId":"sw-left","portId":"a"}` | Dokumenterad kontra simulerad explicit VLAN-konfiguration |
 
 `route` får endast slå upp **källans eller destinationens egen IP**
@@ -84,7 +92,8 @@ kopplas inte implicit in i detta ICMP-felsökningsfall.
 
 `POST /api/icmp/investigation/diagnose` kräver exakt
 `sessionId`, `project`, `diagnosis`, där en enda av
-`CABLE_DOWN`, `PORT_SHUTDOWN`, `VLAN_MISMATCH`, `STATIC_ROUTE_MISSING`
+`CABLE_DOWN`, `PORT_SHUTDOWN`, `VLAN_MISMATCH`,
+`STATIC_ROUTE_MISSING`, `IPV4_PREFIX_MISMATCH`
 är tillåten. Före diagnos krävs riktiga mätningar av **ping**,
 **route** och minst en tredje kontrolltyp (**address**, **link**, **port**
 eller **vlan**). Fel gissning returnerar enbart `correct=false`
@@ -119,6 +128,8 @@ efter projektändring.
 - Den är begränsad till befintlig statisk IPv4-routing och dokumenterat VLAN.
 - Den simulerar ingen DHCP-tilldelning för den dokumenterade
   IPv4-källan och vet inte varifrån dess adress kommer.
+- IPv4/CIDR-mätningen visar simulerad konfiguration mot dokumenterad
+  baslinje, inte live-kontroll av faktisk nätmask på en riktig NIC.
 - Den ger ingen DNS-analys, TCP-test, NAT, dynamisk routing,
   brandväggspolicy, RTT, automatiska felläkningar eller internetstatus.
 - En ensam route lookup är aldrig liktydig med paketrechability,
