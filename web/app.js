@@ -428,12 +428,38 @@ function renderTroubleshooting() {
   vlanSelect.replaceChildren(...vlanPorts.map(p => el('option',{value:p.value},p.label)));
   if (vlanPorts.some(p => p.value === previousVlan)) vlanSelect.value = previousVlan;
 
+  const ipv4Select = $('trouble-ipv4-port');
+  const previousIpv4 = ipv4Select.value;
+  const ipv4Ports = project.nodes.filter(n => n.kind !== 'switch')
+    .flatMap(n => n.ports.filter(p => p.enabled && p.ipv4).map(p => ({
+      value:JSON.stringify([n.id,p.id]),
+      label:n.label + ' / ' + p.name + ' (' + p.ipv4 + ')',
+    })));
+  ipv4Select.replaceChildren(...ipv4Ports.map(p => el('option',{value:p.value},p.label)));
+  if (ipv4Ports.some(p => p.value === previousIpv4)) ipv4Select.value = previousIpv4;
+
+  const routeSelect = $('trouble-route');
+  const previousRoute = routeSelect.value;
+  const routes = project.nodes.filter(n => n.kind !== 'switch')
+    .flatMap(n => (n.staticRoutes || []).map(route => ({
+      value:JSON.stringify([n.id,route.id]),
+      label:n.label + ' / ' + route.id + ' (' + route.destination
+        + ' via ' + route.nextHop + ')',
+    })));
+  routeSelect.replaceChildren(...routes.map(r => el('option',{value:r.value},r.label)));
+  if (routes.some(r => r.value === previousRoute)) routeSelect.value = previousRoute;
+
   $('trouble-link-fields').hidden = type !== 'LINK_DISABLED';
   $('trouble-port-fields').hidden = type !== 'PORT_DISABLED';
   $('trouble-vlan-fields').hidden = !['ACCESS_VLAN_CHANGED','TRUNK_VLAN_BLOCKED'].includes(type);
+  $('trouble-ipv4-fields').hidden = type !== 'IPV4_PREFIX_CHANGED';
+  $('trouble-route-fields').hidden = !['STATIC_ROUTE_REMOVED','STATIC_NEXT_HOP_CHANGED'].includes(type);
+  $('trouble-next-hop-fields').hidden = type !== 'STATIC_NEXT_HOP_CHANGED';
   $('run-troubleshoot').disabled = !sources.length ||
     !(type === 'LINK_DISABLED' ? links.length :
-      type === 'PORT_DISABLED' ? ports.length : vlanPorts.length);
+      type === 'PORT_DISABLED' ? ports.length :
+      ['ACCESS_VLAN_CHANGED','TRUNK_VLAN_BLOCKED'].includes(type) ? vlanPorts.length :
+      type === 'IPV4_PREFIX_CHANGED' ? ipv4Ports.length : routes.length);
 
   const output = $('trouble-result');
   output.classList.remove('ok','fail');
@@ -457,17 +483,33 @@ function renderTroubleshooting() {
       + `\n  Verkligt observerade kablar: ${wires.join(', ') || 'inga'}`;
   };
   const faultKind = d.fault.type;
-  const target = d.fault.linkId || (d.fault.nodeId + '/' + d.fault.portId);
+  const target = d.fault.linkId || (d.fault.nodeId + '/' +
+    (d.fault.routeId || d.fault.portId));
   const faultState = faultKind === 'ACCESS_VLAN_CHANGED'
     ? ('access ' + d.fault.fromVlan + ' → ' + d.fault.toVlan)
-    : faultKind === 'TRUNK_VLAN_BLOCKED'
-      ? ('trunk: blockera VLAN ' + d.fault.blockedVlan) : 'enabled true → false';
+    : faultKind === 'TRUNK_VLAN_BLOCKED' ? ('trunk: blockera VLAN ' + d.fault.blockedVlan)
+    : faultKind === 'IPV4_PREFIX_CHANGED' ? (d.fault.fromIpv4 + ' → ' + d.fault.toIpv4)
+    : faultKind === 'STATIC_ROUTE_REMOVED' ? ('ta bort ' + d.fault.removedRoute.destination)
+    : faultKind === 'STATIC_NEXT_HOP_CHANGED'
+      ? (d.fault.fromNextHop + ' → ' + d.fault.toNextHop)
+      : 'enabled true → false';
   const faultLabel = faultKind === 'LINK_DISABLED' ? 'Kabel avstängd'
-    : faultKind === 'PORT_DISABLED' ? 'Port avstängd' : 'VLAN-fel';
+    : faultKind === 'PORT_DISABLED' ? 'Port avstängd'
+    : faultKind === 'IPV4_PREFIX_CHANGED' ? 'IPv4-prefix fel'
+    : faultKind === 'STATIC_ROUTE_REMOVED' ? 'Statisk route borttagen'
+    : faultKind === 'STATIC_NEXT_HOP_CHANGED' ? 'Fel next-hop' : 'VLAN-fel';
   const restoredLabel = faultKind === 'LINK_DISABLED' ? 'Återställd kabel'
-    : faultKind === 'PORT_DISABLED' ? 'Återställd port' : 'Återställt VLAN';
+    : faultKind === 'PORT_DISABLED' ? 'Återställd port'
+    : faultKind === 'IPV4_PREFIX_CHANGED' ? 'Återställt IPv4-prefix'
+    : ['STATIC_ROUTE_REMOVED','STATIC_NEXT_HOP_CHANGED'].includes(faultKind)
+      ? 'Återställd route' : 'Återställt VLAN';
   const repair = d.repair.action === 'RESTORE_VLAN_CONFIG'
     ? ('återställ ' + target + ' till ' + JSON.stringify(d.repair.expectedVlan))
+    : d.repair.action === 'RESTORE_IPV4' ? ('återställ ' + target + ' till ' + d.repair.expectedIpv4)
+    : d.repair.action === 'RESTORE_STATIC_ROUTE'
+      ? ('återställ ' + target + ' med ' + JSON.stringify(d.repair.expectedRoute))
+    : d.repair.action === 'RESTORE_NEXT_HOP'
+      ? ('återställ ' + target + ' till next-hop ' + d.repair.expectedNextHop)
     : ('återaktivera ' + target);
   output.textContent = [
     'Felsökningsstatus: ' + d.status,
@@ -1150,30 +1192,50 @@ async function runTroubleshooting() {
   const destinationIpv4 = $('trouble-destination').value.trim();
   const ttlText = $('trouble-ttl').value.trim();
   const chosen = kind === 'LINK_DISABLED' ? $('trouble-link').value :
-    kind === 'PORT_DISABLED' ? $('trouble-port').value : $('trouble-vlan-port').value;
+    kind === 'PORT_DISABLED' ? $('trouble-port').value :
+    ['ACCESS_VLAN_CHANGED','TRUNK_VLAN_BLOCKED'].includes(kind)
+      ? $('trouble-vlan-port').value :
+    kind === 'IPV4_PREFIX_CHANGED' ? $('trouble-ipv4-port').value :
+      $('trouble-route').value;
   const vlanText = $('trouble-vlan').value.trim();
+  const prefixText = $('trouble-prefix').value.trim();
+  const hopText = $('trouble-next-hop').value.trim();
   if (!chosen || !destinationIpv4 || !/^[0-9]+$/.test(ttlText) ||
       Number(ttlText) < 1 || Number(ttlText) > 255 ||
       (['ACCESS_VLAN_CHANGED','TRUNK_VLAN_BLOCKED'].includes(kind) &&
-       (!/^[0-9]+$/.test(vlanText) || Number(vlanText) < 1 || Number(vlanText) > 4094))) {
-    troubleDiagnostic = {error:'Ange källa, mål-IPv4, TTL 1–255 och en giltig port/kabel/VLAN 1–4094.'};
+       (!/^[0-9]+$/.test(vlanText) || Number(vlanText) < 1 || Number(vlanText) > 4094)) ||
+      (kind === 'IPV4_PREFIX_CHANGED' &&
+       (!/^[0-9]+$/.test(prefixText) || Number(prefixText) < 1 || Number(prefixText) > 32)) ||
+      (kind === 'STATIC_NEXT_HOP_CHANGED' && !hopText)) {
+    troubleDiagnostic = {error:'Ange källa, mål-IPv4, TTL, och ett explicit giltigt värde för det valda felet.'};
     renderTroubleshooting();
     return;
   }
   const ttl = Number(ttlText);
-  const [nodeId,portId] = kind !== 'LINK_DISABLED' ? JSON.parse(chosen) : [null,null];
+  const [nodeId,targetId] = kind !== 'LINK_DISABLED' ? JSON.parse(chosen) : [null,null];
   const fault = kind === 'LINK_DISABLED' ? {type:kind,linkId:chosen}
-    : kind === 'PORT_DISABLED' ? {type:kind,nodeId,portId}
-    : kind === 'ACCESS_VLAN_CHANGED' ? {type:kind,nodeId,portId,newVlan:Number(vlanText)}
-    : {type:kind,nodeId,portId,blockedVlan:Number(vlanText)};
+    : kind === 'PORT_DISABLED' ? {type:kind,nodeId,portId:targetId}
+    : kind === 'ACCESS_VLAN_CHANGED' ? {type:kind,nodeId,portId:targetId,newVlan:Number(vlanText)}
+    : kind === 'TRUNK_VLAN_BLOCKED' ? {type:kind,nodeId,portId:targetId,blockedVlan:Number(vlanText)}
+    : kind === 'IPV4_PREFIX_CHANGED' ? {type:kind,nodeId,portId:targetId,newPrefix:Number(prefixText)}
+    : kind === 'STATIC_ROUTE_REMOVED' ? {type:kind,nodeId,routeId:targetId}
+    : {type:kind,nodeId,routeId:targetId,newNextHop:hopText};
   const snapshot = JSON.stringify(project);
-  const inputSnapshot = [selected,kind,chosen,destinationIpv4,ttlText,vlanText].join('|');
-  const currentInputs = () => [ $('trouble-source').value,$('trouble-type').value,
-    $('trouble-type').value === 'LINK_DISABLED' ? $('trouble-link').value :
-      $('trouble-type').value === 'PORT_DISABLED' ? $('trouble-port').value :
-      $('trouble-vlan-port').value,
-    $('trouble-destination').value.trim(),$('trouble-ttl').value.trim(),
-    $('trouble-vlan').value.trim() ].join('|');
+  const inputSnapshot = [selected,kind,chosen,destinationIpv4,ttlText,vlanText,
+    prefixText,hopText].join('|');
+  const currentInputs = () => {
+    const currentType = $('trouble-type').value;
+    const currentTarget = currentType === 'LINK_DISABLED' ? $('trouble-link').value :
+      currentType === 'PORT_DISABLED' ? $('trouble-port').value :
+      ['ACCESS_VLAN_CHANGED','TRUNK_VLAN_BLOCKED'].includes(currentType)
+        ? $('trouble-vlan-port').value :
+      currentType === 'IPV4_PREFIX_CHANGED' ? $('trouble-ipv4-port').value :
+        $('trouble-route').value;
+    return [ $('trouble-source').value, currentType,currentTarget,
+      $('trouble-destination').value.trim(),$('trouble-ttl').value.trim(),
+      $('trouble-vlan').value.trim(),$('trouble-prefix').value.trim(),
+      $('trouble-next-hop').value.trim() ].join('|');
+  };
   const stillCurrent = () => snapshot === JSON.stringify(project) &&
     currentInputs() === inputSnapshot;
   const path = kind === 'LINK_DISABLED' ? '/api/troubleshoot/link' : '/api/troubleshoot/fault';
@@ -1312,8 +1374,10 @@ $('run-ipv4-trace').addEventListener('click', runIPv4Trace);
 $('run-ping').addEventListener('click', runPing);
 $('run-troubleshoot').addEventListener('click', runTroubleshooting);
 for (const id of ['trouble-source','trouble-link','trouble-type','trouble-port',
-                  'trouble-vlan-port','trouble-vlan','trouble-destination','trouble-ttl']) {
-  $(id).addEventListener(['trouble-vlan','trouble-destination','trouble-ttl'].includes(id)
+                  'trouble-vlan-port','trouble-vlan','trouble-ipv4-port','trouble-prefix',
+                  'trouble-route','trouble-next-hop','trouble-destination','trouble-ttl']) {
+  $(id).addEventListener(['trouble-vlan','trouble-prefix','trouble-next-hop',
+      'trouble-destination','trouble-ttl'].includes(id)
     ? 'input' : 'change', () => {
     troubleDiagnostic = null; renderTroubleshooting();
   });

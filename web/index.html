@@ -158,6 +158,9 @@
             <option value="PORT_DISABLED">Stäng av en port</option>
             <option value="ACCESS_VLAN_CHANGED">Byt access-VLAN</option>
             <option value="TRUNK_VLAN_BLOCKED">Blockera VLAN på trunk</option>
+            <option value="IPV4_PREFIX_CHANGED">Ändra IPv4-prefix</option>
+            <option value="STATIC_ROUTE_REMOVED">Ta bort statisk route</option>
+            <option value="STATIC_NEXT_HOP_CHANGED">Ändra statisk next-hop</option>
           </select>
           <div id="trouble-link-fields">
             <label for="trouble-link">Kabel att stänga av tillfälligt</label>
@@ -172,6 +175,20 @@
             <select id="trouble-vlan-port" class="control"></select>
             <label for="trouble-vlan">Nytt access-VLAN / befintligt trunk-VLAN att blockera</label>
             <input id="trouble-vlan" class="control" type="number" min="1" max="4094" step="1" value="20">
+          </div>
+          <div id="trouble-ipv4-fields" hidden>
+            <label for="trouble-ipv4-port">Port med explicit IPv4/CIDR</label>
+            <select id="trouble-ipv4-port" class="control"></select>
+            <label for="trouble-prefix">Nytt prefix (1–32)</label>
+            <input id="trouble-prefix" class="control" type="number" min="1" max="32" step="1" value="30">
+          </div>
+          <div id="trouble-route-fields" hidden>
+            <label for="trouble-route">Befintlig statisk route</label>
+            <select id="trouble-route" class="control"></select>
+            <div id="trouble-next-hop-fields" hidden>
+              <label for="trouble-next-hop">Felaktig men on-link next-hop IPv4</label>
+              <input id="trouble-next-hop" class="control" type="text" autocomplete="off" placeholder="192.0.2.254">
+            </div>
           </div>
           <label for="trouble-ttl">TTL per riktning (1–255)</label>
           <input id="trouble-ttl" class="control" type="number" min="1" max="255" step="1" value="5">
