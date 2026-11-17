@@ -66,6 +66,14 @@ let doraRenewalTrace = null;
 let doraFaultEvent = null;
 let doraPortFaultEvent = null;
 let doraVlanFaultEvent = null;
+let investigationId = null;
+let investigationState = null;
+let investigationGeneration = 0;
+let investigationBusy = false;
+let investigationLog = [];
+let investigationVerdict = null;
+let investigationRecovery = null;
+let investigationError = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -155,7 +163,21 @@ function invalidateDoraDiagnostics() {
   doraGeneration += 1;
   doraDiagnostic = null;
 }
+function invalidateInvestigation() {
+  investigationGeneration += 1;
+  const previous = investigationId;
+  investigationId = null;
+  investigationState = null;
+  investigationBusy = false;
+  investigationLog = [];
+  investigationVerdict = null;
+  investigationRecovery = null;
+  investigationError = null;
+  if (previous) void api('/api/dhcp/investigation/stop', {sessionId: previous}).catch(() => {});
+}
+
 function invalidateDoraSession() {
+  invalidateInvestigation();
   doraSessionGeneration += 1;
   const previous = doraSessionId;
   doraSessionId = null;
@@ -484,6 +506,142 @@ function renderDoraDiagnostics() {
   resultLines.push('Endast tillfällig DHCP-simuleringssession. Klientens kanoniska IPv4 ändras inte.'
     + ' Ingen fil sparas. Ingen faktisk adresskonfliktskontroll eller lease-förnyelse.');
   output.textContent = resultLines.join('\n\n');
+}
+
+function investigationDescription(probe, observation) {
+  if (probe === 'lease') {
+    return 'LEASE: ' + observation.status + ' · IPv4 ' + observation.ipv4
+      + ' · t=' + observation.clockSeconds + ' s'
+      + ' · T1 ' + observation.t1AtSeconds + ' s · T2 '
+      + observation.t2AtSeconds + ' s · kvar ' + observation.remainingSeconds + ' s';
+  }
+  if (probe === 'renew') {
+    return 'DHCPREQUEST: ' + observation.status + ' · fas ' + observation.phase
+      + '\n  REQUEST nådde vald server: ' + (observation.requestReachedServer ? 'ja' : 'nej')
+      + '\n  DHCPACK nådde klienten: ' + (observation.ackReachedClient ? 'ja' : 'nej')
+      + '\n  Simulerade kablar: ' + (observation.transmissions.map(t => t.linkId).join(', ') || 'inga')
+      + '\n  VLAN-droppar: ' + (observation.vlanDrops.length
+        ? observation.vlanDrops.map(d => d.reason + ' vid ' + d.switch + '/' + d.port).join(', ')
+        : 'inga observerade')
+      + '\n  Lease förnyad: ' + (observation.leaseRenewed ? 'ja' : 'nej');
+  }
+  if (probe === 'link') {
+    return 'LÄNKMÄTNING ' + observation.linkId + ': '
+      + observation.observedCarrier + ' · dokumenterat aktiv: '
+      + (observation.documentedActive ? 'ja' : 'nej')
+      + '\n  ' + observation.endpoints.map(x => x.node + '/' + x.port).join(' ↔ ');
+  }
+  if (probe === 'port') {
+    return 'SWITCHPORT ' + observation.nodeId + '/' + observation.portId
+      + ' · administrativ status: ' + observation.observedAdmin
+      + ' · operativ länk: ' + observation.observedCarrier;
+  }
+  if (probe === 'vlan') {
+    return 'ACCESS-VLAN ' + observation.nodeId + '/' + observation.portId
+      + ' · dokumenterat VLAN ' + observation.documentedVlan
+      + ' · observerat VLAN ' + observation.observedVlan;
+  }
+  return 'Okänd observation';
+}
+
+function renderInvestigation() {
+  const active = investigationId !== null;
+  const busy = investigationBusy;
+  const startValues = doraSessionInput();
+  $('investigation-start').disabled = active || busy
+    || !startValues[0] || !startValues[1] || !startValues[2] || !startValues[3];
+  $('investigation-stop').disabled = !active || busy;
+  const links = project.links.filter(link => link.enabled
+    && [link.a, link.b].every(endpoint => {
+      const node = project.nodes.find(n => n.id === endpoint.node);
+      return node?.ports.some(p => p.id === endpoint.port && p.enabled);
+    }));
+  const linkSelector = $('investigation-link');
+  const previousLink = linkSelector.value;
+  linkSelector.replaceChildren(...links.map(link =>
+    el('option', {value:link.id}, link.id + ' · '
+      + link.a.node + '/' + link.a.port + ' ↔ ' + link.b.node + '/' + link.b.port)));
+  if (links.some(l => l.id === previousLink)) linkSelector.value = previousLink;
+  const switches = project.nodes.filter(n => n.kind === 'switch')
+    .flatMap(n => n.ports.filter(p => p.enabled && links.some(l =>
+      (l.a.node === n.id && l.a.port === p.id)
+      || (l.b.node === n.id && l.b.port === p.id)))
+      .map(p => ({nodeId:n.id, portId:p.id})));
+  const portSelector = $('investigation-port');
+  const previousPort = portSelector.value;
+  portSelector.replaceChildren(...switches.map(p => el('option',
+    {value:JSON.stringify([p.nodeId, p.portId])}, p.nodeId + '/' + p.portId)));
+  if (switches.some(p => JSON.stringify([p.nodeId, p.portId]) === previousPort)) {
+    portSelector.value = previousPort;
+  }
+  const selectedProbe = $('investigation-probe').value;
+  const needsLink = selectedProbe === 'link';
+  const needsPort = selectedProbe === 'port' || selectedProbe === 'vlan';
+  linkSelector.disabled = !active || busy || !needsLink;
+  portSelector.disabled = !active || busy || !needsPort;
+  $('investigation-probe').disabled = !active || busy;
+  $('investigation-run-probe').disabled = !active || busy
+    || (needsLink && !linkSelector.value) || (needsPort && !portSelector.value)
+    || Boolean(investigationState?.repaired);
+  const observed = new Set(investigationState?.probesPerformed ?? []);
+  $('investigation-submit').disabled = !active || busy
+    || Boolean(investigationState?.repaired) || Boolean(investigationState?.diagnosed)
+    || !observed.has('renew') || [...observed].filter(k => k !== 'renew').length < 2;
+  $('investigation-diagnosis').disabled = !active || busy || Boolean(investigationState?.diagnosed);
+  $('investigation-repair').disabled = !active || busy
+    || !investigationState?.diagnosed || Boolean(investigationState?.repaired);
+  const status = $('investigation-status');
+  status.textContent = investigationBusy
+    ? 'Undersökning pågår…'
+    : investigationError ? 'Felsökningslabb: ' + investigationError
+    : active
+      ? 'Aktiv övning · ' + investigationState.clientNode + '/' + investigationState.clientPort
+        + ' · simulerad tid ' + investigationState.clockSeconds + ' s'
+        + ' · tidigare DHCP-lease ' + investigationState.leaseIpv4
+        + ' · ' + investigationState.remainingSeconds + ' s kvar'
+        + ' · ' + investigationState.observations + ' observation(er)'
+      : 'Ingen felsökningsövning. Starta från ett dokumenterat DHCP-nät.';
+  const log = $('investigation-observations');
+  log.classList.remove('ok', 'fail');
+  log.textContent = investigationLog.length
+    ? investigationLog.map((x, i) => (i + 1) + '. '
+        + (x.error ? 'MÄTNING AVVISAD: ' + x.error :
+          investigationDescription(x.probe, x.observation))).join('\n\n')
+    : 'Inga observationer. Börja gärna med lease, skicka sedan DHCPREQUEST och undersök de möjliga felvägarna.';
+  const verdict = $('investigation-verdict');
+  verdict.classList.remove('ok', 'fail');
+  if (investigationVerdict?.error) {
+    verdict.classList.add('fail');
+    verdict.textContent = investigationVerdict.error;
+  } else if (investigationVerdict) {
+    verdict.classList.add(investigationVerdict.correct ? 'ok' : 'fail');
+    verdict.textContent = investigationVerdict.correct
+      ? 'DIAGNOS BEKRÄFTAD. Du kan nu återställa den identifierade felkategorin '
+        + 'och testa om ett faktiskt DHCPACK når klienten.'
+      : 'HYPOTES AVVISAD. ' + investigationVerdict.feedback
+        + ' Det verkliga felet avslöjas inte.';
+  } else {
+    verdict.textContent = 'Pröva en hypotes först efter ett faktiskt DHCPREQUEST och '
+      + 'minst två andra olika slags observationer.';
+  }
+  const recovery = $('investigation-recovery');
+  recovery.classList.remove('ok', 'fail');
+  if (investigationRecovery?.error) {
+    recovery.classList.add('fail');
+    recovery.textContent = 'Åtgärd avvisad: ' + investigationRecovery.error;
+  } else if (investigationRecovery) {
+    recovery.classList.add(investigationRecovery.status === 'RECOVERED' ? 'ok' : 'fail');
+    recovery.textContent = 'RESULTAT: ' + investigationRecovery.status
+      + '\nREQUEST nådde servern: ' + (investigationRecovery.requestReachedServer ? 'ja' : 'nej')
+      + '\nACK nådde klienten: ' + (investigationRecovery.ackReachedClient ? 'ja' : 'nej')
+      + '\nNy simulerad slutsekund: ' + investigationRecovery.expiresAtSeconds
+      + (investigationRecovery.status === 'RECOVERED'
+        ? '\nBekräftat övningsfel: ' + investigationRecovery.cause
+          + ' · identifierad dokumenterad målpunkt: ' + JSON.stringify(investigationRecovery.repair)
+        : '\nIngen verifierad DHCP-reparation. Återställning av annan okänd orsak påstås inte.');
+  } else {
+    recovery.textContent = 'Ingen reparation. Återställning kräver bekräftad diagnos och verklig DHCPACK.';
+  }
 }
 
 function renderDoraSession() {
@@ -1425,6 +1583,7 @@ function render() {
   renderDhcpDiagnostics();
   renderDoraDiagnostics();
   renderDoraSession();
+  renderInvestigation();
   renderSessionDiagnostics();
   renderRouteLookup();
   renderIPv4Trace();
@@ -1661,6 +1820,176 @@ function sessionInteger(value, min, max) {
   return /^[0-9]+$/.test(value) && Number.isSafeInteger(Number(value))
     && Number(value) >= min && Number(value) <= max ? Number(value) : null;
 }
+async function startInvestigation() {
+  if (investigationId || investigationBusy) return;
+  const inputs = doraSessionInput();
+  const [client, server, poolStart, poolEnd, , rawLease] = inputs;
+  const leaseSeconds = sessionInteger(rawLease, 60, 604800);
+  if (!client || !server || !poolStart || !poolEnd || leaseSeconds === null) {
+    investigationError = 'Välj klient, server, explicit pool och giltig leasetid i DHCP-panelen.';
+    renderInvestigation();
+    return;
+  }
+  const [clientNode, clientPort] = JSON.parse(client);
+  const [serverNode, serverPort] = JSON.parse(server);
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++investigationGeneration;
+  investigationBusy = true;
+  investigationError = null;
+  investigationLog = [];
+  investigationVerdict = null;
+  investigationRecovery = null;
+  renderInvestigation();
+  const stillCurrent = () => generation === investigationGeneration
+    && edit === editRevision && workspace === workspaceRevision
+    && JSON.stringify(project) === snapshot
+    && JSON.stringify(doraSessionInput()) === JSON.stringify(inputs);
+  try {
+    const data = await api('/api/dhcp/investigation/start', {
+      project: JSON.parse(snapshot), clientNode, clientPort, serverNode, serverPort,
+      poolStart, poolEnd, leaseSeconds,
+    });
+    if (stillCurrent()) {
+      investigationId = data.sessionId;
+      investigationState = data;
+    } else {
+      void api('/api/dhcp/investigation/stop', {sessionId: data.sessionId}).catch(() => {});
+    }
+  } catch (error) {
+    if (stillCurrent()) investigationError = error.message;
+  } finally {
+    if (generation === investigationGeneration) {
+      investigationBusy = false;
+      renderInvestigation();
+    }
+  }
+}
+
+async function probeInvestigation() {
+  if (!investigationId || investigationBusy || investigationState?.repaired) return;
+  const kind = $('investigation-probe').value;
+  let target = {};
+  if (kind === 'link') {
+    target = {linkId: $('investigation-link').value};
+    if (!target.linkId) return;
+  } else if (kind === 'port' || kind === 'vlan') {
+    if (!$('investigation-port').value) return;
+    const [nodeId, portId] = JSON.parse($('investigation-port').value);
+    target = {nodeId, portId};
+  }
+  const id = investigationId;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++investigationGeneration;
+  investigationBusy = true;
+  investigationError = null;
+  renderInvestigation();
+  const stillCurrent = () => generation === investigationGeneration
+    && investigationId === id && edit === editRevision
+    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
+  try {
+    const data = await api('/api/dhcp/investigation/probe', {
+      sessionId: id, project: JSON.parse(snapshot), probe: kind, target,
+    });
+    if (stillCurrent()) {
+      investigationState = data;
+      investigationLog.push({probe:kind, observation:data.observation});
+    }
+  } catch (error) {
+    if (stillCurrent()) investigationLog.push({error:error.message});
+  } finally {
+    if (generation === investigationGeneration) {
+      investigationBusy = false;
+      renderInvestigation();
+    }
+  }
+}
+
+async function diagnoseInvestigation() {
+  if (!investigationId || investigationBusy || investigationState?.diagnosed) return;
+  const id = investigationId, diagnosis = $('investigation-diagnosis').value;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++investigationGeneration;
+  investigationBusy = true;
+  renderInvestigation();
+  const stillCurrent = () => generation === investigationGeneration
+    && investigationId === id && edit === editRevision
+    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
+  try {
+    const data = await api('/api/dhcp/investigation/diagnose', {
+      sessionId: id, project: JSON.parse(snapshot), diagnosis,
+    });
+    if (stillCurrent()) {
+      investigationState = data;
+      investigationVerdict = data;
+    }
+  } catch (error) {
+    if (stillCurrent()) investigationVerdict = {error:error.message};
+  } finally {
+    if (generation === investigationGeneration) {
+      investigationBusy = false;
+      renderInvestigation();
+    }
+  }
+}
+
+async function repairInvestigation() {
+  if (!investigationId || investigationBusy || !investigationState?.diagnosed
+      || investigationState.repaired) return;
+  const id = investigationId;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++investigationGeneration;
+  investigationBusy = true;
+  renderInvestigation();
+  const stillCurrent = () => generation === investigationGeneration
+    && investigationId === id && edit === editRevision
+    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
+  try {
+    const data = await api('/api/dhcp/investigation/repair', {
+      sessionId: id, project: JSON.parse(snapshot),
+    });
+    if (stillCurrent()) {
+      investigationState = data;
+      investigationRecovery = data;
+    }
+  } catch (error) {
+    if (stillCurrent()) investigationRecovery = {error:error.message};
+  } finally {
+    if (generation === investigationGeneration) {
+      investigationBusy = false;
+      renderInvestigation();
+    }
+  }
+}
+
+async function stopInvestigation() {
+  if (!investigationId || investigationBusy) return;
+  const id = investigationId, generation = ++investigationGeneration;
+  investigationBusy = true;
+  renderInvestigation();
+  try {
+    await api('/api/dhcp/investigation/stop', {sessionId:id});
+    if (generation === investigationGeneration) {
+      investigationId = null;
+      investigationState = null;
+      investigationLog = [];
+      investigationVerdict = null;
+      investigationRecovery = null;
+      investigationError = null;
+    }
+  } catch (error) {
+    if (generation === investigationGeneration) investigationError = error.message;
+  } finally {
+    if (generation === investigationGeneration) {
+      investigationBusy = false;
+      renderInvestigation();
+    }
+  }
+}
+
 async function startDoraSession() {
   if (doraSessionBusy || doraSessionId !== null || doraBusy) return;
   doraClockEvent = null;
@@ -2428,6 +2757,12 @@ $('route-destination-ip').addEventListener('input', () => {
 $('run-arp').addEventListener('click', runArp);
 $('run-dhcp').addEventListener('click', runDhcp);
 $('run-dora').addEventListener('click', runDora);
+$('investigation-start').addEventListener('click', startInvestigation);
+$('investigation-stop').addEventListener('click', stopInvestigation);
+$('investigation-run-probe').addEventListener('click', probeInvestigation);
+$('investigation-submit').addEventListener('click', diagnoseInvestigation);
+$('investigation-repair').addEventListener('click', repairInvestigation);
+$('investigation-probe').addEventListener('change', renderInvestigation);
 $('dora-session-start').addEventListener('click', startDoraSession);
 $('dora-session-run').addEventListener('click', runDoraSession);
 $('dora-session-renew').addEventListener('click', renewDoraSession);

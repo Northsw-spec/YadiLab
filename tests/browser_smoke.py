@@ -974,6 +974,132 @@ def run():
             assert vlan_reset.value.json()['faultedAccessVlans'] == []
             assert vlan_reset.value.json()['leases'] == []
             assert not errors, errors
+
+            # PR38: student sees only real observations; the server never
+            # reveals hidden fault metadata before successful diagnosis.
+            with vlan_page.expect_response('**/api/dhcp/investigation/start') as exercise_start:
+                vlan_page.locator('#investigation-start').click()
+            exercise = exercise_start.value.json()
+            assert exercise_start.value.status == 200
+            assert exercise['clockSeconds'] == 30
+            assert exercise['remainingSeconds'] == 30
+            assert exercise['expiresAtSeconds'] == 60
+            assert 'faulted' not in json.dumps(exercise)
+            assert not any(x in json.dumps(exercise) for x in (
+                'CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH'))
+            expect(vlan_page.locator('#investigation-status')).to_contain_text(
+                'Aktiv övning')
+            expect(vlan_page.locator('#investigation-submit')).to_be_disabled()
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as measured_lease:
+                vlan_page.locator('#investigation-run-probe').click()
+            assert measured_lease.value.json()['observation']['status'] == 'BOUND'
+            assert measured_lease.value.json()['observation']['remainingSeconds'] == 30
+            vlan_page.locator('#investigation-probe').select_option('renew')
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as measured_renew:
+                vlan_page.locator('#investigation-run-probe').click()
+            symptom = measured_renew.value.json()['observation']
+            assert symptom['status'] == 'REQUEST_NOT_RECEIVED'
+            assert symptom['requestReachedServer'] is False
+            assert symptom['ackReachedClient'] is False
+            expect(vlan_page.locator('#investigation-observations')).to_contain_text(
+                'DHCPREQUEST: REQUEST_NOT_RECEIVED')
+            vlan_page.locator('#investigation-probe').select_option('link')
+            vlan_page.locator('#investigation-link').select_option('to-server')
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as measured_link:
+                vlan_page.locator('#investigation-run-probe').click()
+            link_observation = measured_link.value.json()['observation']
+            assert link_observation['documentedActive'] is True
+            vlan_page.locator('#investigation-probe').select_option('port')
+            vlan_page.locator('#investigation-port').select_option(
+                json.dumps(['sw', 's'], separators=(',', ':')))
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as measured_port:
+                vlan_page.locator('#investigation-run-probe').click()
+            port_observation = measured_port.value.json()['observation']
+            vlan_page.locator('#investigation-probe').select_option('vlan')
+            vlan_page.locator('#investigation-port').select_option(
+                json.dumps(['sw', 'c'], separators=(',', ':')))
+            with vlan_page.expect_response('**/api/dhcp/investigation/probe') as measured_vlan:
+                vlan_page.locator('#investigation-run-probe').click()
+            vlan_observation = measured_vlan.value.json()['observation']
+            assert vlan_observation['documentedVlan'] == 10
+            if link_observation['observedCarrier'] == 'DOWN':
+                inferred = ('PORT_SHUTDOWN'
+                            if port_observation['observedAdmin'] == 'DOWN'
+                            else 'CABLE_DOWN')
+            else:
+                assert link_observation['observedCarrier'] == 'UP'
+                assert vlan_observation['observedVlan'] == 20
+                inferred = 'VLAN_MISMATCH'
+            wrong = next(x for x in ('CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH')
+                         if x != inferred)
+            expect(vlan_page.locator('#investigation-submit')).to_be_enabled()
+            vlan_page.locator('#investigation-diagnosis').select_option(wrong)
+            with vlan_page.expect_response('**/api/dhcp/investigation/diagnose') as incorrect_guess:
+                vlan_page.locator('#investigation-submit').click()
+            wrong_reply = incorrect_guess.value.json()
+            assert incorrect_guess.value.status == 200
+            assert wrong_reply['correct'] is False
+            assert inferred not in json.dumps(wrong_reply)
+            expect(vlan_page.locator('#investigation-repair')).to_be_disabled()
+            vlan_page.locator('#investigation-diagnosis').select_option(inferred)
+            with vlan_page.expect_response('**/api/dhcp/investigation/diagnose') as correct_guess:
+                vlan_page.locator('#investigation-submit').click()
+            assert correct_guess.value.json()['correct'] is True
+            expect(vlan_page.locator('#investigation-verdict')).to_contain_text(
+                'DIAGNOS BEKRÄFTAD')
+            expect(vlan_page.locator('#investigation-repair')).to_be_enabled()
+            with vlan_page.expect_response('**/api/dhcp/investigation/repair') as verified_repair:
+                vlan_page.locator('#investigation-repair').click()
+            repair = verified_repair.value.json()
+            assert verified_repair.value.status == 200
+            assert repair['status'] == 'RECOVERED'
+            assert repair['requestReachedServer'] is True
+            assert repair['ackReachedClient'] is True
+            assert repair['expiresAtSeconds'] == 90
+            assert repair['cause'] == inferred
+            expect(vlan_page.locator('#investigation-recovery')).to_contain_text(
+                'RESULTAT: RECOVERED')
+            vlan_page.locator('[data-item-type="node"][data-item-id="sw"]').click()
+            expect(vlan_page.locator('[data-port-vlan="c"]')).to_have_value('access:10')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            expect(vlan_page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+            with vlan_page.expect_response('**/api/dhcp/investigation/stop') as exercise_stop:
+                vlan_page.locator('#investigation-stop').click()
+            assert exercise_stop.value.status == 200
+            expect(vlan_page.locator('#investigation-status')).to_contain_text(
+                'Ingen felsökningsövning')
+
+            # Late probe responses must not resurrect an exercise after a
+            # canonical topology edit; saved bytes are never overwritten.
+            with vlan_page.expect_response('**/api/dhcp/investigation/start') as stale_start:
+                vlan_page.locator('#investigation-start').click()
+            assert stale_start.value.status == 200
+            vlan_page.evaluate("""() => {
+              window.__actualInvestigateFetch = window.fetch;
+              window.__finishInvestigate = null;
+              window.fetch = async (...args) => {
+                const response = await window.__actualInvestigateFetch(...args);
+                if (args[0] === '/api/dhcp/investigation/probe') {
+                  return new Promise(resolve => {
+                    window.__finishInvestigate = () => resolve(response);
+                  });
+                }
+                return response;
+              };
+            }""")
+            vlan_page.locator('#investigation-run-probe').click()
+            vlan_page.wait_for_function("typeof window.__finishInvestigate === 'function'")
+            expect(vlan_page.locator('#investigation-run-probe')).to_be_disabled()
+            vlan_page.locator('[data-item-type="link"][data-item-id="to-server"]').click()
+            vlan_page.locator('#inspector input[type="checkbox"]').uncheck()
+            expect(vlan_page.locator('#investigation-status')).to_contain_text(
+                'Ingen felsökningsövning')
+            vlan_page.evaluate('window.__finishInvestigate()')
+            expect(vlan_page.locator('#investigation-observations')).to_contain_text(
+                'Inga observationer')
+            vlan_page.evaluate('window.fetch = window.__actualInvestigateFetch')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert not errors, errors
             vlan_page.close()
 
             # A different saved project must not be silently overwritten.

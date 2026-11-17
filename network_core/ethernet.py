@@ -277,6 +277,53 @@ class EthernetFabric:
         for table in self._tables.values():
             table.clear()
 
+    def inspect_link(self, link_id: str) -> dict:
+        """Read observed carrier from session wires, not merely graph adjacency."""
+        if not isinstance(link_id, str):
+            raise ProjectValidationError("inspection: link ID must be a string")
+        link = next((l for l in self.project["links"] if l["id"] == link_id), None)
+        if link is None:
+            raise ProjectValidationError("inspection: undeclared link")
+        left = (link["a"]["node"], link["a"]["port"])
+        right = (link["b"]["node"], link["b"]["port"])
+        original = (left in self._original_wires and right in self._original_wires)
+        operational = (left in self.wires and right in self.wires)
+        return {
+            "linkId": link_id,
+            "documentedActive": original,
+            "observedCarrier": "UP" if operational else "DOWN",
+            "endpoints": [dict(link["a"]), dict(link["b"])],
+            "source": "SIMULATED",
+        }
+
+    def inspect_switch_port(self, node_id: str, port_id: str) -> dict:
+        """Return a measured admin state and carrier without inferring its cause."""
+        endpoint = self._active_switch_endpoint(node_id, port_id)
+        return {
+            "nodeId": node_id,
+            "portId": port_id,
+            "documentedEnabled": True,
+            "observedAdmin": "DOWN" if endpoint in self._faulted_ports else "UP",
+            "observedCarrier": "UP" if endpoint in self.wires else "DOWN",
+            "source": "SIMULATED",
+        }
+
+    def inspect_access_vlan(self, node_id: str, port_id: str) -> dict:
+        """Read current access membership against only explicit documented config."""
+        endpoint = self._active_switch_endpoint(node_id, port_id)
+        original = self._original_vlan_ports.get(endpoint)
+        if original is None or original[0] != "access":
+            raise ProjectValidationError("inspection: requires documented switch access port")
+        current = self._vlan_ports[endpoint]
+        return {
+            "nodeId": node_id,
+            "portId": port_id,
+            "documentedVlan": original[1],
+            "observedVlan": current[1],
+            "mode": "access",
+            "source": "SIMULATED",
+        }
+
     def _reject_switch_loops(self) -> None:
         adjacent: dict[str, list[tuple[str, str]]] = {
             node_id: [] for node_id, node in self.nodes.items()
