@@ -121,7 +121,7 @@ class StagedEngineTests(unittest.TestCase):
     def test_intermediate_t2_real_rebind_then_ack_without_expiration(self):
         case = exercise("VLAN_MISMATCH", "T2_REBIND")
         self.assertEqual(case.public_state()["phase"], "RENEWING")
-        with self.assertRaisesRegex(ProjectValidationError, "observe real T2"):
+        with self.assertRaisesRegex(ProjectValidationError, "observe real renewal"):
             case.diagnose("VLAN_MISMATCH")
         self.assertEqual(case.probe("renew", {})["observation"]["phase"], "RENEWING")
         self.assertEqual(case.advance(23)["phase"], "REBINDING")
