@@ -1666,6 +1666,8 @@ async function startDoraSession() {
   doraClockEvent = null;
   doraRenewalTrace = null;
   doraFaultEvent = null;
+  doraPortFaultEvent = null;
+  doraVlanFaultEvent = null;
   const inputs = doraSessionInput();
   const [client, server, poolStart, poolEnd] = inputs;
   if (!client || !server || !poolStart || !poolEnd) {
@@ -1749,6 +1751,55 @@ async function runDoraSession() {
     }
   }
 }
+async function setDoraSwitchFault(kind, restore) {
+  if (!doraSessionId || doraSessionBusy || doraBusy) return;
+  if (kind !== 'port' && kind !== 'vlan') return;
+  const selectorId = kind === 'port' ? 'dora-session-port-fault' : 'dora-session-vlan-port';
+  const selected = $(selectorId).value;
+  if (!selected) return;
+  const [nodeId, portId] = JSON.parse(selected);
+  const target = kind === 'vlan' ? $('dora-session-vlan-target').value : null;
+  if (kind === 'vlan' && !restore && !target) return;
+  const parameter = kind === 'port'
+    ? {disabled: !restore}
+    : {vlanId: restore ? null : Number(target)};
+  const id = doraSessionId;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  if (kind === 'port') doraPortFaultEvent = null;
+  else doraVlanFaultEvent = null;
+  renderDoraSession();
+  try {
+    const state = await api('/api/dhcp/session/' + (kind === 'port' ? 'port-fault' : 'vlan-fault'), {
+      sessionId: id, project: JSON.parse(snapshot), nodeId, portId, ...parameter,
+    });
+    if (generation === doraSessionGeneration && doraSessionId === id
+        && edit === editRevision && workspace === workspaceRevision
+        && JSON.stringify(project) === snapshot
+        && $(selectorId).value === selected) {
+      doraSessionState = state;
+      if (kind === 'port') doraPortFaultEvent = {nodeId, portId, ...parameter};
+      else doraVlanFaultEvent = {nodeId, portId, ...parameter};
+      doraSessionTrace = null;
+      doraRenewalTrace = null;
+      doraClockEvent = null;
+      doraFaultEvent = null;
+    }
+  } catch (error) {
+    if (generation === doraSessionGeneration && doraSessionId === id) {
+      if (kind === 'port') doraPortFaultEvent = {error: error.message};
+      else doraVlanFaultEvent = {error: error.message};
+    }
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraSession();
+    }
+  }
+}
+
 async function setDoraLinkFault(disabled) {
   if (!doraSessionId || doraSessionBusy || doraBusy) return;
   const linkId = $('dora-session-fault-link').value;
@@ -1892,6 +1943,8 @@ async function resetDoraSession() {
       doraClockEvent = null;
       doraRenewalTrace = null;
       doraFaultEvent = null;
+      doraPortFaultEvent = null;
+      doraVlanFaultEvent = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration && doraSessionId === id) {
@@ -1918,6 +1971,8 @@ async function stopDoraSession() {
       doraClockEvent = null;
       doraRenewalTrace = null;
       doraFaultEvent = null;
+      doraPortFaultEvent = null;
+      doraVlanFaultEvent = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration) {
@@ -2378,6 +2433,18 @@ $('dora-session-run').addEventListener('click', runDoraSession);
 $('dora-session-renew').addEventListener('click', renewDoraSession);
 $('dora-session-fault-break').addEventListener('click', () => setDoraLinkFault(true));
 $('dora-session-fault-restore').addEventListener('click', () => setDoraLinkFault(false));
+$('dora-session-port-down').addEventListener('click', () => setDoraSwitchFault('port', false));
+$('dora-session-port-up').addEventListener('click', () => setDoraSwitchFault('port', true));
+$('dora-session-vlan-set').addEventListener('click', () => setDoraSwitchFault('vlan', false));
+$('dora-session-vlan-restore').addEventListener('click', () => setDoraSwitchFault('vlan', true));
+for (const id of ['dora-session-port-fault', 'dora-session-vlan-port',
+                  'dora-session-vlan-target']) {
+  $(id).addEventListener('change', () => {
+    doraPortFaultEvent = null;
+    doraVlanFaultEvent = null;
+    renderDoraSession();
+  });
+}
 $('dora-session-fault-link').addEventListener('change', () => {
   doraFaultEvent = null;
   renderDoraSession();
