@@ -114,7 +114,9 @@ class ProjectSpreadsheetExportTests(unittest.TestCase):
 
     def test_explicit_empty_static_routes_are_rejected(self):
         original=copy.deepcopy(expected_v13())
-        original["nodes"][1]["staticRoutes"]=[]
+        # A router is allowed an explicitly empty list; a Layer-2 switch
+        # cannot own staticRoutes even if the list is empty.
+        original["nodes"][3]["staticRoutes"]=[]
         original=validate_project(original)
         for extension in ("xlsx","ods"):
             with self.assertRaisesRegex(ProjectValidationError,"explicit empty staticRoutes"):
@@ -156,8 +158,16 @@ class ProjectSpreadsheetExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             project=expected_v13()
             for extension in ("xlsx","ods"):
+                before = {
+                    file.name: hashlib.sha256(file.read_bytes()).hexdigest()
+                    for file in Path(root).glob("*.yadilab")
+                }
                 raw=export_workbook(project,extension)
-                self.assertEqual(list(Path(root).glob("*.yadilab")),[])
+                after = {
+                    file.name: hashlib.sha256(file.read_bytes()).hexdigest()
+                    for file in Path(root).glob("*.yadilab")
+                }
+                self.assertEqual(after,before, "export must not modify or create saved files")
                 restored=reimport(raw,extension,project["name"])
                 store=ProjectStore(Path(root))
                 saved=store.save("roundtrip-"+extension,restored)
