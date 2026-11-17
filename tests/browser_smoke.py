@@ -1254,7 +1254,7 @@ def run():
             assert started['dhcpCheck'] == 'NOT_VERIFIED'
             assert 'fault' not in json.dumps(started)
             assert not any(name in json.dumps(started) for name in (
-                'CABLE_DOWN', 'VLAN_MISMATCH', 'STATIC_ROUTE_MISSING'))
+                'CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH', 'STATIC_ROUTE_MISSING'))
             expect(icmp_page.locator('#icmp-investigation-status')).to_contain_text(
                 'Aktiv dold övning')
             expect(icmp_page.locator('#icmp-investigation-diagnose')).to_be_disabled()
@@ -1310,9 +1310,24 @@ def run():
                 vlan_observation = vlan_check.value.json()['observation']
                 if vlan_observation['documentedVlan'] != vlan_observation['observedVlan']:
                     mismatched.append((nid, pid))
+            icmp_page.locator('#icmp-investigation-probe').select_option('port')
+            shut_ports = []
+            for nid, pid in (('sw-left', 'a'), ('sw-left', 'r'),
+                             ('sw-right', 'r'), ('sw-right', 'b')):
+                icmp_page.locator('#icmp-investigation-port').select_option(
+                    json.dumps([nid, pid], separators=(',', ':')))
+                with icmp_page.expect_response('**/api/icmp/investigation/probe') as port_check:
+                    icmp_page.locator('#icmp-investigation-measure').click()
+                port_observation = port_check.value.json()['observation']
+                assert port_observation['documentedEnabled'] is True
+                if port_observation['observedEnabled'] is False:
+                    shut_ports.append((nid, pid))
             if disconnected:
                 assert len(disconnected) == 1
                 inferred = 'CABLE_DOWN'
+            elif shut_ports:
+                assert len(shut_ports) == 1
+                inferred = 'PORT_SHUTDOWN'
             elif mismatched:
                 assert len(mismatched) == 1
                 inferred = 'VLAN_MISMATCH'
@@ -1320,7 +1335,7 @@ def run():
                 assert forward['status'] == 'NO_ROUTE' or reverse['status'] == 'NO_ROUTE'
                 inferred = 'STATIC_ROUTE_MISSING'
             expect(icmp_page.locator('#icmp-investigation-diagnose')).to_be_enabled()
-            wrong = next(x for x in ('CABLE_DOWN', 'VLAN_MISMATCH', 'STATIC_ROUTE_MISSING')
+            wrong = next(x for x in ('CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH', 'STATIC_ROUTE_MISSING')
                          if x != inferred)
             icmp_page.locator('#icmp-investigation-diagnosis').select_option(wrong)
             with icmp_page.expect_response('**/api/icmp/investigation/diagnose') as false_guess:

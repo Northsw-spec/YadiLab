@@ -1152,6 +1152,11 @@ function icmpInvestigationDescription(item) {
       + ' · i aktuell simulering ' + (o.observedEnabled ? 'UP' : 'DOWN')
       + '\n' + o.endpoints.map(p => p.node + '/' + p.port).join(' ↔ ');
   }
+  if (item.probe === 'port') {
+    return 'PORT ' + o.nodeId + '/' + o.portId
+      + ': dokumenterat admin ' + (o.documentedEnabled ? 'UP' : 'DOWN')
+      + ' · simulerat admin ' + (o.observedEnabled ? 'UP' : 'DOWN');
+  }
   if (item.probe === 'vlan') {
     return 'SWITCH VLAN ' + o.nodeId + '/' + o.portId
       + '\nDokumenterat: ' + JSON.stringify(o.documentedVlan)
@@ -1184,6 +1189,14 @@ function renderIcmpInvestigation() {
   routeSelector.replaceChildren(...nodes.map(n =>
     el('option', {value:n.id}, n.id + ' · ' + n.kind)));
   if (nodes.some(n => n.id === previousRoute)) routeSelector.value = previousRoute;
+  const portSelector = $('icmp-investigation-port');
+  const previousPort = portSelector.value;
+  const ports = project.nodes.flatMap(n => n.ports.map(p => ({
+    value: JSON.stringify([n.id,p.id]), title:n.id + '/' + p.id,
+  })));
+  portSelector.replaceChildren(...ports.map(p =>
+    el('option', {value:p.value}, p.title)));
+  if (ports.some(p => p.value === previousPort)) portSelector.value = previousPort;
   const vlanSelector = $('icmp-investigation-vlan');
   const previousVlan = vlanSelector.value;
   const vlans = project.nodes.filter(n => n.kind === 'switch').flatMap(n =>
@@ -1202,12 +1215,14 @@ function renderIcmpInvestigation() {
   $('icmp-investigation-route-node').disabled = !active || busy || kind !== 'route';
   $('icmp-investigation-route-destination').disabled = !active || busy || kind !== 'route';
   $('icmp-investigation-link').disabled = !active || busy || kind !== 'link';
+  $('icmp-investigation-port').disabled = !active || busy || kind !== 'port';
   $('icmp-investigation-vlan').disabled = !active || busy || kind !== 'vlan';
   $('icmp-investigation-start').disabled = active || busy || !sourceSelector.value
     || !$('icmp-investigation-destination').value.trim();
   $('icmp-investigation-stop').disabled = !active || busy;
   $('icmp-investigation-measure').disabled = !active || busy || icmpInvestigationState?.repaired
     || (kind === 'link' && !linkSelector.value)
+    || (kind === 'port' && !portSelector.value)
     || (kind === 'vlan' && !vlanSelector.value)
     || (kind === 'route' && !routeSelector.value);
   $('icmp-investigation-diagnosis').disabled = !active || busy
@@ -2856,6 +2871,11 @@ async function measureIcmpInvestigation() {
   } else if (kind === 'link') {
     target = {linkId: $('icmp-investigation-link').value};
     if (!target.linkId) return;
+  } else if (kind === 'port') {
+    const selected = $('icmp-investigation-port').value;
+    if (!selected) return;
+    const [nodeId, portId] = JSON.parse(selected);
+    target = {nodeId, portId};
   } else if (kind === 'vlan') {
     const selected = $('icmp-investigation-vlan').value;
     if (!selected) return;
