@@ -25,6 +25,7 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 | `model.py` | Schema, referenser, explicit grafspårning | Routing, ping, fysisk sanning |
 | `storage.py` | Verkliga filer, SHA-256, förväntad föregående version | Autosave, tyst overwrite |
 | `csv_import.py` | Explicit fyrtabells-CSV till verifierad kanonisk modell | Implicita kablar, heuristisk kolumnmappning, filskrivning |
+| `ethernet.py` | Flyktig MAC-inlärning, Ethernet-forwarding på aktiva deklarerade kablar | ARP, VLAN, ping, IP, STP, NIC-acceptans eller beständig projektkonfiguration |
 | `server.py` | Lokal UI, API, validering | Tolka källdata som topologi |
 | `web/model.js` | Explicit UI-modell, enhets- och portkommandon | Adressbaserad länkförutsägelse |
 | `web/canvas.js` | SVG-geometri och direktträff på portpunkter | Ändra noders eller länkars identitet |

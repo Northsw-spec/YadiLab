@@ -33,6 +33,12 @@ python3 -m network_core --data-dir ~/NetworkProjects --no-browser --port 8765
 - Importera/exportera kanoniskt JSON; okända fält avvisas så att de inte försvinner tyst.
 - Offline-baserat gränssnitt med SVG-linjer direkt i respektive ports synliga anslutningspunkt.
 
+## Fristående Layer 2-kärna (under utveckling)
+
+`network_core/ethernet.py` erbjuder en **endast Python-baserad, deterministisk MAC-forwardingmodell** ovanpå projektets uttryckligen deklarerade länkar. Den lär käll-MAC från faktisk switchingress, floodar broadcast och okänd unicast samt riktar känd unicast. Avstängda portar och länkar används inte; switchloopar avvisas eftersom STP saknas. 23 nya beteendetester ingår.
+
+Detta är **inte** en färdig Ethernet-/ARP-/IP-simulator och har **ännu ingen UI-/HTTP-integration**. Inga MAC-adresser skapas eller tilldelas nätverksenheter automatiskt. Se [Layer 2-kontrakt och begränsningar](docs/ETHERNET_FORWARDING.md).
+
 ## Avsiktligt INTE implementerat
 
 **Topologisk väg är inte ping, IP-routing, VLAN-forwarding, brandväggslogik eller ett bevis på nätverksanslutning.** Första versionens grafspårning traverserar dokumentationsgrafen, inte verkliga protokoll.
