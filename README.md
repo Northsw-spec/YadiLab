@@ -177,6 +177,26 @@ API: `POST /api/dhcp/investigation/start` accepterar nu ett **valfritt** uttryck
 
 Varken den kanoniska modellen, riktiga klient-NIC:ar, virtuellt okontrollerat bakgrundsarbete eller sparade projektbytes påverkas. Avancerad nivå inför inte DHCP-relay, riktiga konkurrerande DHCP-servrar, ICMP/routing-felsökning eller automatisk DHCP-retry; detta är fortsatt ett **avgränsat** praktiskt DHCPv4-labb.
 
+## Dolt routing- och Layer 2-felsökningslabb (PR #40)
+
+Builder har en ny **Process of Elimination**-övning för en redan fungerande, uttryckligen dokumenterad tvåvägs-IPv4-kommunikation. Välj klientgränssnitt med dokumenterad IPv4, mål-IP och TTL. Start kräver att den riktiga befintliga `EchoExchange` faktiskt levererar **ICMP Echo Request och korrekt matchad Echo Reply**, genom den existerande IPv4-routing-, ARP-, Ethernet- och VLAN-motorn. Enbart grafväg, adresslikhet eller route lookup räcker aldrig. Om baslinjen redan är trasig avvisas övningen.
+
+Motorn väljer därefter **ett enda dolt fel som redan har bevisats orsaka ett misslyckat Echo-utbyte och vars återställning ger ett nytt fungerande Echo-utbyte** i den befintliga kontrollmotorn `compare_fault`. Den väljer endast bland verkliga dokumenterade och topologiskt tillämpliga förändringar:
+
+- **Layer 2: kabelavbrott** på en kabel som faktiskt användes vid baslinjens riktiga paketöverföringar.
+- **Layer 2: fel access-VLAN** på en använd switchport, och bara till ett annat VLAN-ID som redan finns dokumenterat i nätet.
+- **Layer 3: borttagen statisk route** som faktiskt bryter framåt- eller returkommunikationen.
+
+Användaren får **inte** veta feltyp, nod, port eller route vid start. I Builder finns explicita mätningar: dokumenterad IPv4 och DHCP-bevisläge; enhetsbaserad routingtabell med longest-prefix match (inklusive val av returväg); verklig ICMP Echo med sändningsstatus, ARP-status och faktiskt använda kablar/VLAN-droppar; original mot aktuellt simulerat kabeltillstånd; original mot aktuellt simulerat VLAN. Inga råa muterbara projektobjekt eller dolda sessionsfel lämnas via start eller mätning. Observationer är markerade **SIMULATED** eller **SIMULATED_CONFIG**, inte verklig hårdvarutelemetri.
+
+**Viktig kunskapsgräns:** Nuvarande kanoniska modell dokumenterar en IPv4/CIDR men **inte adressens tilldelningsursprung**. En konfigurerad adress kan alltså inte påstås vara *statisk* eller *från DHCP* enbart utifrån värdet. IP-kontrollen rapporterar därför `dhcpAddressOrigin=UNKNOWN` och `dhcpCheck=NOT_VERIFIED`. Detta routing- och Layer 2-labb är inte ett sammanvävt DHCP-felcase; använd det separata riktiga DHCP-labbet för att testa DHCP-lease och DORA. Inga felaktiga uteslutningar eller falska success-svar förekommer.
+
+Före diagnos krävs minst **ett faktiskt misslyckat ICMP Echo**, en **routingtabellsfråga** och minst en tredje oberoende kontroll (IP, kabel eller VLAN). Felaktiga hypoteser får ingen facitinformation; högst tre försök. Efter korrekt hypotes kan användaren uttryckligen begära **Återställ och verifiera**. Motorn gör då två oberoende nya paketsimuleringar: fortfarande misslyckat Echo med felet och en **verklig matchad ICMP Echo Reply** efter återställning till ursprunglig dokumentation. Först då visas `RECOVERED`, korrekt felkategori och den specifika simulerade reparationspunkten. Utan framgång visas `NOT_VERIFIED`.
+
+Fem nya, strikta, sessionsbundna API-operationer finns under `/api/icmp/investigation/`: `start`, `probe`, `diagnose`, `repair`, `stop`. Samtliga data finns enbart i serverminnet och är bundna till oförändrad, validerad projektsnapshot; max 16 samtidiga sessioner, 48 mätningar och 3 hypoteser. Inget ändrar arbetsytan, sparade projektbytes, riktig NIC-konfiguration eller andra sessioner. Webbgränssnittet stoppar övningen och avvisar sena svar vid ändring av kanonisk dokumentation. Se [protokollkontrakt och avgränsningar](docs/ICMP_INVESTIGATION.md).
+
+**Ej modellerat:** DHCP-ursprungsbevis utifrån statisk IPv4-dokumentation, automatisk klientkonfiguration, NAT, dynamiska routingprotokoll, verkliga brandväggsbeslut, DNS, RTT och live-paketmätningar. De åtgärderna kräver särskild verifierbar motormodell och får inte presenteras som implementerade.
+
 ## Export av aktuellt projekt till XLSX och ODS (PR #27)
 
 Builder har separata **Exportera XLSX** och **Exportera ODS**-knappar bredvid **Exportera JSON**. Exporten läser **arbetsytans aktuella** (även ännu osparade) nätverksdokumentation, validerar modellen och skapar verkliga binära kalkylbladsfiler med exakt definierade blad och kolumner. Noder, portar, länkar och länkändpunkter, zoner, MAC-adresser, VLAN och deklarerade statiska routes behålls. Ingen fil skrivs till serverns projektlagring. Webbläsarnedladdningen initieras separat från **Spara projekt**.
