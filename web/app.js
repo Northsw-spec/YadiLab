@@ -58,6 +58,7 @@ let sessionDiagnostic = null;
 let sessionHighlightedLinks = [];
 let routeLookup = null;
 let ipv4Diagnostic = null;
+let pingDiagnostic = null;
 let filename = 'lab';
 let savedName = null;
 let savedSha = null;
@@ -74,6 +75,7 @@ const canvas = new TopologyCanvas($('topology'), {
       traceResult = null; highlightedLinks = [];
       routeLookup = null;
       ipv4Diagnostic = null;
+      pingDiagnostic = null;
       invalidateSimulationSession();
       renderSessionDiagnostics();
       canvas.setData(project, selection, pendingPort, highlightedLinks);
@@ -122,6 +124,7 @@ function changed({keepTrace = false} = {}) {
   if (!keepTrace) {traceResult = null; highlightedLinks = [];}
   routeLookup = null;
   ipv4Diagnostic = null;
+  pingDiagnostic = null;
   // Any network/document change invalidates sessions bound to the old snapshot.
   invalidateSimulationSession();
   arpDiagnostic = null; arpHighlightedLinks = [];
@@ -381,6 +384,58 @@ function renderRouteLookup() {
       'Ingen matchande route.',
     'Ingen faktisk paketöverföring eller ARP-förfrågan utfördes. Grafväg, VLAN, länkstatus och NIC-acceptans är inte verifierade.',
   ].join('\n\n');
+}
+
+function renderPing() {
+  const selector = $('ping-source');
+  const previous = selector.value;
+  const sources = project.nodes.filter(n => n.kind !== 'switch')
+    .flatMap(n => n.ports.map(p => ({
+      value:JSON.stringify([n.id,p.id]),
+      label:`${n.label} / ${p.name} (${n.id}/${p.id})`,
+    })));
+  selector.replaceChildren(...sources.map(s => el('option',{value:s.value},s.label)));
+  if (sources.some(s => s.value === previous)) selector.value = previous;
+  $('run-ping').disabled = !sources.length;
+
+  const output = $('ping-result');
+  output.classList.remove('ok','fail');
+  if (!pingDiagnostic) {
+    output.textContent = 'Ingen aktuell ICMP Echo-utväxling. Varje körning har isolerad ARP- och MAC-inlärning.';
+    return;
+  }
+  if (pingDiagnostic.error) {
+    output.classList.add('fail');
+    output.textContent = `ICMP Echo avvisad: ${pingDiagnostic.error}\nIngen tur-och-retur-leverans verifierad.`;
+    return;
+  }
+  const data = pingDiagnostic;
+  output.classList.add(data.status === 'REPLIED' ? 'ok' : 'fail');
+  const lines = [
+    `Ping-status: ${data.status}`,
+    data.meaning,
+    `Echo id=${data.identifier} seq=${data.sequence}`,
+    `Echo Reply matchad: ${data.replyMatched ? 'JA' : 'NEJ'}`,
+  ];
+  for (const [label, trace] of [['Request',data.request],['Reply',data.reply]]) {
+    if (!trace) {
+      lines.push(`${label}: ingen faktisk datagramöverföring`);
+      continue;
+    }
+    lines.push(`${label}: ${trace.status} · IP ${trace.sourceIpv4} → ${trace.destinationIpv4}`
+      + ` · TTL ${trace.initialTtl} → ${trace.finalTtl}`);
+    for (const [i,step] of trace.steps.entries()) {
+      lines.push(`  Hopp ${i+1}: ${step.node}/${step.outPort}, ${step.route.type} ${step.route.destination}`);
+      lines.push(`    ARP: ${step.arp.status} · ${step.arp.resolvedMac || 'MAC ej upplöst'}`);
+      lines.push(`    IPv4-kablar: ${step.ipv4Transmissions.map(t=>t.linkId).join(', ') || 'inga'}`);
+      for (const d of [...(step.arp.requestVlanDrops || []),
+          ...(step.arp.replyVlanDrops || []),...step.vlanDrops]) {
+        lines.push(`    VLAN-drop: ${d.switch}/${d.port} ${d.reason}`);
+      }
+    }
+  }
+  lines.push('Svarstid: ej uppmätt. Inga ICMP-felmeddelanden, TCP/UDP eller externa nät verifieras.');
+  output.textContent = lines.join('\n');
 }
 
 function renderIPv4Trace() {
@@ -708,6 +763,7 @@ function render() {
   renderSessionDiagnostics();
   renderRouteLookup();
   renderIPv4Trace();
+  renderPing();
   updateSaveIndicator();
   } finally {
     rendering = false;
@@ -781,6 +837,7 @@ async function openProject() {
     invalidateSimulationSession();
     routeLookup = null;
     ipv4Diagnostic = null;
+    pingDiagnostic = null;
     project = loaded.project;
     filename = loaded.filename;
     savedName = loaded.filename;
@@ -967,6 +1024,40 @@ async function stopSimulationSession() {
   render();
 }
 
+async function runPing() {
+  const selected = $('ping-source').value;
+  if (!selected) return;
+  const [sourceNode,sourcePort] = JSON.parse(selected);
+  const destinationIpv4 = $('ping-destination').value.trim();
+  const rawTtl = $('ping-ttl').value.trim();
+  const rawIdentifier = $('ping-identifier').value.trim();
+  const rawSequence = $('ping-sequence').value.trim();
+  const number = s => /^[0-9]+$/.test(s) ? Number(s) : NaN;
+  const ttl = number(rawTtl), identifier = number(rawIdentifier), sequence = number(rawSequence);
+  if (!destinationIpv4 || !Number.isInteger(ttl) || ttl < 1 || ttl > 255 ||
+      !Number.isInteger(identifier) || identifier < 0 || identifier > 65535 ||
+      !Number.isInteger(sequence) || sequence < 0 || sequence > 65535) {
+    pingDiagnostic = {error:'Ange mål-IP, TTL 1–255, identifierare och sekvens 0–65535.'};
+    renderPing();
+    return;
+  }
+  const snapshot = JSON.stringify(project);
+  const inputSnapshot = [selected,destinationIpv4,rawTtl,rawIdentifier,rawSequence].join('|');
+  try {
+    const result = await api('/api/icmp/echo',
+      {project, sourceNode, sourcePort, destinationIpv4, ttl, identifier, sequence});
+    if (snapshot !== JSON.stringify(project) ||
+        [ $('ping-source').value, $('ping-destination').value.trim(),
+          $('ping-ttl').value.trim(), $('ping-identifier').value.trim(),
+          $('ping-sequence').value.trim() ].join('|') !== inputSnapshot) return;
+    pingDiagnostic = result;
+  } catch (error) {
+    if (snapshot !== JSON.stringify(project)) return;
+    pingDiagnostic = {error:error.message};
+  }
+  renderPing();
+}
+
 async function runIPv4Trace() {
   const selected = $('ipv4-source').value;
   if (!selected) return;
@@ -1051,6 +1142,12 @@ $('export-project').addEventListener('click', exportProject);
 $('run-trace').addEventListener('click', runTrace);
 $('run-route-lookup').addEventListener('click', runRouteLookup);
 $('run-ipv4-trace').addEventListener('click', runIPv4Trace);
+$('run-ping').addEventListener('click', runPing);
+for (const id of ['ping-source','ping-destination','ping-ttl','ping-identifier','ping-sequence']) {
+  $(id).addEventListener(id === 'ping-source' ? 'change' : 'input', () => {
+    pingDiagnostic = null; renderPing();
+  });
+}
 for (const id of ['ipv4-source','ipv4-destination','ipv4-ttl']) {
   $(id).addEventListener(id === 'ipv4-source' ? 'change' : 'input', () => {
     ipv4Diagnostic = null; renderIPv4Trace();

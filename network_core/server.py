@@ -19,6 +19,7 @@ from .arp import ArpSession
 from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
 from .ipv4 import IPv4Trace
+from .icmp_ping import EchoExchange
 from .storage import ProjectConflictError, ProjectStore
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -108,6 +109,19 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict) or set(body) != {"project", "source", "target"}:
                     raise ProjectValidationError("trace: expected project, source, target")
                 self._json(200, topology_trace(body["project"], body["source"], body["target"]))
+            elif path == "/api/icmp/echo":
+                required = {"project", "sourceNode", "sourcePort", "destinationIpv4",
+                            "ttl", "identifier", "sequence"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "icmp echo: expected project, sourceNode, sourcePort, destinationIpv4, ttl, identifier, sequence"
+                    )
+                # A complete request/reply exchange through one Layer 3/ARP/
+                # Ethernet instance. No stored session or project file writes.
+                self._json(200, EchoExchange(body["project"]).ping(
+                    body["sourceNode"], body["sourcePort"],
+                    body["destinationIpv4"], body["ttl"],
+                    body["identifier"], body["sequence"]))
             elif path == "/api/ipv4/trace":
                 required = {"project", "sourceNode", "sourcePort", "destinationIpv4", "ttl"}
                 if not isinstance(body, dict) or set(body) != required:
