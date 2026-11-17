@@ -145,7 +145,7 @@
           <div id="dora-session-status" class="small-muted" role="status">Ingen aktiv DHCP-session.</div>
           <div id="dora-session-clock-result" class="trace-result" aria-live="polite">Ingen simuleringstid har flyttats fram.</div>
           <div class="eyebrow">FELINJICERING · BARA AKTIV SIMULERINGSSESSION</div>
-          <p class="muted tiny">Välj en dokumenterad aktiv kabel. Koppla bort den endast i den pågående DHCP-sessionens Ethernet-motor; återställ den när du vill testa återhämtning. Leases och simulerad tid behålls. Varken Builder-topologin eller projektfilen ändras.</p>
+          <p class="muted tiny">Välj en dokumenterad aktiv kabel. Koppla bort den endast i den pågående DHCP-sessionens Ethernet-motor; återställ den när du vill testa återhämtning. Leases och simulerad tid behålls. Samma session stöder även administrativ avstängning av dokumenterade switchportar och tillfällig access-VLAN-isolering. Varken Builder-topologin eller projektfilen ändras.</p>
           <label for="dora-session-fault-link">Fysiskt dokumenterad kabel</label>
           <select id="dora-session-fault-link" class="control"></select>
           <div class="session-actions">
@@ -153,6 +153,22 @@
             <button id="dora-session-fault-restore" type="button" class="btn btn-soft" disabled>Återställ kabel i sessionen</button>
           </div>
           <div id="dora-session-fault-result" class="trace-result" aria-live="polite">Inga tillfälliga kabelavbrott.</div>
+          <label for="dora-session-port-fault">Dokumenterad aktiv switchport</label>
+          <select id="dora-session-port-fault" class="control"></select>
+          <div class="session-actions">
+            <button id="dora-session-port-down" type="button" class="btn btn-outline" disabled>Stäng switchport i sessionen</button>
+            <button id="dora-session-port-up" type="button" class="btn btn-soft" disabled>Aktivera switchport i sessionen</button>
+          </div>
+          <div id="dora-session-port-result" class="trace-result" aria-live="polite">Inga simulerade avstängda switchportar.</div>
+          <label for="dora-session-vlan-port">Dokumenterad hostansluten accessport</label>
+          <select id="dora-session-vlan-port" class="control"></select>
+          <label for="dora-session-vlan-target">Felaktigt VLAN (måste redan vara dokumenterat)</label>
+          <select id="dora-session-vlan-target" class="control"></select>
+          <div class="session-actions">
+            <button id="dora-session-vlan-set" type="button" class="btn btn-outline" disabled>Isolera port med fel VLAN</button>
+            <button id="dora-session-vlan-restore" type="button" class="btn btn-soft" disabled>Återställ ursprungligt VLAN</button>
+          </div>
+          <div id="dora-session-vlan-result" class="trace-result" aria-live="polite">Inga simulerade VLAN-ändringar.</div>
           <div id="dora-session-result" class="trace-result" aria-live="polite">Inga sessionoperationer har körts.</div>
           <div id="dora-session-renew-result" class="trace-result" aria-live="polite">Ingen DHCP-förnyelse har begärts.</div>
           <div class="eyebrow">SIMULERADE LEASES (ENDAST MINNE)</div>
