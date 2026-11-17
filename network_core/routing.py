@@ -1,8 +1,8 @@
-"""Read-only IPv4 connected-route tables and longest-prefix lookup.
+"""Read-only IPv4 connected + explicitly configured static route lookup.
 
-A route is derived ONLY from an explicitly configured, administratively enabled
-IPv4/CIDR interface on the selected canonical node. No links, MACs, ARP or device
-position are used to infer routes. A matching route is NOT packet reachability.
+Only enabled configured IPv4 interfaces contribute connected routes, and only
+explicit saved 1.3 routes on enabled output interfaces contribute static routes.
+No links, MACs, ARP, metrics, or position imply routes or reachability.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from .model import ProjectValidationError, validate_project
 
 
 class ConnectedRoutingTable:
-    """Per-device connected IPv4 RIB: no static routes, gateway or forwarding."""
+    """Per-device configured IPv4 RIB: no packet forwarding or inferred routes."""
 
     def __init__(self, project: dict, node_id: str):
         canonical = validate_project(project)
@@ -41,9 +41,25 @@ class ConnectedRoutingTable:
                 "nextHop": None,
             }
             self._entries.append((network, record))
+        port_by_id = {port["id"]: port for port in node["ports"]}
+        for explicit in node.get("staticRoutes", []):
+            port = port_by_id[explicit["outPort"]]
+            if not port["enabled"]:
+                # Configuration remains saved, but this output port is down.
+                continue
+            record = {
+                "routeId": explicit["id"],
+                "destination": explicit["destination"],
+                "type": "STATIC",
+                "outInterface": {"node": node_id, "port": explicit["outPort"]},
+                "sourceIpv4": str(ipaddress.IPv4Interface(port["ipv4"]).ip),
+                "nextHop": explicit["nextHop"],
+            }
+            self._entries.append((ipaddress.IPv4Network(explicit["destination"]), record))
         self._entries.sort(key=lambda item: (
             -item[0].prefixlen, int(item[0].network_address),
-            item[1]["outInterface"]["port"],
+            item[1]["outInterface"]["port"], item[1]["type"],
+            item[1].get("routeId", ""),
         ))
 
     def routes(self) -> list[dict]:
@@ -83,8 +99,8 @@ class ConnectedRoutingTable:
             "selectedRoute": candidates[0] if status == "MATCH" else None,
             "candidates": candidates,
             "meaning": {
-                "MATCH": "Most specific configured connected prefix selected. No packet, ARP, Ethernet or IP reachability simulated.",
-                "NO_ROUTE": "No configured enabled IPv4 interface has a connected prefix matching this destination.",
-                "AMBIGUOUS": "Multiple equally specific connected routes match; no interface or metric is assumed.",
+                "MATCH": "Most specific active configured IPv4 prefix selected. Static next-hop is configured, not resolved. No packet, ARP, Ethernet or IP reachability simulated.",
+                "NO_ROUTE": "No active connected or explicitly configured static IPv4 route matches this destination.",
+                "AMBIGUOUS": "Multiple equally specific configured IPv4 routes match; no interface, route preference or metric is assumed.",
             }[status],
         }

@@ -11,9 +11,10 @@ import re
 from collections import deque
 from typing import Any
 
-SCHEMA_VERSION = "1.2"
+SCHEMA_VERSION = "1.3"
 LEGACY_SCHEMA_VERSION = "1.0"
 MAC_SCHEMA_VERSION = "1.1"
+VLAN_SCHEMA_VERSION = "1.2"
 MAC_RE = re.compile(r"^[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}$")
 NODE_KINDS = frozenset({"host", "switch", "router", "firewall"})
 ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,63}$")
@@ -101,6 +102,51 @@ def _vlan_config(value: Any, where: str) -> dict:
     _fail(where + ".mode", "expected access or trunk")
 
 
+def _static_route(value: Any, where: str, ports: dict[str, dict]) -> dict:
+    """Validate explicit on-link next-hop against its declared output port.
+
+    A disabled interface can retain documentation; route installation is
+    handled separately in the read-only routing table.
+    """
+    obj = _object(value, where, {"id", "destination", "nextHop", "outPort"})
+    rid = _id(obj["id"], where + ".id")
+    destination = obj["destination"]
+    if not isinstance(destination, str):
+        _fail(where + ".destination", "expected a canonical IPv4 network/prefix")
+    try:
+        prefix = ipaddress.ip_network(destination, strict=True)
+    except ValueError:
+        _fail(where + ".destination", "expected a canonical IPv4 network/prefix (no host bits)")
+    if not isinstance(prefix, ipaddress.IPv4Network) or destination != str(prefix):
+        _fail(where + ".destination", "expected a canonical IPv4 network/prefix")
+    out_port = _id(obj["outPort"], where + ".outPort")
+    if out_port not in ports:
+        _fail(where + ".outPort", "undeclared output interface")
+    port = ports[out_port]
+    if port["ipv4"] is None:
+        _fail(where + ".outPort", "output interface needs explicit IPv4/CIDR")
+    next_hop = obj["nextHop"]
+    if not isinstance(next_hop, str):
+        _fail(where + ".nextHop", "expected an explicit unicast IPv4 address")
+    try:
+        gateway = ipaddress.IPv4Address(next_hop)
+    except ipaddress.AddressValueError:
+        _fail(where + ".nextHop", "expected an explicit unicast IPv4 address")
+    if (next_hop != str(gateway) or gateway.is_multicast or gateway.is_unspecified
+            or gateway.is_reserved):
+        _fail(where + ".nextHop", "next-hop must be a canonical unicast IPv4 address")
+    iface = ipaddress.IPv4Interface(port["ipv4"])
+    if gateway not in iface.network:
+        _fail(where + ".nextHop", "next-hop is not on the configured output interface's subnet")
+    if gateway == iface.ip:
+        _fail(where + ".nextHop", "next-hop cannot equal output interface's own IPv4")
+    if iface.network.prefixlen <= 30 and gateway in (
+            iface.network.network_address, iface.network.broadcast_address):
+        _fail(where + ".nextHop", "next-hop cannot be a subnet network or broadcast address")
+    return {"id": rid, "destination": str(prefix),
+            "nextHop": str(gateway), "outPort": out_port}
+
+
 def blank_project(name: str = "Nytt nätverkslabb") -> dict:
     return {"schemaVersion": SCHEMA_VERSION, "name": name, "zones": [], "nodes": [], "links": []}
 
@@ -109,8 +155,9 @@ def validate_project(value: Any) -> dict:
     """Reject incompatible/lossy documents; normalize only explicitly declared data."""
     p = _object(value, "project", {"schemaVersion", "name", "zones", "nodes", "links"})
     version = p["schemaVersion"]
-    if type(version) is not str or version not in (LEGACY_SCHEMA_VERSION, MAC_SCHEMA_VERSION, SCHEMA_VERSION):
-        _fail("project.schemaVersion", "only '1.0', '1.1' and '1.2' are supported")
+    if type(version) is not str or version not in (
+            LEGACY_SCHEMA_VERSION, MAC_SCHEMA_VERSION, VLAN_SCHEMA_VERSION, SCHEMA_VERSION):
+        _fail("project.schemaVersion", "only '1.0', '1.1', '1.2' and '1.3' are supported")
     project = blank_project(_name(p["name"], "project.name"))
     # Never silently upgrade or rewrite a legacy document during validation.
     project["schemaVersion"] = version
@@ -130,7 +177,8 @@ def validate_project(value: Any) -> dict:
     configured_macs: set[str] = set()
     for i, original in enumerate(_array(p["nodes"], "project.nodes")):
         loc = f"project.nodes[{i}]"
-        n = _object(original, loc, {"id", "label", "kind", "x", "y", "zoneId", "ports"})
+        n = _object(original, loc, {"id", "label", "kind", "x", "y", "zoneId", "ports"},
+                    {"staticRoutes"} if version == SCHEMA_VERSION else frozenset())
         nid = _id(n["id"], loc + ".id")
         if nid in nodes_by_id:
             _fail(loc, f"duplicate node ID {nid!r}")
@@ -146,8 +194,8 @@ def validate_project(value: Any) -> dict:
         seen_ports: set[str] = set()
         for pi, po in enumerate(_array(n["ports"], loc + ".ports", 128)):
             ploc = f"{loc}.ports[{pi}]"
-            optional = {"mac"} if version in (MAC_SCHEMA_VERSION, SCHEMA_VERSION) else set()
-            if version == SCHEMA_VERSION:
+            optional = {"mac"} if version in (MAC_SCHEMA_VERSION, VLAN_SCHEMA_VERSION, SCHEMA_VERSION) else set()
+            if version in (VLAN_SCHEMA_VERSION, SCHEMA_VERSION):
                 optional.add("vlan")
             port = _object(po, ploc, {"id", "name", "enabled", "ipv4"}, optional)
             pid = _id(port["id"], ploc + ".id")
@@ -188,6 +236,24 @@ def validate_project(value: Any) -> dict:
                 vlan = port["vlan"]
                 parsed_port["vlan"] = None if vlan is None else _vlan_config(vlan, ploc + ".vlan")
             node["ports"].append(parsed_port)
+        if "staticRoutes" in n:
+            if kind == "switch":
+                _fail(loc + ".staticRoutes", "a layer-2 switch cannot own static IPv4 routes")
+            port_by_id = {port["id"]: port for port in node["ports"]}
+            route_ids: set[str] = set()
+            route_facts: set[tuple[str, str, str]] = set()
+            node["staticRoutes"] = []
+            for ri, raw in enumerate(_array(n["staticRoutes"], loc + ".staticRoutes", 128)):
+                rloc = f"{loc}.staticRoutes[{ri}]"
+                route = _static_route(raw, rloc, port_by_id)
+                if route["id"] in route_ids:
+                    _fail(rloc + ".id", "duplicate static route ID")
+                route_ids.add(route["id"])
+                facts = (route["destination"], route["nextHop"], route["outPort"])
+                if facts in route_facts:
+                    _fail(rloc, "duplicate identical static route")
+                route_facts.add(facts)
+                node["staticRoutes"].append(route)
         nodes_by_id[nid] = node
         port_ids_by_node[nid] = seen_ports
         project["nodes"].append(node)
