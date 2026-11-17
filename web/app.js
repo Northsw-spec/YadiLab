@@ -1460,6 +1460,7 @@ function sessionInteger(value, min, max) {
 }
 async function startDoraSession() {
   if (doraSessionBusy || doraSessionId !== null || doraBusy) return;
+  doraClockEvent = null;
   const inputs = doraSessionInput();
   const [client, server, poolStart, poolEnd] = inputs;
   if (!client || !server || !poolStart || !poolEnd) {
@@ -1531,6 +1532,7 @@ async function runDoraSession() {
     if (stillCurrent()) {
       doraSessionState = data;
       doraSessionTrace = data.result;
+      doraClockEvent = null;
     }
   } catch (error) {
     if (stillCurrent()) doraSessionTrace = {error: error.message};
@@ -1541,6 +1543,43 @@ async function runDoraSession() {
     }
   }
 }
+async function advanceDoraSession() {
+  if (!doraSessionId || doraSessionBusy) return;
+  const seconds = sessionInteger($('dora-session-advance-seconds').value.trim(), 1, 604800);
+  if (seconds === null) {
+    doraClockEvent = {error: 'Ange ett heltal från 1 till 604800 sekunder.'};
+    renderDoraSession();
+    return;
+  }
+  const id = doraSessionId;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  renderDoraSession();
+  try {
+    const state = await api('/api/dhcp/session/advance', {
+      sessionId: id, project: JSON.parse(snapshot), seconds,
+    });
+    if (generation === doraSessionGeneration && doraSessionId === id
+        && edit === editRevision && workspace === workspaceRevision
+        && JSON.stringify(project) === snapshot) {
+      doraSessionState = state;
+      doraSessionTrace = null;
+      doraClockEvent = state;
+    }
+  } catch (error) {
+    if (generation === doraSessionGeneration && doraSessionId === id) {
+      doraClockEvent = {error: error.message};
+    }
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraSession();
+    }
+  }
+}
+
 async function resetDoraSession() {
   if (!doraSessionId || doraSessionBusy) return;
   const id = doraSessionId;
@@ -1582,6 +1621,7 @@ async function stopDoraSession() {
       doraSessionId = null;
       doraSessionState = null;
       doraSessionTrace = null;
+      doraClockEvent = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration) {
@@ -2039,6 +2079,7 @@ $('run-dhcp').addEventListener('click', runDhcp);
 $('run-dora').addEventListener('click', runDora);
 $('dora-session-start').addEventListener('click', startDoraSession);
 $('dora-session-run').addEventListener('click', runDoraSession);
+$('dora-session-advance').addEventListener('click', advanceDoraSession);
 $('dora-session-reset').addEventListener('click', resetDoraSession);
 $('dora-session-stop').addEventListener('click', stopDoraSession);
 
