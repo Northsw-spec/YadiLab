@@ -86,7 +86,7 @@ dokumenterad IPv4), poolstart och poolslut, transaktions-ID och
 simulerad leasetid. Båda porternas MAC måste fortfarande vara
 uttryckligen dokumenterade; saknade identiteter avvisas.
 
-Knappen **Simulera full DHCP DORA** anropar det existerande
+Engångsknappen **Simulera full DHCP DORA** anropar det existerande
 `POST /api/dhcp/dora` utan extra nätverkslogik i JavaScript.
 Resultatet visar separata överföringsspår för DISCOVER, OFFER,
 REQUEST och ACK, observerade VLAN-droppar, inlärda MAC-tabeller,
@@ -102,6 +102,56 @@ ett nytt knapptryck startar en ny tom simuleringssession. Den
 befintliga Discover/Offer-panelen kvarstår separat och visar
 fortfarande bara två meddelanden.
 
+## Processlokal sessionshantering för flera klienter (PR #33)
+
+Den befintliga `DhcpSession`-motorn och samma `EthernetFabric` används;
+en serverprocess håller högst **16** separata, slump-ID-skyddade
+`DhcpLabSession`-instanser. Varje session kan utföra högst **256**
+DORA-operationer mellan nollställningar. Alla operationer och uppdateringar
+för en viss serverprocess serialiseras via ett lås. En session binds
+vid starten till ett validerat projekts SHA-256-signatur, en
+uttryckligen vald serverport och en sammanhängande adresspool.
+Den serverporten och poolen kan inte ändras under sessionen.
+
+Nya endpoints (HTTP POST, exakt JSON-nyckeluppsättning):
+
+- `/api/dhcp/session/start`: `project`, `serverNode`,
+  `serverPort`, `poolStart`, `poolEnd`.
+  Ger `sessionId`, pool/server, `operationCount=0`, `leases=[]`.
+- `/api/dhcp/session/run`: `sessionId`, `project`,
+  `clientNode`, `clientPort`, `transactionId`, `leaseSeconds`.
+  Ger `result` från **samma existerande DORA-motor** och
+  aktuell `leases`, `leaseCount`, `operationCount` och MAC-tabeller.
+  Klienten måste vara en deklarerad hostport utan IPv4.
+- `/api/dhcp/session/reset`: `sessionId`, `project`.
+  Behåller server och pool men nollställer lease-tabell, MAC-inlärning
+  och operationsräknare.
+- `/api/dhcp/session/stop`: endast `sessionId`.
+  Tar bort den processlokala sessionen.
+
+Alla endpunkter avvisar oväntade/saknade nycklar (422). `run` och
+`reset` vägrar om projektets signatur ändrats sedan sessionens start;
+`stop` tillåts alltid för att frigöra den gamla sessionen.
+Dubblerad tilldelning till samma klient och uttömd pool ger 422
+**utan att tidigare BOUND-leases raderas**. L2-fel räknas som en
+genomförd simuleringsoperation men ger ingen lease; invalida
+indata räknas inte som genomförd operation.
+
+Builder använder nu de fyra livscykelknapparna ovan. Den gemensamma
+DORA-panelens server och pool låses när sessionen är aktiv,
+medan användaren uttryckligen kan välja nästa klient och transaktions-ID.
+Observerade spår för DISCOVER/OFFER/REQUEST/ACK och den aktuella
+simulerade lease-tabellen visas var för sig. Projektändringar ogiltigförklarar
+sessionen och gör ett best-effort-anrop till `stop`; ett fördröjt
+HTTP-svar får aldrig återställa gammal UI-status. Separata
+engångsanrop till `/api/dhcp/dora` påverkar inte någon session.
+
+**Ingen session sparas** till projektfilen. Leases gäller bara den
+aktuella serverprocessens simulerade arbetsminne; de försvinner
+vid omstart, och inget faktiskt nät verifieras. RFC-leasetid är
+fortfarande endast ett *föreslaget värde*, inte en tidsstyrd
+nedräkning eller förnyelsemekanism.
+
 ## Avsiktliga begränsningar
 
 - Den simulerade leasen existerar endast i minnet. **Klientportens
@@ -115,9 +165,11 @@ fortfarande bara två meddelanden.
 - Bara DHCP selecting-state broadcast med en vald server och
   en enda klient per `run`; inga konkurrerande servrar,
   relay-agenter, unicast ACK eller BOOTP-alternativ.
-- Builder har nu en separat DORA-panel som utför ett API-anrop
-  per klick. Ingen delad lease-databas mellan knapptryckningar;
-  tidigare Discover/Offer-panel är oförändrad och påstår inte ACK.
+- Builder har en separat DORA-panel. Engångsknappen delar aldrig
+  lease-databas med senare engångskörningar. De explicita
+  DHCP-sessionsknapparna delar däremot tillfällig lease-tabell
+  mellan klienter inom en och samma startade session.
+  Den tidigare Discover/Offer-panelen är oförändrad och påstår inte ACK.
 - Poolgränsen 256 adresser gäller denna uttryckligt begränsade
   modell och är ingen påstådd DHCP-protokollgräns.
 
