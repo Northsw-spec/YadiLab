@@ -1512,6 +1512,7 @@ function sessionInteger(value, min, max) {
 async function startDoraSession() {
   if (doraSessionBusy || doraSessionId !== null || doraBusy) return;
   doraClockEvent = null;
+  doraRenewalTrace = null;
   const inputs = doraSessionInput();
   const [client, server, poolStart, poolEnd] = inputs;
   if (!client || !server || !poolStart || !poolEnd) {
@@ -1584,6 +1585,7 @@ async function runDoraSession() {
       doraSessionState = data;
       doraSessionTrace = data.result;
       doraClockEvent = null;
+      doraRenewalTrace = null;
     }
   } catch (error) {
     if (stillCurrent()) doraSessionTrace = {error: error.message};
@@ -1594,6 +1596,50 @@ async function runDoraSession() {
     }
   }
 }
+async function renewDoraSession() {
+  if (!doraSessionId || doraSessionBusy) return;
+  const inputs = doraSessionInput();
+  const [client, , , , rawTransaction] = inputs;
+  const transactionId = sessionInteger(rawTransaction, 1, 4294967295);
+  if (!client || transactionId === null) {
+    doraRenewalTrace = {error: 'Välj en giltig klient och ett transaktions-ID 1–4294967295.'};
+    renderDoraSession();
+    return;
+  }
+  const [clientNode, clientPort] = JSON.parse(client);
+  const id = doraSessionId;
+  const snapshot = JSON.stringify(project);
+  const edit = editRevision, workspace = workspaceRevision;
+  const generation = ++doraSessionGeneration;
+  doraSessionBusy = true;
+  doraRenewalTrace = null;
+  renderDoraSession();
+  const stillCurrent = () => generation === doraSessionGeneration
+    && doraSessionId === id && edit === editRevision
+    && workspace === workspaceRevision
+    && JSON.stringify(project) === snapshot
+    && JSON.stringify(doraSessionInput()) === JSON.stringify(inputs);
+  try {
+    const data = await api('/api/dhcp/session/renew', {
+      sessionId: id, project: JSON.parse(snapshot),
+      clientNode, clientPort, transactionId,
+    });
+    if (stillCurrent()) {
+      doraSessionState = data;
+      doraRenewalTrace = data.result;
+      doraSessionTrace = null;
+      doraClockEvent = null;
+    }
+  } catch (error) {
+    if (stillCurrent()) doraRenewalTrace = {error: error.message};
+  } finally {
+    if (generation === doraSessionGeneration) {
+      doraSessionBusy = false;
+      renderDoraSession();
+    }
+  }
+}
+
 async function advanceDoraSession() {
   if (!doraSessionId || doraSessionBusy) return;
   const seconds = sessionInteger($('dora-session-advance-seconds').value.trim(), 1, 604800);
@@ -1618,6 +1664,7 @@ async function advanceDoraSession() {
       doraSessionState = state;
       doraSessionTrace = null;
       doraClockEvent = state;
+      doraRenewalTrace = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration && doraSessionId === id) {
@@ -1649,6 +1696,7 @@ async function resetDoraSession() {
       doraSessionState = state;
       doraSessionTrace = null;
       doraClockEvent = null;
+      doraRenewalTrace = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration && doraSessionId === id) {
@@ -1673,6 +1721,7 @@ async function stopDoraSession() {
       doraSessionState = null;
       doraSessionTrace = null;
       doraClockEvent = null;
+      doraRenewalTrace = null;
     }
   } catch (error) {
     if (generation === doraSessionGeneration) {
@@ -2130,6 +2179,7 @@ $('run-dhcp').addEventListener('click', runDhcp);
 $('run-dora').addEventListener('click', runDora);
 $('dora-session-start').addEventListener('click', startDoraSession);
 $('dora-session-run').addEventListener('click', runDoraSession);
+$('dora-session-renew').addEventListener('click', renewDoraSession);
 $('dora-session-advance').addEventListener('click', advanceDoraSession);
 $('dora-session-reset').addEventListener('click', resetDoraSession);
 $('dora-session-stop').addEventListener('click', stopDoraSession);
@@ -2142,6 +2192,7 @@ for (const id of ['dora-client', 'dora-server', 'dora-pool-start', 'dora-pool-en
                                      'dora-lease-seconds'].includes(id)) {
       doraSessionGeneration += 1;
       doraSessionTrace = null;
+      doraRenewalTrace = null;
     }
     renderDoraDiagnostics();
     renderDoraSession();
