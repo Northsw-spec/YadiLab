@@ -66,6 +66,14 @@ let doraRenewalTrace = null;
 let doraFaultEvent = null;
 let doraPortFaultEvent = null;
 let doraVlanFaultEvent = null;
+let investigationId = null;
+let investigationState = null;
+let investigationGeneration = 0;
+let investigationBusy = false;
+let investigationLog = [];
+let investigationVerdict = null;
+let investigationRecovery = null;
+let investigationError = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -155,7 +163,21 @@ function invalidateDoraDiagnostics() {
   doraGeneration += 1;
   doraDiagnostic = null;
 }
+function invalidateInvestigation() {
+  investigationGeneration += 1;
+  const previous = investigationId;
+  investigationId = null;
+  investigationState = null;
+  investigationBusy = false;
+  investigationLog = [];
+  investigationVerdict = null;
+  investigationRecovery = null;
+  investigationError = null;
+  if (previous) void api('/api/dhcp/investigation/stop', {sessionId: previous}).catch(() => {});
+}
+
 function invalidateDoraSession() {
+  invalidateInvestigation();
   doraSessionGeneration += 1;
   const previous = doraSessionId;
   doraSessionId = null;
@@ -1425,6 +1447,7 @@ function render() {
   renderDhcpDiagnostics();
   renderDoraDiagnostics();
   renderDoraSession();
+  renderInvestigation();
   renderSessionDiagnostics();
   renderRouteLookup();
   renderIPv4Trace();
