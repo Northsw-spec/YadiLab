@@ -347,6 +347,36 @@ def _checked_frame(message: DhcpMessage, sender_mac: str, source_ip: str) -> Eth
     return checked
 
 
+def validate_dora_pool(fabric: EthernetFabric, server_node: str,
+                       server_port: str, pool_start: str, pool_end: str) -> tuple[int, int]:
+    """Validate one explicit server interface and bounded pool, no packet sent."""
+    ports = fabric.ports
+    if (not isinstance(server_node, str) or not isinstance(server_port, str)
+            or server_node not in ports or server_port not in ports[server_node]):
+        _fail("DORA requires a declared server interface")
+    if (fabric.nodes[server_node]["kind"] not in ("host", "router")
+            or (server_node, server_port) not in fabric.bound_macs()):
+        _fail("DORA server requires a host/router with explicit MAC")
+    server_ipv4 = ports[server_node][server_port]["ipv4"]
+    if server_ipv4 is None:
+        _fail("selected DHCP server requires an explicit IPv4/CIDR")
+    interface = ipaddress.IPv4Interface(server_ipv4)
+    if not 1 <= interface.network.prefixlen <= 30:
+        _fail("DORA requires server subnet /1../30")
+    start = int(ipaddress.IPv4Address(_address(pool_start, "pool start")))
+    end = int(ipaddress.IPv4Address(_address(pool_end, "pool end")))
+    if start > end or end - start >= 256:
+        _fail("DORA pool must contain 1..256 contiguous IPv4 addresses")
+    if not (ipaddress.IPv4Address(start) in interface.network
+            and ipaddress.IPv4Address(end) in interface.network
+            and ipaddress.IPv4Address(start) not in (
+                interface.network.network_address, interface.network.broadcast_address)
+            and ipaddress.IPv4Address(end) not in (
+                interface.network.network_address, interface.network.broadcast_address)):
+        _fail("DORA pool must contain usable addresses in selected server subnet")
+    return start, end
+
+
 class DhcpSession:
     """Explicit single-server DORA with an isolated, bounded in-memory lease set.
 
@@ -375,23 +405,8 @@ class DhcpSession:
                 or server_node not in ports or server_port not in ports[server_node]
                 or client_node not in ports or client_port not in ports[client_node]):
             _fail("DORA requires declared client and server endpoints")
-        server_ipv4 = ports[server_node][server_port]["ipv4"]
-        if server_ipv4 is None:
-            _fail("selected DHCP server requires an explicit IPv4/CIDR")
-        interface = ipaddress.IPv4Interface(server_ipv4)
-        if not 1 <= interface.network.prefixlen <= 30:
-            _fail("DORA requires server subnet /1../30")
-        start = int(ipaddress.IPv4Address(_address(pool_start, "pool start")))
-        end = int(ipaddress.IPv4Address(_address(pool_end, "pool end")))
-        if start > end or end - start >= 256:
-            _fail("DORA pool must contain 1..256 contiguous IPv4 addresses")
-        if not (ipaddress.IPv4Address(start) in interface.network
-                and ipaddress.IPv4Address(end) in interface.network
-                and ipaddress.IPv4Address(start) not in (
-                    interface.network.network_address, interface.network.broadcast_address)
-                and ipaddress.IPv4Address(end) not in (
-                    interface.network.network_address, interface.network.broadcast_address)):
-            _fail("DORA pool must contain usable addresses in selected server subnet")
+        start, end = validate_dora_pool(
+            self.fabric, server_node, server_port, pool_start, pool_end)
         if any(lease["clientNode"] == client_node and lease["clientPort"] == client_port
                for lease in self._leases.values()):
             _fail("client already owns a simulated lease; renewal is unsupported")
