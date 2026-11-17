@@ -8,7 +8,7 @@ Modulen `network_core/ethernet.py` implementerar en *deterministisk MAC-forwardi
 
 1. `EthernetFabric(project)` validerar det **befintliga kanoniska projektet** med `validate_project`. Inga noder, kablar, portar eller konfigurationer härleds eller skapas.
 2. Endast länkar med `enabled: true` och aktiverade portar i **båda ändarna** kan transportera ramen.
-3. `inject(node_id, port_id, source_mac, destination_mac)` kräver en deklarerad **icke-switch** som avsändare och en port där en extern ram påstås sändas. MAC-adresserna måste tillföras uttryckligen av anroparen. **Inga MAC-adresser finns ännu i projektformatet.** Ingen adress tillskrivs en nod på eget initiativ.
+3. `inject(node_id, port_id, source_mac, destination_mac)` är det ursprungliga MAC-only-anropet. Den striktare `inject_frame(node_id, port_id, frame)` kräver en faktisk `EthernetFrame` och en uttrycklig källa i `interface_macs` vid sessionens start. **MAC-identiteter finns ännu inte i projektformatet** och tilldelas aldrig automatiskt.
 4. Endast sex oktetter hex, separerade med kolon, stöds. Källadressen måste vara icke-noll unicast. Destinationen måste vara unicast eller `FF:FF:FF:FF:FF:FF` (broadcast). Multicast avvisas uttryckligen som ej implementerat.
 5. Samtliga portars forwarding-domän antas för denna modell vara **otaggad, utan VLAN-segmentering**. Det är en begränsning, inte ett påstående om verkliga switchkonfigurationer.
 
@@ -42,7 +42,7 @@ Exemplet är kodfragment med **platshållar-ID:n**, inte ett bevis att dessa nä
 
 ## Icke-implementerat
 
-- Serializering/parsning av Ethernetramars bytes, EtherType, payload, FCS, preamble, tidsfördröjning, länkförhandling.
+- L2-ramar kan nu serialiseras/parsas **utan FCS** som Ethernet II i `ethernet_frame.py`. Däremot saknas FCS, preamble, tidsfördröjning, länkförhandling och protokollavkodning av payload.
 - Dynamisk MAC-aging, STP/RSTP, multicastgrupper, VLAN och trunkar.
 - ARP, IP, ICMP, ping, DHCP, DNS, routing, brandväggslogik.
 - MAC-filtrering eller paketacceptans i mottagande host/NIC. `endpointArrivals` betyder **enbart att ramen nådde ett deklarerat gränssnitt**.
@@ -58,4 +58,12 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 Beteendet provas i `tests/test_ethernet.py`: kända/okända destinationer, broadcast, flyttad MAC, nedstängd port eller länk, två switchar, loopar och ogiltiga MAC-adresser samt oförändrat källdokument. Dessa tester är **funktionella modelltester**, inte test av verklig fysisk nätverkskommunikation.
 
-Nästa välmotiverade etapp: definiera explicit MAC-adresskonfiguration och väldefinierade Ethernetramar, följt av ARP med separat verifiering, innan någon UI-integrering som kan antyda IP-reachability.
+Nästa välmotiverade etapp: definiera hur MAC-adresser ska sparas som källdata genom en separat versionshanterad projektmodell och verifierad migrering, följt av ARP med oberoende testning. Ingen UI-integrering får antyda IP-reachability innan IP-forwarding finns.
+
+## Utökning: uttryckliga NIC-MAC-bindningar och Ethernet II
+
+Se även [ETHERNET_FRAMES.md](ETHERNET_FRAMES.md). `EthernetFabric(project, interface_macs={('host-id', 'eth0'): '02:00:00:00:00:0A'})` validerar deklarerade icke-switchportar och avvisar ogiltig/duplicerad MAC. Bindningen finns **endast i simuleringens minne**, inte i projektfilen.
+
+`inject_frame` avvisar obundna källportar eller ramar vars käll-MAC inte matchar den explicita bindningen. Ramen är en validerad Ethernet II-header med opak bytes-payload. Det ändrar inte switchens enda befintliga forwardingalgoritm. Tidigare `inject` finns kvar för kompatibilitet och är fortsatt ett explicit MAC-only-anrop utan bindningskontroll.
+
+Inga MAC-adresser, FCS-värden, ARP-svar eller IP-resultat skapas automatiskt.

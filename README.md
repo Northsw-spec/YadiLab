@@ -39,6 +39,12 @@ python3 -m network_core --data-dir ~/NetworkProjects --no-browser --port 8765
 
 Detta är **inte** en färdig Ethernet-/ARP-/IP-simulator och har **ännu ingen UI-/HTTP-integration**. Inga MAC-adresser skapas eller tilldelas nätverksenheter automatiskt. Se [Layer 2-kontrakt och begränsningar](docs/ETHERNET_FORWARDING.md).
 
+## Ethernet II-ramar och explicita MAC-bindningar (isolerat Python-API)
+
+Den fristående Layer 2-motorn kan nu serialisera och tolka väldefinierade Ethernet II-ramar utan FCS, med strikt EtherType- och MAC-validering. En simuleringssession kan få **uttryckliga port-MAC-bindningar** och avvisar ramkällor utan sådan bindning eller med fel källadress. MAC-tabeller lärs fortfarande in av verkligt simulerade inkommande ramar, inte av IP-adresser eller påhittade enheter.
+
+**Begränsning:** MAC-bindningarna lagras endast i simuleringssessionen, inte i projektfilen. GUI, ARP, VLAN, IP och ping stöds ännu inte av motorn. Se [Ethernet II-kontrakt](docs/ETHERNET_FRAMES.md) och [forwardingkontrakt](docs/ETHERNET_FORWARDING.md).
+
 ## Avsiktligt INTE implementerat
 
 **Topologisk väg är inte ping, IP-routing, VLAN-forwarding, brandväggslogik eller ett bevis på nätverksanslutning.** Första versionens grafspårning traverserar dokumentationsgrafen, inte verkliga protokoll.
