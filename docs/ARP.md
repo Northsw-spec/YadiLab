@@ -4,7 +4,7 @@
 
 `network_core.arp.ArpMessage` modellerar och kodar ett 28-byte ARP-meddelande enligt Ethernet/IPv4-varianten i RFC 826 (EtherType `0x0806`, hardware type 1, protocol type `0x0800`, hardware length 6, protocol length 4, opcode 1 eller 2). `serialize` och `parse` bevarar de deklarerade ARP-fälten exakt. Om ett meddelande kapslas i `EthernetFrame` används korrekt broadcast för request, unicast för reply och Ethernet-minimipadding. Avkodning accepterar endast kanonisk nollpadding och avvisar avvikande Ethernet- och ARP-adresser. Detta är en **avsiktligt strikt modell**, inte ett fullständigt stöd för varje ARP-variant.
 
-`ArpSession(project, interface_macs=...)` använder den **redan implementerade** `EthernetFabric`, utan en parallell topologi eller forwardingmotor. Käll-IP hämtas från den **uttryckligen konfigurerade** IPv4/CIDR-adressen i projektets port. MAC-bindningen måste alltid skickas uttryckligen som `{(node_id, port_id): "02:..."}` och är bara sessionstillstånd. Förfrågan skickas som Ethernet-broadcast över aktiva, uttryckligt dokumenterade länkar. En icke-switchport som faktiskt nås, har exakt den efterfrågade IPv4-adressen och har en explicit MAC-bindning skickar ett ARP-reply. Den avsedda källporten måste verkligen nås av svaret för att MAC-adressen ska hamna i källportens ARP-cache. En senare fråga i samma session kan ge `CACHE_HIT` utan ny trafik.
+`ArpSession(project, interface_macs=...)` använder den **redan implementerade** `EthernetFabric`, utan en parallell topologi eller forwardingmotor. Käll-IP hämtas från den **uttryckligen konfigurerade** IPv4/CIDR-adressen i projektets port. MAC-bindningen måste vara explicit: antingen det sparade `mac`-fältet i projektformat 1.1 eller `interface_macs={(node_id, port_id): "02:..."}` vid skapandet av sessionen. Förfrågan skickas som Ethernet-broadcast över aktiva, uttryckligt dokumenterade länkar. En icke-switchport som faktiskt nås, har exakt den efterfrågade IPv4-adressen och har en explicit MAC-bindning skickar ett ARP-reply. Den avsedda källporten måste verkligen nås av svaret för att MAC-adressen ska hamna i källportens ARP-cache. En senare fråga i samma session kan ge `CACHE_HIT` utan ny trafik.
 
 ### Sanningsgränser och negativa beteenden
 
@@ -15,7 +15,7 @@
 - Off-link IP, egen IP, odeklarerade källportar, saknad käll-IP/MAC och dubblerade deklarerade IP-adresser avvisas. Proxy ARP stöds inte.
 - IPv4 ARP probes med `0.0.0.0`, multicast, VLAN, IPv6 NDP, virtuella MAC-adresser, STP, IP-forwarding, ICMP, DHCP, ARP-aging, gratuitous ARP och riktiga NIC-paketfilter är **inte implementerade**.
 - En switchloop avvisas av befintlig `EthernetFabric` tills korrekt loopkontroll finns. En router vidarebefordrar inte ARP-broadcast mellan sina gränssnitt.
-- ARP-cachen, MAC-tabeller och explicit tilldelade MAC-adresser finns enbart i denna session och sparas **inte** automatiskt i `.yadilab`-projektet.
+- ARP-cachen, inlärda MAC-tabeller och sessionsspecifika MAC-bindningar sparas **inte**. Endast explicit dokumenterad port-MAC i schema 1.1 sparas efter användarens uttryckliga Save.
 
 ### Exempel (Python-API)
 

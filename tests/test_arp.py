@@ -170,13 +170,18 @@ class ArpSessionTests(unittest.TestCase):
             session.arp_table('fake', 'eth0')
 
     def test_cache_is_detached_and_project_unchanged(self):
-        p=network();original=copy.deepcopy(p)
-        session=ArpSession(p,interface_macs=bindings())
-        session.resolve('a', 'eth0', '192.0.2.20')
-        table=session.arp_table('a', 'eth0');table.clear()
-        self.assertEqual(session.arp_table('a', 'eth0'), {'192.0.2.20': B})
-        self.assertEqual(p, original)
-        self.assertEqual(p['schemaVersion'], '1.0')
+        for version in ('1.0', '1.1'):
+            with self.subTest(version=version):
+                p = network()
+                p['schemaVersion'] = version
+                original = copy.deepcopy(p)
+                session = ArpSession(p, interface_macs=bindings())
+                session.resolve('a', 'eth0', '192.0.2.20')
+                table = session.arp_table('a', 'eth0')
+                table.clear()
+                self.assertEqual(session.arp_table('a', 'eth0'), {'192.0.2.20': B})
+                self.assertEqual(p, original)
+                self.assertEqual(p['schemaVersion'], version)
 
     def test_no_router_bridging_or_fake_ip_reachability(self):
         from test_ethernet import node, link

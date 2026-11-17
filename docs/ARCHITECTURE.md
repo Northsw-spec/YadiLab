@@ -25,8 +25,8 @@ Visningsnamnet deklareras endast i **`network_core/config.py`** som `APP_NAME`. 
 | `model.py` | Schema, referenser, explicit grafspårning | Routing, ping, fysisk sanning |
 | `storage.py` | Verkliga filer, SHA-256, förväntad föregående version | Autosave, tyst overwrite |
 | `csv_import.py` | Explicit fyrtabells-CSV till verifierad kanonisk modell | Implicita kablar, heuristisk kolumnmappning, filskrivning |
-| `arp.py` | Explicit Ethernet/IPv4 ARP-request/reply över befintlig `EthernetFabric`, flyktig cache och avvisning av okänt | Ingen IP-routing, ping, proxy-ARP, VLAN, beständig MAC eller UI-integrering |
-| `ethernet.py` | Flyktig MAC-inlärning, Ethernet-forwarding på aktiva deklarerade kablar | ARP, VLAN, ping, IP, STP, NIC-acceptans eller beständig projektkonfiguration |
+| `arp.py` | Explicit Ethernet/IPv4 ARP-request/reply över befintlig `EthernetFabric`, flyktig cache och avvisning av okänt | Ingen IP-routing, ping, proxy-ARP, VLAN eller UI-integrering |
+| `ethernet.py` | Flyktig MAC-inlärning, explicit v1.1-port-MAC och Ethernet-forwarding på aktiva kablar | ARP, VLAN, ping, IP, STP, NIC-acceptans eller lagring av sessionstillstånd |
 | `server.py` | Lokal UI, API, validering | Tolka källdata som topologi |
 | `web/model.js` | Explicit UI-modell, enhets- och portkommandon | Adressbaserad länkförutsägelse |
 | `web/canvas.js` | SVG-geometri och direktträff på portpunkter | Ändra noders eller länkars identitet |

@@ -11,7 +11,9 @@ import re
 from collections import deque
 from typing import Any
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
+LEGACY_SCHEMA_VERSION = "1.0"
+MAC_RE = re.compile(r"^[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}$")
 NODE_KINDS = frozenset({"host", "switch", "router", "firewall"})
 ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,63}$")
 
@@ -77,9 +79,12 @@ def blank_project(name: str = "Nytt nätverkslabb") -> dict:
 def validate_project(value: Any) -> dict:
     """Reject incompatible/lossy documents; normalize only explicitly declared data."""
     p = _object(value, "project", {"schemaVersion", "name", "zones", "nodes", "links"})
-    if p["schemaVersion"] != SCHEMA_VERSION:
-        _fail("project.schemaVersion", f"only {SCHEMA_VERSION!r} is supported")
+    version = p["schemaVersion"]
+    if type(version) is not str or version not in (LEGACY_SCHEMA_VERSION, SCHEMA_VERSION):
+        _fail("project.schemaVersion", f"only {LEGACY_SCHEMA_VERSION!r} and {SCHEMA_VERSION!r} are supported")
     project = blank_project(_name(p["name"], "project.name"))
+    # Never silently upgrade or rewrite a legacy document during validation.
+    project["schemaVersion"] = version
 
     zone_ids: set[str] = set()
     for i, original in enumerate(_array(p["zones"], "project.zones", 1000)):
@@ -93,6 +98,7 @@ def validate_project(value: Any) -> dict:
 
     nodes_by_id: dict[str, dict] = {}
     port_ids_by_node: dict[str, set[str]] = {}
+    configured_macs: set[str] = set()
     for i, original in enumerate(_array(p["nodes"], "project.nodes")):
         loc = f"project.nodes[{i}]"
         n = _object(original, loc, {"id", "label", "kind", "x", "y", "zoneId", "ports"})
@@ -111,7 +117,8 @@ def validate_project(value: Any) -> dict:
         seen_ports: set[str] = set()
         for pi, po in enumerate(_array(n["ports"], loc + ".ports", 128)):
             ploc = f"{loc}.ports[{pi}]"
-            port = _object(po, ploc, {"id", "name", "enabled", "ipv4"})
+            port = _object(po, ploc, {"id", "name", "enabled", "ipv4"},
+                           {"mac"} if version == SCHEMA_VERSION else frozenset())
             pid = _id(port["id"], ploc + ".id")
             if pid in seen_ports:
                 _fail(ploc, f"duplicate port ID {pid!r} on {nid!r}")
@@ -127,9 +134,24 @@ def validate_project(value: Any) -> dict:
                 if not isinstance(addr, ipaddress.IPv4Interface):
                     _fail(ploc + ".ipv4", "IPv6 is not modeled in v1")
                 ipv4 = str(addr)
-            node["ports"].append({"id": pid, "name": _name(port["name"], ploc + ".name"),
-                                  "enabled": _bool(port["enabled"], ploc + ".enabled"),
-                                  "ipv4": ipv4})
+            parsed_port = {"id": pid, "name": _name(port["name"], ploc + ".name"),
+                           "enabled": _bool(port["enabled"], ploc + ".enabled"),
+                           "ipv4": ipv4}
+            if "mac" in port:
+                mac = port["mac"]
+                if mac is not None:
+                    if kind == "switch":
+                        _fail(ploc + ".mac", "switch ports cannot have endpoint MAC bindings")
+                    if not isinstance(mac, str) or not MAC_RE.fullmatch(mac):
+                        _fail(ploc + ".mac", "expected six colon-separated hex octets or null")
+                    mac = mac.upper()
+                    if (int(mac[:2], 16) & 1) or mac == "00:00:00:00:00:00":
+                        _fail(ploc + ".mac", "endpoint MAC must be nonzero unicast")
+                    if mac in configured_macs:
+                        _fail(ploc + ".mac", "duplicate endpoint MAC binding")
+                    configured_macs.add(mac)
+                parsed_port["mac"] = mac
+            node["ports"].append(parsed_port)
         nodes_by_id[nid] = node
         port_ids_by_node[nid] = seen_ports
         project["nodes"].append(node)
