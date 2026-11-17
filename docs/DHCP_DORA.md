@@ -441,11 +441,99 @@ serveromstart tappar sessionen. Högst 16 samtidiga övningar och
 48 observationer per övning (utöver övrig DHCP-sessionsbudget).
 Felaktiga parametrar avvisas med HTTP 422 utan att lägga
 till observationer. Ingen övningsinformation sparas till disk.
-Övningen simulerar enbart **ett dolt T1-renewalfel** åt gången,
-utan automatiska DHCP-retries, T2 eller expiration i själva
-övningsscenariot, utan verklig OS-/NIC-konfiguration eller
-routade/relay-trafikflöden. Alla mätningar gäller
+Ursprungliga PR #38-nivån simulerar **ett dolt T1-renewalfel**
+åt gången. PR #39 utökar samma modell med explicita T2- och
+expiration-steg på högre nivåer, utan automatiska DHCP-retries,
+verklig OS-/NIC-konfiguration eller routade/relay-trafikflöden. Alla mätningar gäller
 `source: "SIMULATED"` och får inte presenteras som verklig telemetri.
+
+## Svårighetsgrader och DHCP-tidsförlopp (PR #39)
+
+PR #39 vidareutvecklar **samma** evidence-first `InvestigationSession`
+från PR #38. Det inför ingen ny parallell paketmotor eller
+automatisk klocka. Bakom varje övning finns samma
+`DhcpLabSession`, `DhcpSession`, `EthernetFabric`,
+ACK-bekräftad baseline och exakt deklarerad L2-/VLAN-topologi.
+
+`POST /api/dhcp/investigation/start` accepterar antingen de
+åtta tidigare exakta fälten eller exakt ett ytterligare
+`difficulty`. Endast tre strängar är tillåtna:
+`T1_ONLY` (standard och PR #38-kompatibel),
+`T2_REBIND`, `EXPIRY_RECOVERY`. Andra värden, inklusive
+boolean och null, avvisas som felaktigt projekt/HTTP 422.
+
+**T1_ONLY:** övningen stannar vid T1 och avvisar framflyttad
+klocka. Efter faktisk DHCPREQUEST och minst två olika
+andra mätningar går det att pröva hypotes och verifiera
+vanlig ACK-bekräftad `RENEWING`-förnyelse.
+
+**T2_REBIND:** efter faktiskt observerad T1-REQUEST får
+användaren explicit flytta fram tiden till och **inte förbi**
+den riktiga `t2AtSeconds`. DHCPREQUEST vid T2 använder den
+befintliga RFC2131-motorns broadcast och måste faktiskt
+observeras innan diagnos tillåts. Reparation före expiration
+använder `REBINDING`-förnyelse med riktig mottagen DHCPACK.
+
+**EXPIRY_RECOVERY:** samma T1- och T2-observationer är
+obligatoriska. Därefter får användaren flytta tiden till
+`expiresAtSeconds` (inte förbi). Den befintliga
+`expire_leases`-operationen tar då bort BOUND-leasen vid
+**exakt** gränssekund. Resultatet innehåller en reducerad
+historisk `expiredLeases`-post och visar
+`phase=EXPIRED`, `leaseActive=false`,
+`remainingSeconds=0` och `requiredRecovery=NEW_DORA`.
+Detta är ingen aktiv lease och inga förlängningar sker
+utan faktiska paket. `probe lease` kan fortsätta läsa
+dokumenterade historiska lease-tider men markerar
+`status=EXPIRED`. `probe renew` efter expiration
+avvisas med HTTP 422 utan att skapa falsk DHCPREQUEST.
+Diagnos kräver dessutom att expiration verkligen inträffat.
+
+**Explicit API** `POST /api/dhcp/investigation/advance`:
+
+```json
+{"sessionId":"<opaque ID>","project":{},"seconds":23}
+```
+
+Exakt dessa nycklar krävs; `seconds` ska vara äkta
+heltal 1..604800, inte sträng eller boolean. Snapshoten
+måste matcha den ursprungliga kanoniska dokumentationen.
+Hopp till T2 kräver tidigare faktiskt observerad
+`RENEWING`-REQUEST, hopp till expiration kräver faktiskt
+observerad `REBINDING`-REQUEST. Tidsteg efter korrekt
+diagnos, över nivåns slutpunkt eller efter expiration
+avvisas. Giltiga steg räknas mot DHCP-sessionens
+existerande operationsbudget och skickar **inga
+automatiska paket eller retries**. Publika statusfält
+`t1AtSeconds`, `t2AtSeconds`,
+`nextClockTargetSeconds`, `canAdvance`,
+`renewedPhases`, `canDiagnose`, `leaseActive`,
+`requiredRecovery` redovisar enbart användarens
+tids- och observationsprocess, aldrig det dolda felet.
+
+**Verifierad reparation:** före expiration skickar
+`repair` ett verkligt T1-/T2-DHCPREQUEST och kräver
+korrekt mottaget ACK för att förlänga samma BOUND-lease.
+Efter expiration får den gamla leasen **inte** förnyas.
+Efter uttrycklig korrekt diagnos återställs den enda
+internt simulerade orsaken och en **ny fyrastegs-DORA**
+måste verkligen lyckas med DISCOVER, OFFER, REQUEST
+och ACK, annars är resultatet `NOT_VERIFIED`.
+Reparationsresultatet anger `verifiedProtocol=RENEWAL`
+eller `verifiedProtocol=NEW_DORA`, `packetStatus`
+och separata sändnings-/mottagningsbevis för relevanta
+DHCP-steg. `RECOVERED` innebär en ny faktisk BOUND-lease
+efter ACK; inte någon verklig IP-konfiguration av OS.
+Feltyp och målpunkt visas först efter denna bevisade
+reparation.
+
+**Samma invariants:** ingen autosave, inga verkliga
+NIC-kommandon, ingen bakgrundstimer, inga påhittade
+kablage/VLAN/routade länkar och ingen tillgång till
+den bakomliggande dolda felinjektionen via övnings-API:t.
+Separata sessions-ID:n och hela projektets signatur
+skyddar livscykeln. Endast en dold L1/L2-felorsak i
+taget och en vald dokumenterad DHCP-server modelleras.
 
 ## Avsiktliga begränsningar
 

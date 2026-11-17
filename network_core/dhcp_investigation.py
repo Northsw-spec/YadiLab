@@ -17,6 +17,7 @@ from .simulation import MAX_SESSIONS
 MAX_PROBES = 48
 DIAGNOSES = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH")
 PROBES = ("lease", "renew", "link", "port", "vlan")
+DIFFICULTIES = ("T1_ONLY", "T2_REBIND", "EXPIRY_RECOVERY")
 
 
 def _fault_candidates(project: dict, fabric, client_node: str, client_port: str,
@@ -67,10 +68,15 @@ class InvestigationSession:
     def __init__(self, project: object, client_node: str, client_port: str,
                  server_node: str, server_port: str,
                  pool_start: str, pool_end: str, lease_seconds: int,
-                 *, _test_choice: str | None = None):
+                 *, difficulty: str = "T1_ONLY",
+                 _test_choice: str | None = None):
         self.lab = DhcpLabSession(project, server_node, server_port, pool_start, pool_end)
         if type(lease_seconds) is not int or not 60 <= lease_seconds <= 604800:
             raise ProjectValidationError("investigation: leaseSeconds must be integer 60..604800")
+        if type(difficulty) is not str or difficulty not in DIFFICULTIES:
+            raise ProjectValidationError("investigation: unsupported difficulty")
+        self.difficulty = difficulty
+        self.lease_seconds = lease_seconds
         candidates = _fault_candidates(
             self.lab.project, self.lab.dhcp.fabric,
             client_node, client_port, server_node, server_port)
@@ -88,6 +94,7 @@ class InvestigationSession:
             raise ProjectValidationError(
                 "investigation: baseline DORA did not deliver ACK; correct source network first")
         self.lease_ipv4 = first["result"]["lease"]["ipv4"]
+        self._last_lease = dict(first["result"]["lease"])
         self.original_deadline = first["result"]["lease"]["expiresAtSeconds"]
         self.lab.advance(first["result"]["lease"]["t1AtSeconds"])
         self._inject(True)
@@ -95,6 +102,8 @@ class InvestigationSession:
         self._attempts = 0
         self._diagnosed = False
         self._repaired = False
+        self._fault_active = True
+        self._renewed_phases: set[str] = set()
         self._last_transaction_id = 101
 
     def _inject(self, enabled: bool) -> None:
@@ -108,20 +117,75 @@ class InvestigationSession:
             self.lab.set_access_vlan_fault(
                 fault["nodeId"], fault["portId"], fault["vlanId"] if enabled else None)
 
+    def _active_lease(self) -> dict | None:
+        """The actual ACK-confirmed lease, not an inferred historical lease."""
+        return next(
+            (lease for lease in self.lab.dhcp.leases()
+             if lease["clientNode"] == self.client_node
+             and lease["clientPort"] == self.client_port),
+            None,
+        )
+
+    def _phase(self, lease: dict | None) -> str:
+        if lease is None:
+            return "EXPIRED"
+        clock = self.lab.clock_seconds
+        return ("BOUND" if clock < lease["t1AtSeconds"]
+                else "RENEWING" if clock < lease["t2AtSeconds"]
+                else "REBINDING")
+
+    def _next_clock_target(self, lease: dict | None) -> int | None:
+        if lease is None or self._repaired or self.difficulty == "T1_ONLY":
+            return None
+        clock = self.lab.clock_seconds
+        if clock < lease["t2AtSeconds"]:
+            return lease["t2AtSeconds"]
+        if self.difficulty == "EXPIRY_RECOVERY" and clock < lease["expiresAtSeconds"]:
+            return lease["expiresAtSeconds"]
+        return None
+
+    def _can_diagnose(self, phase: str) -> bool:
+        observed = {p["probe"] for p in self._probes}
+        if "renew" not in observed or len(observed - {"renew"}) < 2:
+            return False
+        if self.difficulty == "T2_REBIND":
+            return "REBINDING" in self._renewed_phases
+        if self.difficulty == "EXPIRY_RECOVERY":
+            return phase == "EXPIRED" and "REBINDING" in self._renewed_phases
+        return True
+
     def public_state(self) -> dict:
-        lease = self.lab.dhcp.bound_lease(self.client_node, self.client_port)
+        lease = self._active_lease()
+        historical = lease if lease is not None else self._last_lease
+        phase = self._phase(lease)
+        target = self._next_clock_target(lease)
+        can_advance = (
+            target is not None
+            and not self._diagnosed
+            and not self._repaired
+            and ("RENEWING" if phase == "RENEWING" else "REBINDING")
+                in self._renewed_phases
+        )
         return {
             "clientNode": self.client_node,
             "clientPort": self.client_port,
             "serverNode": self.lab.server_node,
             "serverPort": self.lab.server_port,
+            "difficulty": self.difficulty,
             "clockSeconds": self.lab.clock_seconds,
             "leaseIpv4": self.lease_ipv4,
-            "expiresAtSeconds": lease["expiresAtSeconds"],
-            "remainingSeconds": lease["expiresAtSeconds"] - self.lab.clock_seconds,
-            "phase": ("BOUND" if self.lab.clock_seconds < lease["t1AtSeconds"]
-                      else "RENEWING" if self.lab.clock_seconds < lease["t2AtSeconds"]
-                      else "REBINDING"),
+            "leaseActive": lease is not None,
+            "expiresAtSeconds": historical["expiresAtSeconds"],
+            "t1AtSeconds": historical["t1AtSeconds"],
+            "t2AtSeconds": historical["t2AtSeconds"],
+            "remainingSeconds": max(0, historical["expiresAtSeconds"] - self.lab.clock_seconds),
+            "phase": phase,
+            "requiredRecovery": ("COMPLETED" if self._repaired else
+                                 "NEW_DORA" if lease is None else "RENEWAL"),
+            "nextClockTargetSeconds": target,
+            "canAdvance": can_advance,
+            "canDiagnose": self._can_diagnose(phase),
+            "renewedPhases": sorted(self._renewed_phases),
             "observations": len(self._probes),
             "probesPerformed": [p["probe"] for p in self._probes],
             "diagnosisAttempts": self._attempts,
@@ -130,6 +194,41 @@ class InvestigationSession:
             "maxProbes": MAX_PROBES,
             "ephemeral": True,
         }
+
+    def advance(self, seconds: int) -> dict:
+        """Only explicit learner-triggered virtual time, with staged evidence.
+
+        Moving the clock NEVER issues DHCPREQUEST or extends the lease.
+        Advanced scenario can expire the last bound lease exactly once.
+        """
+        if self._repaired or self._diagnosed:
+            raise ProjectValidationError("investigation: clock is locked after diagnosis")
+        if self.difficulty == "T1_ONLY":
+            raise ProjectValidationError("investigation: T1-only difficulty has no clock advance")
+        if type(seconds) is not int or not 1 <= seconds <= 604800:
+            raise ProjectValidationError("investigation: seconds must be integer 1..604800")
+        lease = self._active_lease()
+        if lease is None:
+            raise ProjectValidationError("investigation: lease already expired")
+        target_clock = self.lab.clock_seconds + seconds
+        limit = (lease["t2AtSeconds"] if self.difficulty == "T2_REBIND"
+                 else lease["expiresAtSeconds"])
+        if target_clock > limit:
+            raise ProjectValidationError("investigation: advance exceeds this difficulty's deadline")
+        if target_clock >= lease["t2AtSeconds"] and "RENEWING" not in self._renewed_phases:
+            raise ProjectValidationError(
+                "investigation: observe real T1 DHCPREQUEST before reaching T2")
+        if target_clock >= lease["expiresAtSeconds"] and "REBINDING" not in self._renewed_phases:
+            raise ProjectValidationError(
+                "investigation: observe real T2 DHCPREQUEST before expiration")
+        result = self.lab.advance(seconds)
+        expired = [
+            {"ipv4": l["ipv4"], "state": l["state"],
+             "expiresAtSeconds": l["expiresAtSeconds"]}
+            for l in result["expiredLeases"]
+        ]
+        # No privileged fabric fault/state is returned to the student.
+        return {"advancedSeconds": seconds, "expiredLeases": expired, **self.public_state()}
 
     def check_project(self, project: object) -> None:
         self.lab.check_project(project)
@@ -146,21 +245,27 @@ class InvestigationSession:
             if target:
                 raise ProjectValidationError("investigation: lease/renew target must be empty")
             if kind == "lease":
-                lease = self.lab.dhcp.bound_lease(self.client_node, self.client_port)
+                lease = self._active_lease()
+                historical = lease if lease is not None else self._last_lease
                 observation = {
-                    "status": lease["state"],
-                    "ipv4": lease["ipv4"],
+                    "status": "BOUND" if lease is not None else "EXPIRED",
+                    "ipv4": historical["ipv4"],
                     "clockSeconds": self.lab.clock_seconds,
-                    "t1AtSeconds": lease["t1AtSeconds"],
-                    "t2AtSeconds": lease["t2AtSeconds"],
-                    "expiresAtSeconds": lease["expiresAtSeconds"],
-                    "remainingSeconds": lease["expiresAtSeconds"] - self.lab.clock_seconds,
+                    "t1AtSeconds": historical["t1AtSeconds"],
+                    "t2AtSeconds": historical["t2AtSeconds"],
+                    "expiresAtSeconds": historical["expiresAtSeconds"],
+                    "remainingSeconds": max(
+                        0, historical["expiresAtSeconds"] - self.lab.clock_seconds),
                     "source": "SIMULATED",
                 }
             else:
+                if self._active_lease() is None:
+                    raise ProjectValidationError(
+                        "investigation: lease expired; DHCP renewal impossible, use new DORA")
                 result = self.lab.renew(
                     self.client_node, self.client_port, self._next_transaction())
                 renewal = result["result"]
+                self._renewed_phases.add(renewal["phase"])
                 observation = {
                     "status": renewal["status"],
                     "phase": renewal["phase"],
@@ -202,6 +307,14 @@ class InvestigationSession:
         if "renew" not in observed or len(observed - {"renew"}) < 2:
             raise ProjectValidationError(
                 "investigation: observe real renewal and at least two other distinct checks before diagnosis")
+        if self.difficulty == "T2_REBIND" and "REBINDING" not in self._renewed_phases:
+            raise ProjectValidationError(
+                "investigation: T2 scenario requires a real rebinding DHCPREQUEST")
+        if self.difficulty == "EXPIRY_RECOVERY" and (
+                self._active_lease() is not None
+                or "REBINDING" not in self._renewed_phases):
+            raise ProjectValidationError(
+                "investigation: advanced scenario requires observed T2 and expired lease")
         if self._attempts >= 3:
             raise ProjectValidationError("investigation: maximum three diagnostic attempts")
         self._attempts += 1
@@ -220,18 +333,52 @@ class InvestigationSession:
             raise ProjectValidationError("investigation: exercise already repaired")
         if not self._diagnosed:
             raise ProjectValidationError("investigation: correct diagnosis required before repair")
-        self._inject(False)
-        result = self.lab.renew(
-            self.client_node, self.client_port, self._next_transaction())["result"]
-        recovered = result["status"] == "ACK_RECEIVED" and result["leaseRenewed"]
+        # Only one original scenario fault is repaired, never the actual project.
+        if self._fault_active:
+            self._inject(False)
+            self._fault_active = False
+        expired = self._active_lease() is None
+        if expired:
+            # RFC2131: an expired lease cannot use RENEWING/REBINDING.
+            # Only a NEW real four-message DORA can allocate an address.
+            proof = self.lab.run(
+                self.client_node, self.client_port,
+                self._next_transaction(), self.lease_seconds)["result"]
+            recovered = proof["status"] == "ACK_RECEIVED" and proof["leaseCommitted"]
+            method = "NEW_DORA"
+            request_received = proof["request"]["receivedAtServer"]
+            ack_received = proof["ack"]["receivedAtClient"]
+            discover_received = proof["discover"]["receivedAtServer"]
+            # The DORA engine proves OFFER arrival before continuing to
+            # DHCPREQUEST; its offer trace does not expose a separate boolean.
+            offer_received = proof["status"] in (
+                "REQUEST_NOT_RECEIVED", "ACK_NOT_RECEIVED", "ACK_RECEIVED")
+        else:
+            proof = self.lab.renew(
+                self.client_node, self.client_port,
+                self._next_transaction())["result"]
+            recovered = proof["status"] == "ACK_RECEIVED" and proof["leaseRenewed"]
+            method = "RENEWAL"
+            request_received = proof["request"]["receivedAtServer"]
+            ack_received = proof["ack"]["receivedAtClient"]
+            discover_received = None
+            offer_received = None
         self._repaired = recovered
+        if recovered:
+            self.lease_ipv4 = proof["lease"]["ipv4"]
+            self._last_lease = dict(proof["lease"])
         return {
-            "status": "RECOVERED" if recovered else "NOT_VERIFIED",
-            "requestReachedServer": result["request"]["receivedAtServer"],
-            "ackReachedClient": result["ack"]["receivedAtClient"],
-            "cause": self._fault["kind"] if recovered else None,
-            "repair": {k: v for k, v in self._fault.items() if k != "kind"} if recovered else None,
             **self.public_state(),
+            "status": "RECOVERED" if recovered else "NOT_VERIFIED",
+            "verifiedProtocol": method,
+            "packetStatus": proof["status"],
+            "discoverReachedServer": discover_received,
+            "offerReachedClient": offer_received,
+            "requestReachedServer": request_received,
+            "ackReachedClient": ack_received,
+            "cause": self._fault["kind"] if recovered else None,
+            "repair": ({k: v for k, v in self._fault.items() if k != "kind"}
+                       if recovered else None),
         }
 
 
@@ -247,16 +394,23 @@ class InvestigationRegistry:
 
     def start(self, project: object, client_node: str, client_port: str,
               server_node: str, server_port: str, pool_start: str,
-              pool_end: str, lease_seconds: int) -> dict:
+              pool_end: str, lease_seconds: int,
+              difficulty: str = "T1_ONLY") -> dict:
         with self._lock:
             if len(self._sessions) >= MAX_SESSIONS:
                 raise ProjectValidationError("investigation: active session limit reached")
             session = InvestigationSession(
                 project, client_node, client_port, server_node, server_port,
-                pool_start, pool_end, lease_seconds)
+                pool_start, pool_end, lease_seconds, difficulty=difficulty)
             session_id = secrets.token_urlsafe(24)
             self._sessions[session_id] = session
             return {"sessionId": session_id, **session.public_state()}
+
+    def advance(self, session_id: object, project: object, seconds: int) -> dict:
+        with self._lock:
+            session = self._get(session_id)
+            session.check_project(project)
+            return {"sessionId": session_id, **session.advance(seconds)}
 
     def probe(self, session_id: object, project: object,
               kind: str, target: object) -> dict:

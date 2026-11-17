@@ -177,12 +177,21 @@
         <section class="trace-panel" aria-label="Interaktiv DHCP-felsökning">
           <div class="eyebrow">FELSÖKNINGSLABB · PROCESS OF ELIMINATION</div>
           <h3>Varför kan klienten inte förnya sin DHCP-lease?</h3>
-          <p class="muted tiny">Utgå från valda klient-, server- och poolvärden ovan. Labbet kontrollerar först ett faktiskt fungerande DHCPACK, flyttar den virtuella klockan till T1 och injicerar ett dolt fel. Du ser aldrig facit förrän du har undersökt nätet, diagnostiserat och återställt det. Allt sker i sessionens arbetsminne.</p>
+          <p class="muted tiny">Utgå från valda klient-, server- och poolvärden ovan. Labbet verifierar först ett riktigt DHCPACK, går till T1 och injicerar ett dolt fel. På högre nivåer för du själv den virtuella tiden vidare till T2 eller exakt expiration – aldrig automatiskt. Vid utgången lease krävs ny fyrastegs-DORA, inte renewal. Facit visas endast efter verifierad återhämtning. Inget sparas.</p>
+          <label for="investigation-difficulty">Svårighetsgrad och tidsförlopp</label>
+          <select id="investigation-difficulty" class="control">
+            <option value="T1_ONLY">Grund – T1: DHCP unicast-förnyelse</option>
+            <option value="T2_REBIND">Medel – T1 → T2: DHCP broadcast-rebinding</option>
+            <option value="EXPIRY_RECOVERY">Avancerad – T1 → T2 → expiration → ny DORA</option>
+          </select>
           <div class="session-actions">
             <button id="investigation-start" type="button" class="btn btn-soft">Starta dolt felsökningsfall</button>
             <button id="investigation-stop" type="button" class="btn btn-outline" disabled>Avsluta övning</button>
           </div>
           <div id="investigation-status" class="small-muted" role="status">Ingen felsökningsövning startad.</div>
+          <div class="eyebrow">VIRTUELL TID · ENDAST EFTER VERKLIG DHCPREQUEST</div>
+          <button id="investigation-advance" type="button" class="btn btn-outline full" disabled>Flytta till nästa DHCP-gräns (T2 / expiration)</button>
+          <div id="investigation-clock-result" class="trace-result" aria-live="polite">Ingen tid har flyttats fram i denna övning.</div>
           <div class="eyebrow">1 · GÖR EGNA OBSERVATIONER</div>
           <label for="investigation-probe">Undersökning</label>
           <select id="investigation-probe" class="control">
