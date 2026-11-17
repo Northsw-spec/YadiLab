@@ -15,6 +15,7 @@ from urllib.parse import unquote, urlsplit
 from . import __version__, config
 from .model import ProjectValidationError, topology_trace, validate_project
 from .csv_import import import_csv_tables
+from .arp import ArpSession
 from .storage import ProjectConflictError, ProjectStore
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -103,6 +104,19 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict) or set(body) != {"project", "source", "target"}:
                     raise ProjectValidationError("trace: expected project, source, target")
                 self._json(200, topology_trace(body["project"], body["source"], body["target"]))
+            elif path == "/api/diagnostics/arp":
+                if not isinstance(body, dict) or set(body) != {"project", "sourceNode", "sourcePort", "targetIpv4"}:
+                    raise ProjectValidationError("arp diagnostics: expected project, sourceNode, sourcePort, targetIpv4")
+                # Every request is a new isolated simulation over the supplied
+                # working document. No store read/write or shared runtime cache.
+                session = ArpSession(body["project"])
+                result = session.resolve(body["sourceNode"], body["sourcePort"], body["targetIpv4"])
+                self._json(200, {
+                    "result": result,
+                    "arpTable": session.arp_table(body["sourceNode"], body["sourcePort"]),
+                    "macTables": session.fabric.learned_mac_tables(),
+                    "ephemeral": True,
+                })
             elif path == "/api/save":
                 if not isinstance(body, dict) or set(body) != {"filename", "project", "expectedSha256"}:
                     raise ProjectValidationError("save: expected filename, project, expectedSha256")

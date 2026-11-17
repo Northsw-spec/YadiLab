@@ -306,6 +306,69 @@ def run():
             page.locator('#saved-projects').select_option('csv-demo')
             page.locator('#open-project').click()
             expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
+
+            # Browser ARP diagnostics use real HTTP and unsaved current workspace.
+            # Reopen the previous genuinely persisted VLAN 1.2 file, then edit
+            # only browser memory to build two configured IPv4 endpoints.
+            page.locator('#saved-projects').select_option('lab')
+            page.locator('#open-project').click()
+            expect(page.locator('[data-node-id="node-2"]')).to_have_count(1)
+            source_option = json.dumps(['node-1', 'port-1'], separators=(',', ':'))
+            page.locator('#arp-source').select_option(source_option)
+            page.locator('#arp-target-ip').fill('192.0.2.20')
+            page.locator('#run-arp').click()
+            expect(page.locator('#arp-result')).to_contain_text('ARP-simulering avvisad:')
+            expect(page.locator('#arp-result')).to_contain_text('explicit IPv4 and MAC')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            page.locator('[data-item-type="node"][data-item-id="node-1"]').click()
+            page.locator('[data-port-ipv4="port-1"]').fill('192.0.2.10/24')
+            with page.expect_response('**/api/validate') as validation:
+                page.locator('[data-port-ipv4="port-1"]').dispatch_event('change')
+            assert validation.value.status == 200
+            page.locator('[data-item-type="node"][data-item-id="node-2"]').click()
+            page.locator('[data-port-vlan="port-2"]').fill('access:10')
+            with page.expect_response('**/api/validate') as validation:
+                page.locator('[data-port-vlan="port-2"]').dispatch_event('change')
+            assert validation.value.status == 200
+            expect(page.locator('[data-port-vlan="port-2"]')).to_have_value('access:10')
+            page.locator('#add-node').click()
+            expect(page.locator('[data-node-id="node-3"]')).to_have_count(1)
+            page.locator('#new-port-name').fill('eth0')
+            page.locator('#submit-port').click()
+            page.locator('[data-port-mac="port-1"]').fill('02:00:00:00:00:0B')
+            with page.expect_response('**/api/validate') as validation:
+                page.locator('[data-port-mac="port-1"]').dispatch_event('change')
+            assert validation.value.status == 200
+            page.locator('[data-port-ipv4="port-1"]').fill('192.0.2.20/24')
+            with page.expect_response('**/api/validate') as validation:
+                page.locator('[data-port-ipv4="port-1"]').dispatch_event('change')
+            assert validation.value.status == 200
+            page.locator('[data-port-node="node-3"][data-port-id="port-1"]').click()
+            page.locator('[data-port-node="node-2"][data-port-id="port-2"]').click()
+            expect(page.locator('[data-link-id="link-2"]')).to_have_count(1)
+
+            page.locator('#arp-source').select_option(source_option)
+            page.locator('#run-arp').click()
+            expect(page.locator('#arp-result')).to_contain_text('ARP-status: RESOLVED')
+            expect(page.locator('#arp-result')).to_contain_text('192.0.2.20 → 02:00:00:00:00:0B')
+            expect(page.locator('#arp-result')).to_contain_text('VLAN 10')
+            expect(page.locator('#arp-result')).to_contain_text('Inlärda switch-MAC-tabeller:')
+            expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+
+            # Moving just one switchport to VLAN 20 makes same /24 ARP fail.
+            page.locator('[data-item-type="node"][data-item-id="node-2"]').click()
+            page.locator('[data-port-vlan="port-2"]').fill('access:20')
+            with page.expect_response('**/api/validate') as validation:
+                page.locator('[data-port-vlan="port-2"]').dispatch_event('change')
+            assert validation.value.status == 200
+            expect(page.locator('#arp-result')).to_contain_text('Ingen aktuell ARP-simulering')
+            page.locator('#run-arp').click()
+            expect(page.locator('#arp-result')).to_contain_text('ARP-status: NO_REPLY')
+            expect(page.locator('#arp-result')).to_contain_text('ARP-cache på avsändarporten:')
+            expect(page.locator('#arp-result')).to_contain_text('Tom')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')

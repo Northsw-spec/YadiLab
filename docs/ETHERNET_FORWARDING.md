@@ -46,7 +46,7 @@ Exemplet är kodfragment med **platshållar-ID:n**, inte ett bevis att dessa nä
 - Dynamisk MAC-aging, STP/RSTP, multicastgrupper, native VLAN och QinQ. En begränsad VLAN access-/trunkmodell finns via Python-API; se [VLAN.md](VLAN.md).
 - ARP-protokollet finns **inte i forwardingmotorn** `ethernet.py`; en separat begränsad ARP-session finns i [ARP.md](ARP.md). IP, ICMP, ping, DHCP, DNS, routing och brandväggslogik saknas.
 - MAC-filtrering eller paketacceptans i mottagande host/NIC. `endpointArrivals` betyder **enbart att ramen nådde ett deklarerat gränssnitt**.
-- UI, HTTP-endpoint eller beständig lagring av simuleringssessionen, inklusive VLAN-konfiguration.
+- Fullständig interaktiv Ethernet-simuleringssession eller beständig lagring av inlärda tabeller. En avgränsad ARP-diagnostik finns via HTTP/UI, där en ny Python-session skapas per anrop. Konfigurerade switch-VLAN kan sparas i schema 1.2.
 
 Den befintliga `topology_trace` är fortfarande en **dokumentationsgraf**, inte denna forwardingmodell. Blanda inte ihop deras resultat och ersätt inte den ena med falska antaganden om den andra.
 
