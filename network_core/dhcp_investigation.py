@@ -119,7 +119,9 @@ class InvestigationSession:
             "leaseIpv4": self.lease_ipv4,
             "expiresAtSeconds": lease["expiresAtSeconds"],
             "remainingSeconds": lease["expiresAtSeconds"] - self.lab.clock_seconds,
-            "phase": "RENEWING",
+            "phase": ("BOUND" if self.lab.clock_seconds < lease["t1AtSeconds"]
+                      else "RENEWING" if self.lab.clock_seconds < lease["t2AtSeconds"]
+                      else "REBINDING"),
             "observations": len(self._probes),
             "probesPerformed": [p["probe"] for p in self._probes],
             "diagnosisAttempts": self._attempts,
