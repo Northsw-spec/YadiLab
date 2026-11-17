@@ -18,6 +18,7 @@ from .csv_import import import_csv_tables
 from .arp import ArpSession
 from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
+from .ipv4 import IPv4Trace
 from .storage import ProjectConflictError, ProjectStore
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -107,6 +108,18 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict) or set(body) != {"project", "source", "target"}:
                     raise ProjectValidationError("trace: expected project, source, target")
                 self._json(200, topology_trace(body["project"], body["source"], body["target"]))
+            elif path == "/api/ipv4/trace":
+                required = {"project", "sourceNode", "sourcePort", "destinationIpv4", "ttl"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "ipv4 trace: expected project, sourceNode, sourcePort, destinationIpv4, ttl"
+                    )
+                # The request creates its own isolated ARP/Ethernet state.
+                # No guessed links, cached results, file writes or ICMP echo.
+                result = IPv4Trace(body["project"]).send(
+                    body["sourceNode"], body["sourcePort"],
+                    body["destinationIpv4"], body["ttl"])
+                self._json(200, result)
             elif path == "/api/routing/connected":
                 if not isinstance(body, dict) or set(body) != {"project", "nodeId", "destinationIpv4"}:
                     raise ProjectValidationError(

@@ -34,7 +34,7 @@ The existing `POST /api/routing/connected` endpoint retains its name for backwar
 
 Builder provides route creation, per-field editing and deletion in each non-switch node's inspector. Creation requires **three explicit inputs**: canonical destination prefix, next-hop IPv4 and selected output port. The client submits the entire draft to the real Python `/api/validate` endpoint before replacing its in-memory project. Invalid data leave existing documentation intact. Deleting a port referenced by static routes is explicitly blocked until its routes are removed, and converting a node with routes to a switch is rejected. Queries and edits never autosave.
 
-**Unimplemented:** ARP resolution of next-hop for static routes, L3 packet forwarding, IP fragmentation, TTL, ICMP, route metrics and dynamic routing. Static configuration describes intended routes, not verified packet delivery. No ping result is derived from this table.
+**Available in one-shot IPv4 diagnostic since PR #17:** ARP resolution of explicit static next-hop, narrowly modeled IPv4 datagram forwarding and TTL. **Still unimplemented:** IP fragmentation, ICMP, route metrics, dynamic routing and live IP-session persistence. See [IPV4_FORWARDING.md](IPV4_FORWARDING.md). Static configuration describes intended routes, not verified packet delivery. No ping result is derived from this table.
 
 ## Verification
 
