@@ -44,7 +44,7 @@ Exemplet är kodfragment med **platshållar-ID:n**, inte ett bevis att dessa nä
 
 - L2-ramar kan nu serialiseras/parsas **utan FCS** som Ethernet II i `ethernet_frame.py`. Däremot saknas FCS, preamble, tidsfördröjning, länkförhandling och protokollavkodning av payload.
 - Dynamisk MAC-aging, STP/RSTP, multicastgrupper, VLAN och trunkar.
-- ARP, IP, ICMP, ping, DHCP, DNS, routing, brandväggslogik.
+- ARP-protokollet finns **inte i forwardingmotorn** `ethernet.py`; en separat begränsad ARP-session finns i [ARP.md](ARP.md). IP, ICMP, ping, DHCP, DNS, routing och brandväggslogik saknas.
 - MAC-filtrering eller paketacceptans i mottagande host/NIC. `endpointArrivals` betyder **enbart att ramen nådde ett deklarerat gränssnitt**.
 - UI, HTTP-endpoint eller beständig lagring av simuleringssessionen.
 
@@ -58,7 +58,7 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 Beteendet provas i `tests/test_ethernet.py`: kända/okända destinationer, broadcast, flyttad MAC, nedstängd port eller länk, två switchar, loopar och ogiltiga MAC-adresser samt oförändrat källdokument. Dessa tester är **funktionella modelltester**, inte test av verklig fysisk nätverkskommunikation.
 
-Nästa välmotiverade etapp: definiera hur MAC-adresser ska sparas som källdata genom en separat versionshanterad projektmodell och verifierad migrering, följt av ARP med oberoende testning. Ingen UI-integrering får antyda IP-reachability innan IP-forwarding finns.
+Nästa välmotiverade etapp: definiera hur MAC-adresser ska sparas som källdata genom en separat versionshanterad projektmodell och verifierad migrering. Den separata ARP-sessionen är verifierad i `tests/test_arp.py` och dokumenterad i [ARP.md](ARP.md). Ingen UI-integrering får antyda IP-reachability innan IP-forwarding finns.
 
 ## Utökning: uttryckliga NIC-MAC-bindningar och Ethernet II
 
@@ -66,4 +66,4 @@ Se även [ETHERNET_FRAMES.md](ETHERNET_FRAMES.md). `EthernetFabric(project, inte
 
 `inject_frame` avvisar obundna källportar eller ramar vars käll-MAC inte matchar den explicita bindningen. Ramen är en validerad Ethernet II-header med opak bytes-payload. Det ändrar inte switchens enda befintliga forwardingalgoritm. Tidigare `inject` finns kvar för kompatibilitet och är fortsatt ett explicit MAC-only-anrop utan bindningskontroll.
 
-Inga MAC-adresser, FCS-värden, ARP-svar eller IP-resultat skapas automatiskt.
+Inga MAC-adresser, FCS-värden eller IP-resultat skapas automatiskt. Ett ARP-svar genereras endast av den separata `ArpSession` när ett konkret nått och uttryckligt konfigurerat gränssnitt matchar förfrågan.
