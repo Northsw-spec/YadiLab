@@ -556,7 +556,9 @@ def run():
             # PR33: real browser imports explicit multi-client topology, then
             # assigns two UNIQUE IPs in the SAME process-local DHCP session.
             # A second session must start fresh and no project is auto-saved.
-            dhcp_page.once('dialog', lambda dialog: dialog.accept())
+            # This workspace is dirty: import must explicitly approve BOTH
+            # discard of unsaved edits and replacement of the current graph.
+            dhcp_page.on('dialog', lambda dialog: dialog.accept())
             with dhcp_page.expect_response('**/api/validate') as imported_multi:
                 dhcp_page.locator('#import-file').set_input_files({
                     'name': 'explicit-dhcp-multi.json',
