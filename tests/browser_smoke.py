@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from network_core import config
 from xlsx_fixture import make_workbook, workbook_parts, zip_parts
+from ods_fixture import make_ods, ods_parts, zip_parts as zip_ods_parts
 
 
 def port():
@@ -281,7 +282,8 @@ def run():
             def accept_import_dialog(dialog):
                 prompts.append(dialog.type)
                 dialog.accept(
-                    'XLSX Browser Lab' if 'XLSX' in dialog.message else 'CSV acceptance lab'
+                    'ODS Browser Lab' if 'ODS' in dialog.message else (
+                      'XLSX Browser Lab' if 'XLSX' in dialog.message else 'CSV acceptance lab')
                 ) if dialog.type == 'prompt' else dialog.accept()
             page.on('dialog', accept_import_dialog)
             page.locator('#import-file').set_input_files([
@@ -364,6 +366,65 @@ def run():
             page.locator('#saved-projects').select_option('xlsx-demo')
             page.locator('#open-project').click()
             expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
+            assert hashlib.sha256((store/'xlsx-demo.yadilab').read_bytes()).hexdigest() == xlsx_sha
+            assert hashlib.sha256((store/'csv-demo.yadilab').read_bytes()).hexdigest() == csv_sha
+
+            # PR24: actual zipped OpenDocument workbook bytes, not XLSX or
+            # renamed CSV. Hidden ODS sheet is rejected before workspace
+            # replacement, without touching prior on-disk files.
+            bad_ods = ods_parts()
+            ods_xml = bad_ods['content.xml'].decode('utf-8')
+            assert '<table:table table:name="Devices">' in ods_xml
+            bad_ods['content.xml'] = ods_xml.replace(
+                '<table:table table:name="Devices">',
+                '<table:table table:name="Devices" table:visibility="collapse">',
+                1
+            ).encode('utf-8')
+            with page.expect_response('**/api/import/ods') as invalid_ods:
+                page.locator('#import-file').set_input_files({
+                    'name':'hidden.ods',
+                    'mimeType':'application/vnd.oasis.opendocument.spreadsheet',
+                    'buffer':zip_ods_parts(bad_ods),
+                })
+            assert invalid_ods.value.status == 422
+            expect(page.locator('#toast')).to_contain_text('Import avvisad:')
+            expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
+            assert hashlib.sha256((store/'xlsx-demo.yadilab').read_bytes()).hexdigest() == xlsx_sha
+            assert not (store/'ods-demo.yadilab').exists()
+
+            # Real ODF manifest and stored MIME, reordered named tables,
+            # boolean/float cells and harmless repeated empty padding.
+            # HTTP validation precedes explicit discard and replace prompts.
+            ods_prompts_before = prompts.count('prompt')
+            with page.expect_response('**/api/import/ods') as actual_ods:
+                page.locator('#import-file').set_input_files({
+                    'name':'declared-net.ods',
+                    'mimeType':'application/vnd.oasis.opendocument.spreadsheet',
+                    'buffer':make_ods(reorder=True,trailing=True,styles=True),
+                })
+            assert actual_ods.value.status == 200
+            ods_project = actual_ods.value.json()['project']
+            assert ods_project['schemaVersion'] == '1.0'
+            assert ods_project['name'] == 'ODS Browser Lab'
+            assert [n['id'] for n in ods_project['nodes']] == ['pc-a','sw-a']
+            assert ods_project['links'][0]['a'] == {'node':'pc-a','port':'eth0'}
+            assert ods_project['links'][0]['b'] == {'node':'sw-a','port':'gi1'}
+            assert prompts.count('prompt') == ods_prompts_before + 1
+            expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+            assert not (store/'ods-demo.yadilab').exists()
+            page.locator('#project-filename').fill('ods-demo')
+            page.locator('#project-filename').dispatch_event('change')
+            page.locator('#save-project').click()
+            expect(page.locator('#save-indicator')).to_contain_text(
+                'Sparat · ods-demo.yadilab', timeout=12000)
+            ods_raw=(store/'ods-demo.yadilab').read_bytes()
+            assert json.loads(ods_raw) == ods_project
+            ods_sha=hashlib.sha256(ods_raw).hexdigest()
+            page.locator('#new-project').click()
+            page.locator('#saved-projects').select_option('ods-demo')
+            page.locator('#open-project').click()
+            expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
+            assert hashlib.sha256((store/'ods-demo.yadilab').read_bytes()).hexdigest() == ods_sha
             assert hashlib.sha256((store/'xlsx-demo.yadilab').read_bytes()).hexdigest() == xlsx_sha
             assert hashlib.sha256((store/'csv-demo.yadilab').read_bytes()).hexdigest() == csv_sha
 

@@ -13,10 +13,10 @@
       <div class="brand" aria-label="{{APP_NAME}}"><div class="brand-mark" aria-hidden="true">◎</div><div><strong>{{APP_NAME}}</strong><small>CANONICAL NETWORK LAB · v0.1</small></div></div>
       <div class="header-actions">
         <button id="new-project" class="btn btn-ghost" type="button">Nytt</button>
-        <button id="import-project" class="btn btn-ghost" type="button" title="Projekt-JSON, fyra explicita CSV-tabeller eller strikt XLSX med Devices/Interfaces/Links/Zones">Importera</button>
+        <button id="import-project" class="btn btn-ghost" type="button" title="Projekt-JSON, explicita CSV-tabeller eller XLSX/ODS med namngivna blad Devices/Interfaces/Links/Zones">Importera</button>
         <button id="export-project" class="btn btn-ghost" type="button">Exportera</button>
         <button id="save-project" class="btn btn-primary" type="button">Spara projekt</button>
-        <input id="import-file" type="file" accept=".yadilab,application/json,.json,.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
+        <input id="import-file" type="file" accept=".yadilab,application/json,.json,.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.ods,application/vnd.oasis.opendocument.spreadsheet" multiple hidden>
       </div>
     </header>
     <div class="subbar"><span class="system-tag"><i class="status-dot"></i> LOKALT LABB</span><span class="separator">/</span><span id="breadcrumb">Nytt nätverkslabb</span><span class="subbar-spacer"></span><span id="save-indicator" class="save-state">Ej sparat</span></div>
