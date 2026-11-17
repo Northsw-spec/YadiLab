@@ -166,10 +166,19 @@ class InvestigationEngineTests(unittest.TestCase):
         self.assertEqual(case.public_state()["observations"], MAX_PROBES)
 
     def test_invalid_baseline_cannot_become_false_exercise(self):
+        # The cabling is fully declared/active, but client is on another
+        # documented VLAN: actual baseline DORA must fail and never become
+        # a misleading exercise.
         p = vlan_clients()
-        p["links"][1]["enabled"] = False
+        p["nodes"][1]["ports"][0]["vlan"]["vlan"] = 20
         with self.assertRaisesRegex(ProjectValidationError, "baseline DORA"):
             scenario(p, "CABLE_DOWN")
+        # Already disconnected documented cable is rejected even earlier,
+        # before a hidden fault is chosen or any packet is sent.
+        q = vlan_clients()
+        q["links"][1]["enabled"] = False
+        with self.assertRaisesRegex(ProjectValidationError, "documented active cables"):
+            scenario(q, "CABLE_DOWN")
 
     def test_isolated_sessions_bound_to_project_and_opaque_ids(self):
         p = vlan_clients()
