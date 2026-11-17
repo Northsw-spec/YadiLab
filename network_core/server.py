@@ -22,6 +22,7 @@ from .spreadsheet_templates import template_bytes
 from .spreadsheet_export import export_workbook
 from .arp import ArpSession
 from .dhcp import discover_offer, simulate_dora
+from .dhcp_registry import DhcpSessionRegistry
 from .simulation import SimulationRegistry
 from .routing import ConnectedRoutingTable
 from .ipv4 import IPv4Trace
@@ -39,6 +40,7 @@ class LabHTTPServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], store: ProjectStore):
         self.store = store
         self.simulations = SimulationRegistry()
+        self.dhcp_sessions = DhcpSessionRegistry()
         super().__init__(address, Handler)
 
 
@@ -208,6 +210,32 @@ class Handler(BaseHTTPRequestHandler):
                 # graph paths, cached MAC/ARP entries, or invent IP forwarding.
                 self._json(200, ConnectedRoutingTable(body["project"], body["nodeId"])
                            .lookup(body["destinationIpv4"]))
+            elif path == "/api/dhcp/session/start":
+                required = {"project", "serverNode", "serverPort", "poolStart", "poolEnd"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "dhcp session start: expected project, serverNode, serverPort, poolStart, poolEnd")
+                self._json(200, self.server.dhcp_sessions.start(
+                    body["project"], body["serverNode"], body["serverPort"],
+                    body["poolStart"], body["poolEnd"]))
+            elif path == "/api/dhcp/session/run":
+                required = {"sessionId", "project", "clientNode", "clientPort",
+                            "transactionId", "leaseSeconds"}
+                if not isinstance(body, dict) or set(body) != required:
+                    raise ProjectValidationError(
+                        "dhcp session run: expected sessionId, project, clientNode, clientPort, transactionId, leaseSeconds")
+                self._json(200, self.server.dhcp_sessions.run(
+                    body["sessionId"], body["project"], body["clientNode"],
+                    body["clientPort"], body["transactionId"], body["leaseSeconds"]))
+            elif path == "/api/dhcp/session/reset":
+                if not isinstance(body, dict) or set(body) != {"sessionId", "project"}:
+                    raise ProjectValidationError("dhcp session reset: expected sessionId and project")
+                self._json(200, self.server.dhcp_sessions.reset(
+                    body["sessionId"], body["project"]))
+            elif path == "/api/dhcp/session/stop":
+                if not isinstance(body, dict) or set(body) != {"sessionId"}:
+                    raise ProjectValidationError("dhcp session stop: expected sessionId")
+                self._json(200, self.server.dhcp_sessions.stop(body["sessionId"]))
             elif path == "/api/dhcp/dora":
                 required = {"project", "clientNode", "clientPort", "serverNode",
                             "serverPort", "poolStart", "poolEnd", "transactionId", "leaseSeconds"}

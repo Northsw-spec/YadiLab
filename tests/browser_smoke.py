@@ -31,6 +31,7 @@ from spreadsheet_v13_fixture import TABLES_13, expected_v13, xlsx_v13, ods_v13
 from network_core.xlsx_import import import_xlsx_workbook
 from network_core.ods_import import import_ods_workbook
 from test_dhcp import topology as dhcp_topology
+from test_dhcp_registry import clients as dhcp_multi_clients
 
 
 def port():
@@ -551,6 +552,121 @@ def run():
             expect(dhcp_page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
             assert sorted(x.name for x in store.glob('*.yadilab')) == ['lab.yadilab']
+
+            # PR33: real browser imports explicit multi-client topology, then
+            # assigns two UNIQUE IPs in the SAME process-local DHCP session.
+            # A second session must start fresh and no project is auto-saved.
+            # This workspace is dirty: import must explicitly approve BOTH
+            # discard of unsaved edits and replacement of the current graph.
+            dhcp_page.on('dialog', lambda dialog: dialog.accept())
+            with dhcp_page.expect_response('**/api/validate') as imported_multi:
+                dhcp_page.locator('#import-file').set_input_files({
+                    'name': 'explicit-dhcp-multi.json',
+                    'mimeType': 'application/json',
+                    'buffer': json.dumps(dhcp_multi_clients()).encode('utf-8'),
+                })
+            assert imported_multi.value.status == 200
+            expect(dhcp_page.locator('[data-node-id="client-2"]')).to_have_count(1)
+            expect(dhcp_page.locator('[data-node-id="client-3"]')).to_have_count(1)
+            dhcp_page.locator('#dora-server').select_option(
+                json.dumps(['server', 'eth0'], separators=(',', ':')))
+            dhcp_page.locator('#dora-client').select_option(
+                json.dumps(['client', 'eth0'], separators=(',', ':')))
+            dhcp_page.locator('#dora-pool-start').fill('192.0.2.70')
+            dhcp_page.locator('#dora-pool-end').fill('192.0.2.71')
+            dhcp_page.locator('#dora-transaction-id').fill('101')
+            dhcp_page.locator('#dora-lease-seconds').fill('3600')
+            with dhcp_page.expect_response('**/api/dhcp/session/start') as multi_start:
+                dhcp_page.locator('#dora-session-start').click()
+            assert multi_start.value.status == 200
+            assert multi_start.value.json()['leaseCount'] == 0
+            expect(dhcp_page.locator('#dora-session-status')).to_contain_text('Aktiv DHCP-session')
+            expect(dhcp_page.locator('#dora-session-run')).to_be_enabled()
+            expect(dhcp_page.locator('#dora-server')).to_be_disabled()
+            expect(dhcp_page.locator('#dora-pool-start')).to_be_disabled()
+            expect(dhcp_page.locator('#run-dora')).to_be_disabled()
+            with dhcp_page.expect_response('**/api/dhcp/session/run') as multi_first:
+                dhcp_page.locator('#dora-session-run').click()
+            first_lease = multi_first.value.json()
+            assert first_lease['result']['status'] == 'ACK_RECEIVED'
+            assert first_lease['leaseCount'] == 1
+            assert first_lease['result']['lease']['ipv4'] == '192.0.2.70'
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text(
+                'client/eth0 · 02:00:00:00:00:0A → 192.0.2.70')
+            dhcp_page.locator('#dora-client').select_option(
+                json.dumps(['client-2', 'eth0'], separators=(',', ':')))
+            dhcp_page.locator('#dora-transaction-id').fill('102')
+            # Choosing another client must preserve the first lease.
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('192.0.2.70')
+            with dhcp_page.expect_response('**/api/dhcp/session/run') as multi_second:
+                dhcp_page.locator('#dora-session-run').click()
+            second_lease = multi_second.value.json()
+            assert second_lease['result']['status'] == 'ACK_RECEIVED'
+            assert second_lease['result']['lease']['ipv4'] == '192.0.2.71'
+            assert second_lease['leaseCount'] == 2
+            assert [v['ipv4'] for v in second_lease['leases']] == [
+                '192.0.2.70', '192.0.2.71']
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('client-2/eth0')
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('192.0.2.71')
+            expect(dhcp_page.locator('#dora-session-status')).to_contain_text('2 BOUND-lease')
+            # Exhaustion returns 422; existing table cannot be cleared
+            # or claim a successful DHCP ACK for the third client.
+            dhcp_page.locator('#dora-client').select_option(
+                json.dumps(['client-3', 'eth0'], separators=(',', ':')))
+            dhcp_page.locator('#dora-transaction-id').fill('103')
+            with dhcp_page.expect_response('**/api/dhcp/session/run') as multi_full:
+                dhcp_page.locator('#dora-session-run').click()
+            assert multi_full.value.status == 422
+            expect(dhcp_page.locator('#dora-session-result')).to_contain_text('pool exhausted')
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('192.0.2.70')
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('192.0.2.71')
+            assert 'client-3/eth0' not in dhcp_page.locator('#dora-session-leases').inner_text()
+            with dhcp_page.expect_response('**/api/dhcp/session/reset') as multi_reset:
+                dhcp_page.locator('#dora-session-reset').click()
+            assert multi_reset.value.status == 200
+            assert multi_reset.value.json()['leases'] == []
+            expect(dhcp_page.locator('#dora-session-status')).to_contain_text('0 BOUND-lease')
+            with dhcp_page.expect_response('**/api/dhcp/session/run') as multi_after_reset:
+                dhcp_page.locator('#dora-session-run').click()
+            assert multi_after_reset.value.json()['result']['lease']['ipv4'] == '192.0.2.70'
+            with dhcp_page.expect_response('**/api/dhcp/session/stop') as multi_stop:
+                dhcp_page.locator('#dora-session-stop').click()
+            assert multi_stop.value.status == 200
+            expect(dhcp_page.locator('#dora-session-status')).to_contain_text('Ingen aktiv DHCP-session')
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('Ingen aktiv lease-tabell')
+            expect(dhcp_page.locator('#dora-pool-start')).to_be_enabled()
+            with dhcp_page.expect_response('**/api/dhcp/session/start') as fresh_multi:
+                dhcp_page.locator('#dora-session-start').click()
+            assert fresh_multi.value.json()['leaseCount'] == 0
+
+            # A real session run can finish on the server but be delayed in
+            # the browser. An explicit topology edit must invalidate/stop
+            # the session; its late response must not restore stale leases.
+            dhcp_page.evaluate("""() => {
+              window.__originalMultiFetch = window.fetch;
+              window.__releaseMulti = null;
+              window.fetch = async (...args) => {
+                const response = await window.__originalMultiFetch(...args);
+                if (args[0] === '/api/dhcp/session/run') {
+                  return new Promise(resolve => {
+                    window.__releaseMulti = () => resolve(response);
+                  });
+                }
+                return response;
+              };
+            }""")
+            dhcp_page.locator('#dora-session-run').click()
+            dhcp_page.wait_for_function("typeof window.__releaseMulti === 'function'")
+            expect(dhcp_page.locator('#dora-session-run')).to_be_disabled()
+            dhcp_page.locator('[data-item-type="link"][data-item-id="to-server"]').click()
+            dhcp_page.locator('#inspector input[type="checkbox"]').uncheck()
+            expect(dhcp_page.locator('#dora-session-status')).to_contain_text('Ingen aktiv DHCP-session')
+            dhcp_page.evaluate('window.__releaseMulti()')
+            expect(dhcp_page.locator('#dora-session-leases')).to_contain_text('Ingen aktiv lease-tabell')
+            dhcp_page.evaluate('window.fetch = window.__originalMultiFetch')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert sorted(x.name for x in store.glob('*.yadilab')) == ['lab.yadilab']
+            expect(dhcp_page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
             assert not errors, errors
             dhcp_page.close()
 
