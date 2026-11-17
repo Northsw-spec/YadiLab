@@ -63,3 +63,26 @@ Saknade/ogiltiga fakta ger HTTP 422, inte ett falskt DHCP-erbjudande.
 
 Referenser: [RFC 2131](https://www.rfc-editor.org/rfc/rfc2131),
 [RFC 768](https://www.rfc-editor.org/rfc/rfc768).
+
+## Builder-panel för diagnosen
+
+I högra panelen **DHCP – Discover / Offer** väljer användaren uttryckligen:
+
+- **Klientgränssnitt:** hostport som ännu saknar IPv4/CIDR.
+- **DHCP-servergränssnitt:** host-/routerport med dokumenterad IPv4/CIDR.
+- **Föreslagen IPv4:** användarens angivna adress, inte en automatisk DHCP-pool.
+- **Transaktions-ID** och **föreslagen leasetid:** synliga, ändringsbara fält.
+
+Panelen kör samma engångssimulering som `POST /api/dhcp/discover-offer`.
+Utdata visar den faktiska serverportens DISCOVER-mottagning, fysiska
+överföringar i båda riktningar, observerade VLAN-drop, tillfälligt
+inlärda MAC-tabeller och om DHCPOFFER verkligen kom tillbaka. Endast
+statusen `OFFER_RECEIVED` får en lyckad presentation, med uttrycklig
+upplysning att ingen lease skapats och ingen IPv4 konfigurerats.
+
+Om användaren ändrar indata, topologi eller projekt ogiltigförklaras
+resultatet. Även ett sent HTTP-svar från en tidigare körning ignoreras.
+Det finns ingen automatisk sparning, återanvändning av tillfälliga tabeller
+eller automatisk serverupptäckt. Urvalen visar endast kvalificerande
+porttyper; avsaknad av deklarerad MAC på en sådan port visas och avvisas
+av servermodellen, inte repareras automatiskt.

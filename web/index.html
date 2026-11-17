@@ -95,6 +95,23 @@
           <button id="run-arp" class="btn btn-soft full" type="button">Simulera ARP</button>
           <div id="arp-result" class="trace-result" aria-live="polite">Ingen ARP-simulering utförd.</div>
         </section>
+        <section class="trace-panel" aria-label="DHCPv4 Discover Offer diagnostik">
+          <div class="eyebrow">LAYER 3 · DHCPv4 BOOTSTRAP</div>
+          <h3>DHCP – Discover / Offer</h3>
+          <p class="muted tiny">En tillfällig simulerad DISCOVER och OFFER via deklarerade kablar och VLAN. Välj klient och server uttryckligen. Ingen DHCPREQUEST/ACK, adresspool, lease eller ändring av projektet.</p>
+          <label for="dhcp-client">Klientgränssnitt (host utan IPv4)</label>
+          <select id="dhcp-client" class="control"></select>
+          <label for="dhcp-server">DHCP-servergränssnitt (host/router)</label>
+          <select id="dhcp-server" class="control"></select>
+          <label for="dhcp-offered-ip">Föreslagen IPv4 (inte tilldelad eller bevisat ledig)</label>
+          <input id="dhcp-offered-ip" class="control" type="text" placeholder="192.0.2.70" autocomplete="off">
+          <label for="dhcp-transaction-id">Transaktions-ID (1–4294967295)</label>
+          <input id="dhcp-transaction-id" class="control" type="number" min="1" max="4294967295" step="1" value="1">
+          <label for="dhcp-lease-seconds">Föreslagen leasetid i sekunder (60–604800)</label>
+          <input id="dhcp-lease-seconds" class="control" type="number" min="60" max="604800" step="1" value="3600">
+          <button id="run-dhcp" class="btn btn-soft full" type="button">Simulera DHCP Discover / Offer</button>
+          <div id="dhcp-result" class="trace-result" aria-live="polite">Ingen DHCP-simulering utförd.</div>
+        </section>
         <section class="trace-panel" aria-label="Beständig Layer 2-session">
           <div class="eyebrow">LAYER 2 · SESSION</div>
           <h3>Stegvis nätverkslabb</h3>
