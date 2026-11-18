@@ -206,7 +206,7 @@ Rapportera oavsiktligt upptäckta allvarliga problem utan att automatiskt lämna
 
 **FAS 4 — Felsökningsmotor:** definierad felinjicering, diagnostiska tabeller, observationsspår, felsökningsövningar, återställning.
 
-**FAS 5 — Dokumentationsimport:** verifierbara XLSX-/ODS-importörer, andra explicita format, exakta identitets- och avvisningskontroller.
+**FAS 5 — Dokumentationsimport:** de strikta CSV/XLSX/ODS-importörerna är redan implementerade. Nästa leverans är en separat, skrivskyddad källförhandsvisning (4A) enligt `docs/IMPORT_SOURCE_CONTRACT.md`. Därefter endast godkända, evidensbundna mappningsetapper 4B–4D.
 
 **FAS 6 — Avancerade protokoll:** DHCP, DNS, NAT, ACL, brandväggsregler, IPv6 och avancerad routing endast efter behov och korrekt verifiering.
 

@@ -68,6 +68,7 @@ Returnera HTTP 200 med följande entydiga struktur vid fullständigt stödd insp
       "tableId": "sheet-1",
       "name": "Inventory",
       "rowCount": 2,
+      "populatedRowCount": 2,
       "columnCount": 2,
       "previewRows": [
         {
@@ -87,8 +88,8 @@ Returnera HTTP 200 med följande entydiga struktur vid fullständigt stödd insp
 Exakt betydelse:
 - `tableId` = `sheet-1`, `sheet-2`, … i dokumentets verkliga ordning; för CSV är det alltid `sheet-1`.
 - `name` = verkligt bladnamn för arbetsbok; för CSV är det filnamnet. Namn ska inte användas för att härleda dokumentroll.
-- `rowCount` = högsta dokumenterade fysiska radposition med lagrad cellinformation, inklusive mellanliggande tomma rader. `columnCount` = högsta dokumenterade fysiska kolumnposition. Inga gap komprimeras om det förändrar positioner.
-- `previewRows` = de första högst 25 fysiska raderna som innehåller lagrade värden, i stigande källordning. `row` och cellens `address` är alltid de **ursprungliga** positionerna. `previewRowLimit` anger gränsen; UI visar uttryckligen att fler rader finns om `rowCount` överstiger de förhandsvisade.
+- För XLSX/ODS är `rowCount` det högsta ursprungliga radnumret med lagrat cellvärde, inklusive mellanliggande radgap. För CSV är `rowCount` antalet **logiska CSV-records**, med första record på radindex 1: en citerad cell med inbäddad radbrytning räknas som **ett** record. `columnCount` är högsta position med ett lagrat värde (för CSV: antal fält i ett record). Rader eller kolumner komprimeras aldrig så att originalpositionerna ändras.
+- `previewRows` = de första högst 25 källrecords/rader med lagrade värden, i stigande ordning, utan att välja ett syntetiskt rubrikområde. För CSV är `row` ett logiskt record-index; celladresser använder samma record-index. För XLSX/ODS är `row` och `address` faktiska källkoordinater. `previewRowLimit` anger gränsen. UI visar `Förhandsvisade X av Y källrader`, där Y är antalet records/rader med data och inte får förväxlas med det högsta radnumret när det finns gap. Detta kräver att API-svaret dessutom innehåller `populatedRowCount` per tabell.
 - `type` är endast `text`, `number` eller `boolean`. `value` är den bokstavliga cellsträngen enligt dokumentet, utan trimning, datumtolkning, formelberäkning eller omklassificering. Tomma celler listas inte; deras position förblir härledbar genom koordinaterna.
 - Ingen rad antas vara rubrik. En rad med `IP Address` ger aldrig automatiskt en `ipv4`-mappning.
 - `sha256` bindes till exakt inlästa bytes. Detsamma kan kontrolleras oberoende i tester.
