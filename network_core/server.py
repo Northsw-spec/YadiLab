@@ -133,6 +133,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path in ("/", "/index.html", "/app.js", "/model.js", "/canvas.js",
                           "/ui/dom.js", "/services/api.js", "/features/projects/persistence.js",
                           "/features/projects/transfer.js",
+                          "/features/diagnostics/queries.js", "/features/diagnostics/presenters.js",
                           "/styles.css"):
                 filename = "index.html" if path == "/" else path[1:]
                 data = (WEB / filename).read_bytes()

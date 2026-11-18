@@ -63,7 +63,8 @@ class LocalHTTPBoundaryTests(unittest.TestCase):
     def test_static_modules_are_explicitly_allowed_without_directory_access(self):
         headers = (("Host", self.host),)
         for path in ("/ui/dom.js", "/services/api.js",
-                     "/features/projects/persistence.js", "/features/projects/transfer.js"):
+                     "/features/projects/persistence.js", "/features/projects/transfer.js",
+                     "/features/diagnostics/queries.js", "/features/diagnostics/presenters.js"):
             with self.subTest(path=path):
                 status, response_headers, body = self.request("GET", path, headers)
                 self.assertEqual(status, 200)
@@ -71,6 +72,7 @@ class LocalHTTPBoundaryTests(unittest.TestCase):
                               ("text/javascript", "application/javascript"))
                 self.assertIn(b"export ", body)
         for path in ("/ui/", "/services/", "/features/", "/features/projects/",
+                     "/features/diagnostics/", "/features/diagnostics/queries.js/extra",
                      "/features/projects/transfer.js/extra",
                      "/features/projects/../projects/persistence.js",
                      "/ui/../services/api.js",
