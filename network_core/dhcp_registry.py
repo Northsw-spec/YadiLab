@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import secrets
 from threading import RLock
+from .session_idle import IdleSessions, session_activity
 
 from .dhcp import DhcpSession, validate_dora_pool
 from .model import ProjectValidationError
@@ -170,15 +171,16 @@ class DhcpLabSession:
         return self.state()
 
 
-class DhcpSessionRegistry:
+class DhcpSessionRegistry(IdleSessions):
     """Opaque, bounded session IDs; one lock serializes racing requests."""
 
-    def __init__(self):
+    def __init__(self, *, clock=None):
         self._sessions: dict[str, DhcpLabSession] = {}
         self._lock = RLock()
+        self._init_idle(clock)
 
     def _get(self, session_id: object) -> DhcpLabSession:
-        if not isinstance(session_id, str) or session_id not in self._sessions:
+        if not self._live(session_id):
             raise ProjectValidationError(
                 "dhcp session: unknown or expired session; start a new session")
         return self._sessions[session_id]
@@ -188,13 +190,16 @@ class DhcpSessionRegistry:
         session = DhcpLabSession(
             project, server_node, server_port, pool_start, pool_end)
         with self._lock:
+            self._reap_expired()
             if len(self._sessions) >= MAX_SESSIONS:
                 raise ProjectValidationError(
                     "dhcp session: too many active sessions; stop an existing session")
             session_id = secrets.token_urlsafe(24)
             self._sessions[session_id] = session
+            self._track(session_id)
             return {"sessionId": session_id, **session.state()}
 
+    @session_activity
     def run(self, session_id: object, project: object, client_node: str,
             client_port: str, transaction_id: int, lease_seconds: int) -> dict:
         with self._lock:
@@ -203,6 +208,7 @@ class DhcpSessionRegistry:
             return {"sessionId": session_id, **session.run(
                 client_node, client_port, transaction_id, lease_seconds)}
 
+    @session_activity
     def link_fault(self, session_id: object, project: object,
                    link_id: str, disabled: bool) -> dict:
         with self._lock:
@@ -211,6 +217,7 @@ class DhcpSessionRegistry:
             return {"sessionId": session_id, **session.set_link_fault(
                 link_id, disabled)}
 
+    @session_activity
     def port_fault(self, session_id: object, project: object,
                    node_id: str, port_id: str, disabled: bool) -> dict:
         with self._lock:
@@ -219,6 +226,7 @@ class DhcpSessionRegistry:
             return {"sessionId": session_id, **session.set_port_fault(
                 node_id, port_id, disabled)}
 
+    @session_activity
     def vlan_fault(self, session_id: object, project: object,
                    node_id: str, port_id: str, vlan_id: int | None) -> dict:
         with self._lock:
@@ -227,6 +235,7 @@ class DhcpSessionRegistry:
             return {"sessionId": session_id, **session.set_access_vlan_fault(
                 node_id, port_id, vlan_id)}
 
+    @session_activity
     def renew(self, session_id: object, project: object, client_node: str,
               client_port: str, transaction_id: int) -> dict:
         with self._lock:
@@ -235,12 +244,14 @@ class DhcpSessionRegistry:
             return {"sessionId": session_id, **session.renew(
                 client_node, client_port, transaction_id)}
 
+    @session_activity
     def advance(self, session_id: object, project: object, seconds: int) -> dict:
         with self._lock:
             session = self._get(session_id)
             session.check_project(project)
             return {"sessionId": session_id, **session.advance(seconds)}
 
+    @session_activity
     def reset(self, session_id: object, project: object) -> dict:
         with self._lock:
             session = self._get(session_id)
@@ -251,4 +262,5 @@ class DhcpSessionRegistry:
         with self._lock:
             self._get(session_id)
             del self._sessions[session_id]
+            self._forget(session_id)
             return {"status": "STOPPED"}

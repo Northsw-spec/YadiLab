@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import secrets
 from threading import RLock
+from .session_idle import IdleSessions, session_activity
 
 from .dhcp_registry import DhcpLabSession
 from .model import ProjectValidationError
@@ -382,13 +383,14 @@ class InvestigationSession:
         }
 
 
-class InvestigationRegistry:
-    def __init__(self):
+class InvestigationRegistry(IdleSessions):
+    def __init__(self, *, clock=None):
         self._sessions: dict[str, InvestigationSession] = {}
         self._lock = RLock()
+        self._init_idle(clock)
 
     def _get(self, session_id: object) -> InvestigationSession:
-        if type(session_id) is not str or session_id not in self._sessions:
+        if type(session_id) is not str or not self._live(session_id):
             raise ProjectValidationError("investigation: unknown or expired session")
         return self._sessions[session_id]
 
@@ -397,6 +399,7 @@ class InvestigationRegistry:
               pool_end: str, lease_seconds: int,
               difficulty: str = "T1_ONLY") -> dict:
         with self._lock:
+            self._reap_expired()
             if len(self._sessions) >= MAX_SESSIONS:
                 raise ProjectValidationError("investigation: active session limit reached")
             session = InvestigationSession(
@@ -404,14 +407,17 @@ class InvestigationRegistry:
                 pool_start, pool_end, lease_seconds, difficulty=difficulty)
             session_id = secrets.token_urlsafe(24)
             self._sessions[session_id] = session
+            self._track(session_id)
             return {"sessionId": session_id, **session.public_state()}
 
+    @session_activity
     def advance(self, session_id: object, project: object, seconds: int) -> dict:
         with self._lock:
             session = self._get(session_id)
             session.check_project(project)
             return {"sessionId": session_id, **session.advance(seconds)}
 
+    @session_activity
     def probe(self, session_id: object, project: object,
               kind: str, target: object) -> dict:
         with self._lock:
@@ -419,12 +425,14 @@ class InvestigationRegistry:
             session.check_project(project)
             return {"sessionId": session_id, **session.probe(kind, target)}
 
+    @session_activity
     def diagnose(self, session_id: object, project: object, diagnosis: object) -> dict:
         with self._lock:
             session = self._get(session_id)
             session.check_project(project)
             return {"sessionId": session_id, **session.diagnose(diagnosis)}
 
+    @session_activity
     def repair(self, session_id: object, project: object) -> dict:
         with self._lock:
             session = self._get(session_id)
@@ -435,4 +443,5 @@ class InvestigationRegistry:
         with self._lock:
             self._get(session_id)
             del self._sessions[session_id]
+            self._forget(session_id)
             return {"status": "STOPPED"}

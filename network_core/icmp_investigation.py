@@ -11,6 +11,7 @@ from copy import deepcopy
 import ipaddress
 import secrets
 from threading import RLock
+from .session_idle import IdleSessions, session_activity
 
 from .icmp_ping import EchoExchange
 from .model import ProjectValidationError, validate_project
@@ -552,27 +553,31 @@ class IcmpInvestigation:
         }
 
 
-class IcmpInvestigationRegistry:
-    def __init__(self):
+class IcmpInvestigationRegistry(IdleSessions):
+    def __init__(self, *, clock=None):
         self._lock = RLock()
         self._sessions: dict[str, IcmpInvestigation] = {}
+        self._init_idle(clock)
 
     def _get(self, session_id: object) -> IcmpInvestigation:
-        if type(session_id) is not str or session_id not in self._sessions:
+        if type(session_id) is not str or not self._live(session_id):
             raise ProjectValidationError("icmp investigation: unknown or expired session")
         return self._sessions[session_id]
 
     def start(self, project: object, source_node: str, source_port: str,
               destination_ipv4: str, ttl: int) -> dict:
         with self._lock:
+            self._reap_expired()
             if len(self._sessions) >= MAX_SESSIONS:
                 raise ProjectValidationError("icmp investigation: session limit reached")
             instance = IcmpInvestigation(
                 project, source_node, source_port, destination_ipv4, ttl)
             session_id = secrets.token_urlsafe(24)
             self._sessions[session_id] = instance
+            self._track(session_id)
             return {"sessionId": session_id, **instance.state()}
 
+    @session_activity
     def probe(self, session_id: object, project: object, kind: object,
               target: object) -> dict:
         with self._lock:
@@ -580,6 +585,7 @@ class IcmpInvestigationRegistry:
             instance.check_project(project)
             return {"sessionId": session_id, **instance.probe(kind, target)}
 
+    @session_activity
     def diagnose(self, session_id: object, project: object,
                  diagnosis: object) -> dict:
         with self._lock:
@@ -587,6 +593,7 @@ class IcmpInvestigationRegistry:
             instance.check_project(project)
             return {"sessionId": session_id, **instance.diagnose(diagnosis)}
 
+    @session_activity
     def repair(self, session_id: object, project: object) -> dict:
         with self._lock:
             instance = self._get(session_id)
@@ -597,4 +604,5 @@ class IcmpInvestigationRegistry:
         with self._lock:
             self._get(session_id)
             del self._sessions[session_id]
+            self._forget(session_id)
             return {"status": "STOPPED"}

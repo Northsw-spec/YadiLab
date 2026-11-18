@@ -8,6 +8,8 @@ import json
 import mimetypes
 import sys
 import webbrowser
+from threading import Event, Thread
+from time import monotonic
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +28,7 @@ from .dhcp_registry import DhcpSessionRegistry
 from .dhcp_investigation import InvestigationRegistry
 from .icmp_investigation import IcmpInvestigationRegistry
 from .simulation import SimulationRegistry
+from .session_idle import CLEANUP_INTERVAL_SECONDS, CLEANUP_JOIN_SECONDS
 from .routing import ConnectedRoutingTable
 from .ipv4 import IPv4Trace
 from .icmp_ping import EchoExchange
@@ -39,15 +42,36 @@ MAX_BODY = 8 * 1024 * 1024
 class LabHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], store: ProjectStore):
+    def __init__(self, address: tuple[str, int], store: ProjectStore,
+                 *, clock=monotonic, cleanup_interval: float = CLEANUP_INTERVAL_SECONDS):
         if address[0] != "127.0.0.1":
             raise ValueError("local HTTP server must bind to 127.0.0.1")
+        if cleanup_interval <= 0:
+            raise ValueError("cleanup interval must be positive")
         self.store = store
-        self.simulations = SimulationRegistry()
-        self.dhcp_sessions = DhcpSessionRegistry()
-        self.investigations = InvestigationRegistry()
-        self.icmp_investigations = IcmpInvestigationRegistry()
+        self.simulations = SimulationRegistry(clock=clock)
+        self.dhcp_sessions = DhcpSessionRegistry(clock=clock)
+        self.investigations = InvestigationRegistry(clock=clock)
+        self.icmp_investigations = IcmpInvestigationRegistry(clock=clock)
+        self._cleanup_stop = Event()
+        self._cleanup_interval = cleanup_interval
         super().__init__(address, Handler)
+        self._cleanup_thread = Thread(target=self._cleanup_loop, name="session-idle-cleanup",
+                                      daemon=True)
+        self._cleanup_thread.start()
+
+    def _cleanup_loop(self) -> None:
+        while not self._cleanup_stop.wait(self._cleanup_interval):
+            for registry in (self.simulations, self.dhcp_sessions,
+                             self.investigations, self.icmp_investigations):
+                registry.cleanup_expired()
+
+    def server_close(self) -> None:
+        self._cleanup_stop.set()
+        self._cleanup_thread.join(timeout=CLEANUP_JOIN_SECONDS)
+        super().server_close()
+        if self._cleanup_thread.is_alive():
+            raise RuntimeError("session cleanup worker did not stop")
 
 
 class Handler(BaseHTTPRequestHandler):

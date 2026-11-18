@@ -1,6 +1,6 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt för etapp 3D1: `main` vid `2916ca7c9c3f3c5edf7dbb5d07a35f97f632dcb8`.
+Utgångspunkt för etapp 3D-SGC: `main` vid `9ebe4b5d9939f68a4764f96031c3487e925db967`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
@@ -12,13 +12,54 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 3B1 | Save/Open och projektlista | Integrerad i `main`; CI godkänd |
 | 3B2 | Säker import/export | Integrerad i `main`; CI godkänd |
 | 3C | ARP-, routing-, IPv4- och ICMP-vyer | Integrerad i `main`; CI godkänd |
-| 3D1 | DHCP Investigation-sessionens livscykel | Lokalt verifierad; ej mergad |
+| 3D1 | DHCP Investigation-sessionens livscykel | Integrerad i `main`; CI godkänd |
+| 3D-SGC | Server Session Garbage Collection | Lokalt verifierad; ej mergad |
 | 3D2–3E | Fortsatt frontendmodularisering | Planerad |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
+
+## Etapp 3D-SGC: temporära serversessioner
+
+De fyra processlokala registren för Layer 2, DHCP/DORA, DHCP Investigation
+och ICMP Investigation hade tidigare ingen serverbaserad städning av
+övergivna sessioner. De omfattas nu av en gemensam policy: **60 minuters
+verklig inaktivitet**, mätt med monotonic-klocka. Valet ger utrymme för
+normala längre övningar och begränsar kvarvarande resurser. En lyckad
+operation för ett giltigt ID förnyar endast den sessionens stämpel;
+ogiltiga ID:n, misslyckade operationer, startsida och hälsokontroll gör
+det inte. Ingen heartbeat införs: en användare som läser i över 60
+minuter utan API-anrop kan därför förlora sessionen och får starta om.
+
+Varje `LabHTTPServer` äger en cleanup-tråd, som blockerar på en Event
+och vaknar högst var 60:e sekund. Därmed frigörs en övergiven session
+utan nytt klientanrop senast cirka 61 minuter efter sista giltiga
+aktivitet, förutsatt att serverprocessen och dess worker kör. Start
+rensar även förfallna poster före kapacitetskontrollen. `server_close()`
+väcker workern och inväntar den i högst fem sekunder; om den fortfarande
+lever rapporteras ett fel i stället för ett falskt lyckat avslut. En
+pågående lokal operation kan fördröja avslutet tills registerlåset släpps.
+
+Expiration, operation och Stop använder samma `RLock` per register.
+Ingen session tas bort mitt under en operation, och ett gammalt ID kan
+inte återaktiveras. Städningen släpper bara temporära minnesobjekt;
+sparade projekt och protokollsimulering ändras inte. Den virtuella
+DHCP-klockan påverkar aldrig den monotonic-baserade livslängden.
+Frontendens DHCP Investigation-controller tolkar en operations exakta
+"unknown or expired session" som ett utgånget ID och erbjuder ny Start.
+Osäkra Stop-resultat, inklusive ett svar som inte bevisar att just det
+avsedda ID:t stoppades, behålls för nytt försök.
+
+Deterministiska tester täcker alla fyra register, aktiv och ogiltig
+operation, virtuell tid, kapacitetsåtervinning, cleanup mot operation
+och Stop, två separata serverinstanser, oförändrade projektbytes och
+schemalagd städning utan HTTP. Chromium täcker övergiven sida,
+förlorat Stop, fortsatt aktiv session, utgånget ID och ny Start.
+En session som ännu inte nått timeout finns kvar; ett skickat Stop är
+fortfarande bara best-effort tills servern bekräftar frånvaro. Vid
+processavslut försvinner allt processlokalt sessionstillstånd.
 
 ## Etapp 3D1: DHCP Investigation
 
