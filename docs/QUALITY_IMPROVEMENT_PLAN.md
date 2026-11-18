@@ -6,8 +6,8 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
 | Etapp | Område | Läge |
 |---|---|---|
-| 1 | Lokal HTTP-gräns | Implementerad; lokalt verifierad med sockettester, full Python-svit och Chromium i denna PR |
-| 2 | Samtidighetssäker Save/Open | Planerad |
+| 1 | Lokal HTTP-gräns | Integrerad i `main`; CI godkänd på start-HEAD |
+| 2 | Samtidighetssäker Save/Open | Implementerad och lokalt verifierad i denna PR; CI/merge återstår |
 | 3 | Frontendmoduler med tydliga ansvar | Planerad |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
@@ -15,7 +15,42 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
 
-Nästa etapp påbörjas först när denna PR har granskats och landat i `main`.
+Nästa etapp är frontendmodularisering och påbörjas först när denna PR
+har granskats och landat i `main`.
+
+## Etapp 2: samtidiga Save-anrop
+
+Före ändringen låg SHA-256-kontrollen utanför en gemensam kritisk
+sektion. Barriärstyrda tester på den gamla koden gav två lyckade
+skrivningar mot samma gamla hash, även i två riktiga Python-processer,
+vid create-only och över HTTP. Den ena uppdateringen kunde då tyst
+försvinna.
+
+På lokal Linux använder `ProjectStore.save()` nu `fcntl.flock` på en
+separat, beständig `.lock-<projektnamn>` i projektkatalogen. Låset
+identifieras av det validerade projektnamnet och byter inte inode när
+`.yadilab`-filen ersätts. Samma projekt synkroniseras mellan trådar,
+`ProjectStore`-instanser och processer; olika projektnamn har olika
+lås. Hashkontroll, temporär fil, fil-`fsync`, `os.replace` och
+katalog-`fsync` sker medan låset hålls. `finally` frigör det även vid
+konflikt eller skrivfel. Formatet och de explicita Save/Open-anropen
+ändras inte.
+
+Verifierade lokala fall: exakt en vinnare och en `ProjectConflictError`
+för samtidiga uppdateringar och create-only, korrekt HTTP 200/409,
+oförändrad originalfil efter fel före ersättning, städad temporär fil,
+och möjlig ny Save efter fel. Chromium verifierar Save, Open, ny Save
+med läst SHA och avvisad konflikt efter en separat diskändring. Den
+fulla Python-sviten passerade med **504 tester** (varav fem nya
+samtidighetstester), `npm run check` passerade och Chromium-regressionen
+passerade med **DIRECT_HTTP**. PR och CI-granskning återstår.
+
+Lösningen är verifierad för YadiLabs lokala Linuxmiljö och samverkande
+skrivare som använder `ProjectStore`. Externa verktyg som ändrar
+`.yadilab` utan låset följer inte kontraktet. Låsfilerna måste finnas
+kvar som stabila låsobjekt; att radera dem medan skrivare är aktiva
+kan bryta synkroniseringen. Portabilitet till andra plattformar eller
+nätverksfilsystem har inte verifierats.
 
 ## Etapp 1: hotmodell och HTTP-kontrakt
 

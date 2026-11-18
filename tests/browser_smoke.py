@@ -2578,6 +2578,52 @@ def run():
             assert wrong['repair']['action'] == 'RESTORE_NEXT_HOP'
             assert wrong['verifiedFault'] is False
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == routes_sha
+
+            # Builder Save/Open keeps the exact version token. A later real
+            # disk update must surface a conflict without claiming success.
+            save_page = context.new_page()
+            save_page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+            assert browser_open(save_page, base) == network_mode
+            save_page.locator('#project-filename').fill('concurrent-ui')
+            save_page.locator('#project-filename').dispatch_event('change')
+            save_page.locator('#empty-add').click()
+            save_page.locator('#node-label').fill('Initial client')
+            save_page.locator('#node-label').dispatch_event('change')
+            with save_page.expect_response('**/api/save') as initial_ui_save:
+                save_page.locator('#save-project').click()
+            assert initial_ui_save.value.status == 200
+            ui_file = store / 'concurrent-ui.yadilab'
+            first_sha = hashlib.sha256(ui_file.read_bytes()).hexdigest()
+            save_page.reload(wait_until='domcontentloaded')
+            save_page.locator('#saved-projects').select_option('concurrent-ui')
+            save_page.locator('#open-project').click()
+            expect(save_page.locator('#save-indicator')).to_contain_text(
+                'Sparat · concurrent-ui.yadilab')
+            save_page.locator('[data-item-type="node"][data-item-id="node-1"]').click()
+            save_page.locator('#node-label').fill('Edited after Open')
+            save_page.locator('#node-label').dispatch_event('change')
+            with save_page.expect_response('**/api/save') as updated_ui_save:
+                save_page.locator('#save-project').click()
+            assert updated_ui_save.value.status == 200
+            assert json.loads(updated_ui_save.value.request.post_data)[
+                'expectedSha256'] == first_sha
+            loaded_ui = ProjectStore(store).read('concurrent-ui')
+            assert loaded_ui['project']['nodes'][0]['label'] == 'Edited after Open'
+            external = json.loads(json.dumps(loaded_ui['project']))
+            external['nodes'][0]['label'] = 'External writer'
+            external_saved = ProjectStore(store).save(
+                'concurrent-ui', external, loaded_ui['sha256'])
+            save_page.locator('#node-label').fill('Stale browser edit')
+            save_page.locator('#node-label').dispatch_event('change')
+            save_page.once('dialog', lambda dialog: dialog.dismiss())
+            with save_page.expect_response('**/api/save') as rejected_ui_save:
+                save_page.locator('#save-project').click()
+            assert rejected_ui_save.value.status == 409
+            expect(save_page.locator('#toast')).to_contain_text('Kunde inte spara:')
+            expect(save_page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+            assert hashlib.sha256(ui_file.read_bytes()).hexdigest() == external_saved['sha256']
+            assert ProjectStore(store).read('concurrent-ui')['project'] == external
+            save_page.close()
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
