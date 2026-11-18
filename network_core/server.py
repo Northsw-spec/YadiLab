@@ -161,6 +161,7 @@ class Handler(BaseHTTPRequestHandler):
                           "/features/sessions/dhcp-investigation.js",
                           "/features/sessions/icmp-investigation.js",
                           "/features/sessions/dora-session.js",
+                          "/features/sessions/simulation-session.js",
                           "/styles.css"):
                 filename = "index.html" if path == "/" else path[1:]
                 data = (WEB / filename).read_bytes()

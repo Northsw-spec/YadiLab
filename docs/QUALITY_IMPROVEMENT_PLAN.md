@@ -1,6 +1,6 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt för etapp 3D3: `main` vid `d34f912f882f66ad9a6dcc4522816c0d6618045d`.
+Utgångspunkt för etapp 3D4: `main` vid `f70a0d1980894d6e8f944387269ee79680c165ca`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
@@ -15,13 +15,49 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 3D1 | DHCP Investigation-sessionens livscykel | Integrerad i `main`; CI godkänd |
 | 3D-SGC | Server Session Garbage Collection | Integrerad i `main`; CI godkänd |
 | 3D2 | ICMP Investigation-sessionens livscykel | Integrerad i `main`; CI godkänd |
-| 3D3 | DHCP/DORA-sessionens livscykel | LOCAL_PASS; CI_PENDING; NOT_MERGED |
-| 3D4–3E | Fortsatt frontendmodularisering | Planerad |
+| 3D3 | DHCP/DORA-sessionens livscykel | Integrerad i `main`; CI godkänd |
+| 3D4 | ARP/Ethernet-sessionens livscykel | LOCAL_PASS; CI_PENDING; NOT_MERGED |
+| 3E | Fortsatt frontendmodularisering | Planerad |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
+
+## Etapp 3D4: ARP/Ethernet-session
+
+Tidigare ägde `app.js` Layer 2-sessionens ID, generation, busy, räknare,
+senaste diagnostik och kabelljus. Start, Run, Reset, Stop och
+projektinvalidation muterade dessa fält direkt. Stop rensade lokalt utan
+att kontrollera serverns svar.
+
+`web/features/sessions/simulation-session.js` äger nu hela sessionens
+livscykel och importerar bara `services/api.js`. `app.js` äger fortfarande
+kanoniskt projekt, revisioner, DOM, användarens port och mål, Save/Open
+och övrig diagnostik. Den ger controllern en fryst projektsnapshot per
+anrop och läser en kopierad vy för rendering och transmissionsmarkering.
+
+Start/Run/Reset/Stop fångar ID, generation och projektkontext. Run fångar
+dessutom operation, källa och mål. Ett serverbehandlat Run uppdaterar den
+verkliga räknaren och tillfälliga ARP/MAC-status även när målet hunnit
+ändras; det gamla resultatet och dess kabelljus visas då inte för det nya
+valet. Reset efter en behandlad Run tömmer inlärningen, och ett sent Run
+kan inte återställa den. Projektbyte ogiltigförklarar lokalt direkt.
+
+Stop kräver serverns `STOPPED` eller dess exakta saknat/utgånget-fel.
+Osäkra ID behålls för ett begränsat riktat nytt försök medan sidan är
+öppen. Ett sent Start-ID städas riktat. Serverns 60-minuters idle-worker,
+kapacitetsgränser och Layer 2-motor är oförändrade; ingen heartbeat finns.
+
+Chromium i `DIRECT_HTTP` testar L01–L22 mot verklig `LabHTTPServer`:
+fördröjda svar efter serverbehandling, målbyten, New/Open/Import,
+Run/Reset/Stop, förlorade Stop-anrop och svar, exakt retry-422,
+serverexpiration och operation limit. Befintliga positiva ARP-, VLAN-,
+Ethernet- och Save/Open-flöden bevaras. En verklig projektfil jämförs med
+SHA-256. Modulen tillåts bara på sin exakta statiska sökväg; katalog,
+okända vägar och extra segment nekas.
+Lokalt passerade 514 Python-tester, `npm run check` och hela Chromium-smoke
+i `DIRECT_HTTP`, inklusive L01–L22. PR-CI är ännu inte verifierad.
 
 ## Etapp 3D3: DHCP/DORA-session
 
@@ -55,8 +91,8 @@ Stop-svar, nytt försök, ny session och serverexpiration. Sparad projektfil
 kontrolleras med SHA-256. Den nya JS-modulen tillåts endast på sin exakta
 statiska sökväg; katalog, okända vägar och extra segment nekas.
 Lokalt passerade 514 Python-tester, `npm run check` och hela Chromium-smoke
-i `DIRECT_HTTP`, inklusive de riktade DORA-racetesterna. PR-CI är ännu inte
-verifierad.
+i `DIRECT_HTTP`, inklusive de riktade DORA-racetesterna. PR #57 är nu
+integrerad i `main` med godkänd CI.
 
 ## Etapp 3D2: ICMP Investigation
 
