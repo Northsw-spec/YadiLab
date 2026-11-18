@@ -1,6 +1,6 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt för etapp 3B1: `main` vid `47c63607cb2b09b3b6b65b8c40f835e344c241c8`.
+Utgångspunkt för etapp 3B2: `main` vid `acb7c78baf8c2225dae712b624304844b760774e`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
@@ -9,13 +9,44 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 1 | Lokal HTTP-gräns | Integrerad i `main` |
 | 2 | Samtidighetssäker Save/Open | Integrerad i `main` |
 | 3A | Fristående DOM- och API-moduler | Integrerad i `main`; CI godkänd |
-| 3B1 | Save/Open och projektlista | Implementerad och lokalt verifierad; CI/merge återstår |
-| 3B2 och 3C–3E | Fortsatt frontendmodularisering | Planerad |
+| 3B1 | Save/Open och projektlista | Integrerad i `main`; CI godkänd |
+| 3B2 | Säker import/export | Implementerad och lokalt verifierad; CI/merge återstår |
+| 3C–3E | Fortsatt frontendmodularisering | Planerad |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
+
+## Etapp 3B2: import/export med arbetsyteskydd
+
+`web/features/projects/transfer.js` innehåller strikt UTF-8-avkodning,
+filstorlekskontroller, förberedelse av redan stödda CSV-, XLSX-, ODS-
+och projektformat, API-anrop samt beredning av exportbytes och MIME.
+Modulen håller inget projekttillstånd och importerar bara `api()`.
+`app.js` äger fortsatt projekt, filnamn, SHA, revisioner, dialogbeslut,
+`resetProject()` och start av webbläsarnedladdning.
+
+Vid importstart fångar `app.js` arbetsyte- och redigeringsrevision,
+filnamn och projektets serialiserade innehåll. Den kontrollerar dem
+efter asynkron filinläsning och efter API-svaret, före dialogerna.
+Sena svar avvisas även om en ny arbetsyta har identiskt JSON-innehåll,
+eftersom arbetsyterevisionen då har ändrats. Export använder en
+separat snapshot från klicket och kontrollerar samma kontext innan
+nedladdningen startas. Projektfilens namn fångas vid samma tidpunkt
+som dess innehåll. Inga importer autosparas och inga svar ändrar SHA.
+
+Chromium testar fördröjd import följd av redigering eller arbetsytebyte,
+nekad import, ogiltig UTF-8/schema/filtyp, fördröjd projekt- och
+XLSX-/ODS-export utan inaktuell nedladdning samt normal import och
+verifierade nedladdningsbytes. Befintliga Save/Open-, 409- och
+omstartstester körs fortfarande. HTTP-servern tillåter endast den
+exakta nya modulvägen; kataloger och andra sökvägar nekas.
+Lokalt passerade 505 Python-tester, `npm run check` och den utökade
+Chromium-regressionen med direkt HTTP och kontrollerade nedladdningsbytes.
+Kvarvarande arbete: 3C för diagnostikens tydliga modulgränser, därefter
+3D för sessionslivscykler och 3E för en tunnare entrypoint. Slutlig
+CI- och mergeverifiering av 3B2 återstår.
 
 ## Etapp 3B1: projektlagring utan dubbelt tillstånd
 
@@ -45,17 +76,13 @@ följd av lokal redigering och en senare giltig Save, Open följt av
 redigering samt Open följt av nytt filval. Den befintliga Save/Open-
 kontrollen över omstart finns kvar. Den nya modulen kontrolleras för
 direkt HTTP och JavaScript-MIME; negativa HTTP-tester nekar fortfarande
-okända vägar. Slutlig CI- och mergeverifiering för 3B1 återstår.
+okända vägar. Etapp 3B1 är nu integrerad i `main` med godkänd CI.
 Lokalt passerade 505 Python-tester, `npm run check` och den utökade
 Chromium-regressionen med direkt HTTP och verkliga projektfiler.
 
-**3B2 planeras separat:** JSON- och `.yadilab`-import, explicita CSV-
-tabeller, XLSX/ODS, projekt- och kalkylbladsexport, förlustfri
-validering, användarbeslut före arbetsytebyte och skydd mot sena svar.
-Import/export stannar i `app.js` under 3B1 för att hålla den känsliga
-Save/Open-ändringen avgränsad. Kvarvarande risk är den stora entrypointen
-och de delade diagnostik- och sessionsberoendena; 3C–3E följer
-beroendekartan nedan efter en separat granskning.
+3B2 har därefter flyttat filberedning och API-anrop för import/export.
+Kvarvarande risk är den stora entrypointen och de delade diagnostik-
+och sessionsberoendena; 3C–3E följer beroendekartan nedan.
 
 ## Etapp 3A: modulgränser och fortsättning
 

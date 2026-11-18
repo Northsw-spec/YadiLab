@@ -129,13 +129,16 @@ def browser_open(page, base):
     api = (ROOT / 'web/services/api.js').read_text(encoding='utf8').replace('export ', '')
     persistence = (ROOT / 'web/features/projects/persistence.js').read_text(encoding='utf8')
     persistence = persistence.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
+    transfer = (ROOT / 'web/features/projects/transfer.js').read_text(encoding='utf8')
+    transfer = transfer.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
     app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
     app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
     app = app.replace("import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';", '')
     app = app.replace("import {api} from './services/api.js';", '')
     app = app.replace("import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + app)
+    app = app.replace("import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport} from './features/projects/transfer.js';", '')
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
 
 
@@ -275,6 +278,118 @@ def persistence_races(context, base, network_mode, store, errors):
     page.close()
 
 
+def transfer_races(context, base, network_mode, store, errors):
+    """Keep real import/export HTTP replies pending while the Builder changes."""
+    def fresh():
+        test_page = context.new_page()
+        test_page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+        assert browser_open(test_page, base) == network_mode
+        return test_page
+
+    source = (store / 'csv-demo.yadilab').read_bytes()
+    source_project = json.loads(source)
+    source_file = {'name': 'source.yadilab', 'mimeType': 'application/json', 'buffer': source}
+    saved_hash = hashlib.sha256(source).hexdigest()
+
+    # A: a newer local edit makes a completed, valid import obsolete.
+    page = fresh()
+    page.locator('#empty-add').click()
+    hold_http_reply(page, '/api/validate')
+    page.locator('#import-file').set_input_files(source_file)
+    page.wait_for_function('window.__heldReply')
+    page.locator('#node-label').fill('Keep newer work')
+    page.locator('#node-label').dispatch_event('change')
+    release_http_reply(page)
+    expect(page.locator('#toast')).to_contain_text('arbetsytan ändrades under import eller export')
+    assert page.locator('#node-label').input_value() == 'Keep newer work'
+    assert page.locator('[data-link-id]').count() == 0
+    page.close()
+
+    # B: even another workspace with similar content must reject the old import.
+    page = fresh()
+    hold_http_reply(page, '/api/validate')
+    page.locator('#import-file').set_input_files(source_file)
+    page.wait_for_function('window.__heldReply')
+    page.locator('#load-example').click()
+    expect(page.locator('#empty-state')).to_be_hidden()
+    release_http_reply(page)
+    expect(page.locator('#toast')).to_contain_text('arbetsytan ändrades under import eller export')
+    expect(page.locator('[data-node-id="pc-1"]')).to_have_count(1)
+    assert page.locator('[data-node-id="pc-a"]').count() == 0
+    page.close()
+
+    # C/D: declined, malformed and unsupported imports retain unsaved work.
+    page = fresh()
+    page.locator('#empty-add').click()
+    page.locator('#node-label').fill('Unsaved local node')
+    page.locator('#node-label').dispatch_event('change')
+    page.once('dialog', lambda dialog: dialog.dismiss())
+    with page.expect_response('**/api/validate') as valid_response:
+        page.locator('#import-file').set_input_files(source_file)
+    assert valid_response.value.status == 200
+    page.wait_for_function('document.querySelector("#import-file").value === ""')
+    assert page.locator('#node-label').input_value() == 'Unsaved local node'
+    for name, data in (('invalid.yadilab', b'\xff'),
+                       ('invalid.json', b'{"schemaVersion":"invalid"}'),
+                       ('unsupported.txt', source)):
+        page.locator('#import-file').set_input_files({
+            'name': name, 'mimeType': 'application/octet-stream', 'buffer': data})
+        expect(page.locator('#toast')).to_contain_text('Import avvisad:')
+        page.wait_for_function('document.querySelector("#import-file").value === ""')
+        assert page.locator('#node-label').input_value() == 'Unsaved local node'
+        expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+    assert hashlib.sha256((store / 'csv-demo.yadilab').read_bytes()).hexdigest() == saved_hash
+    page.close()
+
+    # E: a delayed project export cannot combine old content with a new workspace.
+    page = fresh()
+    page.locator('#empty-add').click()
+    downloads = []
+    page.on('download', lambda download: downloads.append(download))
+    hold_http_reply(page, '/api/validate')
+    page.locator('#export-project').click()
+    page.wait_for_function('window.__heldReply')
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#new-project').click()
+    release_http_reply(page)
+    expect(page.locator('#toast')).to_contain_text('arbetsytan ändrades under import eller export')
+    assert not downloads
+    expect(page.locator('#empty-state')).to_be_visible()
+    page.close()
+
+    # F: both spreadsheet formats suppress a download after a local edit.
+    for format in ('xlsx', 'ods'):
+        page = fresh()
+        page.locator('#empty-add').click()
+        downloads = []
+        page.on('download', lambda download: downloads.append(download))
+        hold_http_reply(page, '/api/export/spreadsheet')
+        page.locator('#export-' + format).click()
+        page.wait_for_function('window.__heldReply')
+        page.locator('#node-label').fill('Changed during ' + format)
+        page.locator('#node-label').dispatch_event('change')
+        release_http_reply(page)
+        expect(page.locator('#toast')).to_contain_text('arbetsytan ändrades under import eller export')
+        assert not downloads
+        page.close()
+
+    # G: unchanged import and real browser download preserve explicit IDs.
+    page = fresh()
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#import-file').set_input_files(source_file)
+    expect(page.locator('[data-node-id="pc-a"]')).to_have_count(1)
+    expect(page.locator('[data-link-id="cable-1"]')).to_have_count(1)
+    with page.expect_download() as downloaded:
+        page.locator('#export-project').click()
+    assert downloaded.value.suggested_filename == 'lab.yadilab'
+    exported = store / 'transfer-export.yadilab'
+    downloaded.value.save_as(str(exported))
+    assert json.loads(exported.read_bytes()) == source_project
+    assert not (store / 'transfer-export-automatic.yadilab').exists()
+    page.close()
+    assert hashlib.sha256((store / 'csv-demo.yadilab').read_bytes()).hexdigest() == saved_hash
+
+
 def run():
     with tempfile.TemporaryDirectory() as td, sync_playwright() as playwright:
         store = Path(td)
@@ -289,7 +404,8 @@ def run():
         page.on('pageerror',lambda error: errors.append(getattr(error, 'stack', str(error))))
         module_responses = {}
         def record_module(response):
-            for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js'):
+            for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
+                           'features/projects/transfer.js'):
                 if response.url.endswith('/' + module):
                     module_responses[module] = response
         page.on('response', record_module)
@@ -298,7 +414,8 @@ def run():
             network_mode = browser_open(page, base)
             expect(page.locator('#empty-state')).to_be_visible()
             if network_mode == 'DIRECT_HTTP':
-                for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js'):
+                for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
+                               'features/projects/transfer.js'):
                     response = module_responses.get(module)
                     assert response is not None and response.status == 200, f'{module} was not loaded'
                     assert response.headers['content-type'].split(';')[0] in (
@@ -2780,6 +2897,7 @@ def run():
             assert ProjectStore(store).read('concurrent-ui')['project'] == external
             save_page.close()
             persistence_races(context, base, network_mode, store, errors)
+            transfer_races(context, base, network_mode, store, errors)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
