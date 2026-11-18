@@ -1,4 +1,4 @@
-"""Opaque, evidence-first ICMP investigation over the existing routed-packet engine.
+"""Opaque, evidence-first ICMP investigation over the existing packet engine.
 
 No new forwarding model: candidate faults use the existing controlled fault
 mutation and are included only when independent real Echo Request/Reply trials
@@ -23,6 +23,8 @@ MAX_GUESSES = 3
 KINDS = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH", "STATIC_ROUTE_MISSING",
          "IPV4_PREFIX_MISMATCH", "STATIC_NEXT_HOP_UNREACHABLE",
          "IPV4_HOST_ADDRESS_MISMATCH")
+LAN_KINDS = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH",
+             "IPV4_HOST_ADDRESS_MISMATCH")
 PROBES = ("address", "route", "ping", "link", "port", "vlan")
 
 
@@ -202,12 +204,31 @@ class IcmpInvestigation:
             source_node, source_port, destination_ipv4, ttl, 101, 1)
         if baseline["status"] != "REPLIED" or not baseline["replyMatched"]:
             raise ProjectValidationError(
-                "icmp investigation: initial routed Echo Request/Reply must be proven")
+                "icmp investigation: initial Echo Request/Reply must be proven")
         self.source_ipv4 = baseline["request"]["sourceIpv4"]
         self.target_node = baseline["request"]["receiver"]["node"]
         self.target_port = baseline["request"]["receiver"]["port"]
+        # A one-hop host exchange uses connected route lookups in both
+        # directions. Keep the routed candidate set for all other exchanges.
+        source_port_config = next(port for node in self.project["nodes"]
+                                  if node["id"] == source_node
+                                  for port in node["ports"] if port["id"] == source_port)
+        target_port_config = next(port for node in self.project["nodes"]
+                                  if node["id"] == self.target_node
+                                  for port in node["ports"] if port["id"] == self.target_port)
+        direct_lan = (
+            all(len(baseline[direction]["steps"]) == 1 and
+                baseline[direction]["steps"][0]["route"]["type"] == "CONNECTED"
+                for direction in ("request", "reply"))
+            and ipaddress.IPv4Interface(source_port_config["ipv4"]).network ==
+                ipaddress.IPv4Interface(target_port_config["ipv4"]).network
+            and next(node for node in self.project["nodes"]
+                     if node["id"] == self.target_node)["kind"] == "host"
+        )
         allowed = []
         for kind, fault in _candidates(self.project, baseline):
+            if direct_lan and kind not in LAN_KINDS:
+                continue
             try:
                 confirmed = compare_fault(
                     self.project, source_node, source_port,
@@ -233,8 +254,10 @@ class IcmpInvestigation:
             allowed.append((kind, fault))
         if not allowed:
             raise ProjectValidationError(
-                "icmp investigation: no verified reversible link/port/VLAN/route/prefix/next-hop fault")
+                "icmp investigation: no verified reversible link/port/VLAN/address/route/prefix/next-hop fault")
         if _test_kind is None:
+            # Every candidate has independently proven failure and recovery.
+            # Do not silently force LAN exercises to always be cable faults.
             choice = allowed[secrets.randbelow(len(allowed))]
         else:
             choice = next((candidate for candidate in allowed

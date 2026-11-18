@@ -34,6 +34,7 @@ from test_dhcp import topology as dhcp_topology
 from test_dhcp_registry import clients as dhcp_multi_clients
 from test_dhcp_port_vlan_fault import vlan_clients as dhcp_vlan_clients
 from test_icmp_echo import routed_reply_lab as icmp_routed_lab
+from test_icmp_investigation_lan import lan_lab as icmp_lan_lab
 
 
 def port():
@@ -1432,7 +1433,107 @@ def run():
                 icmp_page.locator('#icmp-investigation-stop').click()
             assert icmp_stop.value.status == 200
             expect(icmp_page.locator('#icmp-investigation-status')).to_contain_text(
-                'Ingen routing-/Layer 2-övning')
+                'Ingen ICMP-övning')
+
+            # Same-subnet hosts, one declared switch, connected routes and
+            # real ARP/Ethernet evidence through a complete hidden-fault flow.
+            lan_page = context.new_page()
+            lan_page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+            assert browser_open(lan_page, base) == network_mode
+            lan_page.once('dialog', lambda dialog: dialog.accept())
+            with lan_page.expect_response('**/api/validate') as lan_import:
+                lan_page.locator('#import-file').set_input_files({
+                    'name': 'lan-echo-investigation.json',
+                    'mimeType': 'application/json',
+                    'buffer': json.dumps(icmp_lan_lab()).encode('utf-8'),
+                })
+            assert lan_import.value.status == 200
+            expect(lan_page.locator('[data-node-id="sw"]')).to_have_count(1)
+            lan_page.locator('#icmp-investigation-source').select_option(
+                json.dumps(['a', 'eth0'], separators=(',', ':')))
+            lan_page.locator('#icmp-investigation-destination').fill('192.168.10.20')
+            with lan_page.expect_response('**/api/icmp/investigation/start') as lan_start:
+                lan_page.locator('#icmp-investigation-start').click()
+            assert lan_start.value.status == 200
+            assert not any(kind in json.dumps(lan_start.value.json()) for kind in
+                           ('CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH',
+                            'IPV4_HOST_ADDRESS_MISMATCH'))
+            lan_page.locator('#icmp-investigation-probe').select_option('ping')
+            with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_ping:
+                lan_page.locator('#icmp-investigation-measure').click()
+            ping_observation = lan_ping.value.json()['observation']
+            assert ping_observation['status'] != 'REPLIED'
+            assert ping_observation['requestStatus'] == 'ARP_FAILED'
+            assert ping_observation['requestSteps'][0]['arpStatus'] in ('NO_REPLY', 'NO_ACTIVE_LINK')
+            lan_page.locator('#icmp-investigation-probe').select_option('route')
+            with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_route:
+                lan_page.locator('#icmp-investigation-measure').click()
+            route_observation = lan_route.value.json()['observation']
+            assert route_observation['selectedRoute']['type'] == 'CONNECTED'
+            assert route_observation['documentedStaticRoutes'] == []
+            lan_page.locator('#icmp-investigation-probe').select_option('link')
+            disconnected = []
+            for link_id in ('la', 'lb'):
+                lan_page.locator('#icmp-investigation-link').select_option(link_id)
+                with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_link:
+                    lan_page.locator('#icmp-investigation-measure').click()
+                measured = lan_link.value.json()['observation']
+                if not measured['observedEnabled']:
+                    disconnected.append(link_id)
+            # Infer the hidden cause from independent documented-versus-
+            # simulated observations; the normal exercise chooses at random.
+            lan_page.locator('#icmp-investigation-probe').select_option('port')
+            shut_ports, changed_addresses = [], []
+            for nid, pid in (('sw', 'a'), ('sw', 'b'), ('b', 'eth0')):
+                lan_page.locator('#icmp-investigation-port').select_option(
+                    json.dumps([nid, pid], separators=(',', ':')))
+                with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_port:
+                    lan_page.locator('#icmp-investigation-measure').click()
+                measured = lan_port.value.json()['observation']
+                if measured['documentedEnabled'] and not measured['observedEnabled']:
+                    shut_ports.append((nid, pid))
+                if measured['documentedIpv4'] != measured['observedIpv4']:
+                    changed_addresses.append((nid, pid))
+            lan_page.locator('#icmp-investigation-probe').select_option('vlan')
+            changed_vlans = []
+            for nid, pid in (('sw', 'a'), ('sw', 'b')):
+                lan_page.locator('#icmp-investigation-vlan').select_option(
+                    json.dumps([nid, pid], separators=(',', ':')))
+                with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_vlan:
+                    lan_page.locator('#icmp-investigation-measure').click()
+                measured = lan_vlan.value.json()['observation']
+                if measured['documentedVlan'] != measured['observedVlan']:
+                    changed_vlans.append((nid, pid))
+            assert sum(bool(x) for x in
+                       (disconnected, shut_ports, changed_vlans, changed_addresses)) == 1
+            if disconnected:
+                assert len(disconnected) == 1
+                inferred, failure_point = 'CABLE_DOWN', disconnected[0]
+            elif shut_ports:
+                assert len(shut_ports) == 1
+                inferred, failure_point = 'PORT_SHUTDOWN', shut_ports[0][1]
+            elif changed_vlans:
+                assert len(changed_vlans) == 1
+                inferred, failure_point = 'VLAN_MISMATCH', changed_vlans[0][1]
+            else:
+                assert changed_addresses == [('b', 'eth0')]
+                inferred, failure_point = 'IPV4_HOST_ADDRESS_MISMATCH', 'eth0'
+            lan_page.locator('#icmp-investigation-diagnosis').select_option(inferred)
+            with lan_page.expect_response('**/api/icmp/investigation/diagnose') as lan_diagnose:
+                lan_page.locator('#icmp-investigation-diagnose').click()
+            assert lan_diagnose.value.json()['correct'] is True
+            with lan_page.expect_response('**/api/icmp/investigation/repair') as lan_repair:
+                lan_page.locator('#icmp-investigation-repair').click()
+            repaired_lan = lan_repair.value.json()
+            assert repaired_lan['status'] == 'RECOVERED'
+            assert repaired_lan['restoredEchoStatus'] == 'REPLIED'
+            assert repaired_lan['replyMatched'] is True
+            assert repaired_lan['faultCategory'] == inferred
+            assert failure_point in repaired_lan['report']['rootCause']
+            expect(lan_page.locator('#icmp-investigation-recovery')).to_contain_text(
+                'matchande Echo Reply')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            lan_page.close()
 
             # Delayed measurement after project edit must not resurrect the
             # old hidden session, replace the graph or modify saved bytes.
@@ -1458,7 +1559,7 @@ def run():
             icmp_page.locator('[data-item-type="link"][data-item-id="la"]').click()
             icmp_page.locator('#inspector input[type="checkbox"]').uncheck()
             expect(icmp_page.locator('#icmp-investigation-status')).to_contain_text(
-                'Ingen routing-/Layer 2-övning')
+                'Ingen ICMP-övning')
             icmp_page.evaluate('window.__finishIcmpProbe()')
             expect(icmp_page.locator('#icmp-investigation-observations')).to_contain_text(
                 'Börja med IP-uppgifter')

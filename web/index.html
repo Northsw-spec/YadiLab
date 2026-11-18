@@ -331,7 +331,7 @@
         <section class="trace-panel" aria-label="Dold ICMP routing och Layer 2 felsökning">
           <div class="eyebrow">FELSÖKNINGSLABB · ROUTING ELLER LAYER 2?</div>
           <h3>Varför fungerar inte ping mellan två nät?</h3>
-          <p class="muted tiny">Välj en källa och en destination som redan har bevisats nå varandra via verkligt simulerade ICMP Echo Request/Reply. Labbet injicerar ett dolt, separat verifierat fel i dokumenterad kabel, avstängd switchport, VLAN, statisk route, IPv4-prefix eller felaktig statisk next-hop. Undersök först IP-uppgifter, routingtabeller och faktiska paket. DHCP-adressens ursprung är inte lagrat i projektet och markeras därför som EJ VERIFIERAT – aldrig automatiskt friskförklarat. Allt sker i minnet.</p>
+          <p class="muted tiny">Välj en källa och en destination som redan har bevisats nå varandra via verkligt simulerade ICMP Echo Request/Reply. Labbet injicerar ett dolt, separat verifierat fel i dokumenterad kabel, avstängd switchport, VLAN, IPv4-adress eller, i routade nät, route, prefix eller next-hop. Undersök först IP-uppgifter, routingtabeller och faktiska paket. DHCP-adressens ursprung är inte lagrat i projektet och markeras därför som EJ VERIFIERAT – aldrig automatiskt friskförklarat. Allt sker i minnet.</p>
           <label for="icmp-investigation-source">Källa med dokumenterad IPv4</label>
           <select id="icmp-investigation-source" class="control"></select>
           <label for="icmp-investigation-destination">Målets uttryckliga IPv4</label>
@@ -339,10 +339,10 @@
           <label for="icmp-investigation-ttl">TTL per riktning (2–255)</label>
           <input id="icmp-investigation-ttl" class="control" type="number" min="2" max="255" step="1" value="5">
           <div class="session-actions">
-            <button id="icmp-investigation-start" type="button" class="btn btn-soft">Starta dolt routing/L2-fall</button>
-            <button id="icmp-investigation-stop" type="button" class="btn btn-outline" disabled>Avsluta routingfall</button>
+            <button id="icmp-investigation-start" type="button" class="btn btn-soft">Starta dolt ICMP-fall</button>
+            <button id="icmp-investigation-stop" type="button" class="btn btn-outline" disabled>Avsluta ICMP-fall</button>
           </div>
-          <div id="icmp-investigation-status" class="small-muted" role="status">Ingen routing-/Layer 2-övning startad.</div>
+          <div id="icmp-investigation-status" class="small-muted" role="status">Ingen ICMP-övning startad.</div>
           <div class="eyebrow">1 · SYSTEMATISKA MÄTNINGAR</div>
           <label for="icmp-investigation-probe">Undersök</label>
           <select id="icmp-investigation-probe" class="control">
