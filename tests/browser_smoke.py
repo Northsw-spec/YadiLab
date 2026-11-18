@@ -862,6 +862,68 @@ def icmp_investigation_races(context, network_mode, errors):
             assert sid not in server.icmp_investigations._sessions
             page.close()
 
+            # Stop processed, response lost: the server has removed A, but
+            # the controller must retain A until a real 422 confirms absence.
+            page = fresh()
+            old = start(page)
+            stop_requests = []
+            page.on('request', lambda request: stop_requests.append(request.post_data_json)
+                    if request.url.endswith('/api/icmp/investigation/stop') else None)
+            page.evaluate("""() => {
+              const original = window.fetch;
+              window.__lostStopResponse = null;
+              window.fetch = async (url, init) => {
+                if (url !== '/api/icmp/investigation/stop') return original(url, init);
+                window.fetch = original;
+                const response = await original(url, init);
+                window.__lostStopResponse = {
+                  status: response.status, body: await response.clone().json(),
+                };
+                throw new TypeError('Stop response lost after server processing');
+              };
+            }""")
+            with page.expect_response('**/api/icmp/investigation/stop') as processed_stop:
+                page.locator('#icmp-investigation-stop').click()
+            assert processed_stop.value.status == 200
+            assert processed_stop.value.json() == {'status': 'STOPPED'}
+            page.wait_for_function('window.__lostStopResponse !== null')
+            assert page.evaluate('window.__lostStopResponse') == {
+                'status': 200, 'body': {'status': 'STOPPED'},
+            }
+            assert old not in server.icmp_investigations._sessions
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Kunde inte bekräfta Stop')
+            expect(page.locator('#icmp-investigation-stop')).to_be_enabled()
+            expect(page.locator('#icmp-investigation-start')).to_be_disabled()
+            assert stop_requests == [{'sessionId': old}]
+
+            with page.expect_response('**/api/icmp/investigation/stop') as absent_stop:
+                page.locator('#icmp-investigation-stop').click()
+            assert absent_stop.value.status == 422
+            assert absent_stop.value.json() == {
+                'error': 'INVALID_PROJECT',
+                'message': 'icmp investigation: unknown or expired session',
+            }
+            assert stop_requests == [{'sessionId': old}, {'sessionId': old}]
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Ingen ICMP-övning')
+            expect(page.locator('#icmp-investigation-status')).not_to_contain_text('Kunde inte bekräfta Stop')
+            expect(page.locator('#icmp-investigation-start')).to_be_enabled()
+            expect(page.locator('#icmp-investigation-stop')).to_be_disabled()
+
+            newer = start(page)
+            assert newer != old
+            assert newer in server.icmp_investigations._sessions
+            assert old not in server.icmp_investigations._sessions
+            assert stop_requests == [{'sessionId': old}, {'sessionId': old}]
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Aktiv dold övning')
+            with page.expect_response('**/api/icmp/investigation/stop') as final_stop:
+                page.locator('#icmp-investigation-stop').click()
+            assert final_stop.value.status == 200
+            assert final_stop.value.json() == {'status': 'STOPPED'}
+            assert stop_requests == [{'sessionId': old}, {'sessionId': old},
+                                     {'sessionId': newer}]
+            assert newer not in server.icmp_investigations._sessions
+            page.close()
+
             # C15/C16: project replacement during processed Diagnose or
             # Repair prevents stale verdict and recovery in the new workspace.
             for path in ('diagnose', 'repair'):
