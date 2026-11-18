@@ -131,7 +131,8 @@ class Handler(BaseHTTPRequestHandler):
             elif path.startswith("/api/projects/"):
                 self._json(200, self.server.store.read(path[len("/api/projects/"):]))
             elif path in ("/", "/index.html", "/app.js", "/model.js", "/canvas.js",
-                          "/ui/dom.js", "/services/api.js", "/styles.css"):
+                          "/ui/dom.js", "/services/api.js", "/features/projects/persistence.js",
+                          "/styles.css"):
                 filename = "index.html" if path == "/" else path[1:]
                 data = (WEB / filename).read_bytes()
                 if filename == "index.html":

@@ -5,6 +5,6 @@
   "type": "module",
   "description": "Independent canonical network lab; npm is not required for runtime",
   "scripts": {
-    "check": "node --check web/model.js && node --check web/canvas.js && node --check web/ui/dom.js && node --check web/services/api.js && node --check web/app.js"
+    "check": "node --check web/model.js && node --check web/canvas.js && node --check web/ui/dom.js && node --check web/services/api.js && node --check web/features/projects/persistence.js && node --check web/app.js"
   }
 }
