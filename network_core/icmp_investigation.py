@@ -24,7 +24,7 @@ KINDS = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH", "STATIC_ROUTE_MISSING",
          "IPV4_PREFIX_MISMATCH", "STATIC_NEXT_HOP_UNREACHABLE",
          "IPV4_HOST_ADDRESS_MISMATCH")
 LAN_KINDS = ("CABLE_DOWN", "PORT_SHUTDOWN", "VLAN_MISMATCH",
-             "IPV4_HOST_ADDRESS_MISMATCH")
+             "IPV4_HOST_ADDRESS_MISMATCH", "IPV4_PREFIX_MISMATCH")
 PROBES = ("address", "route", "ping", "link", "port", "vlan")
 
 
@@ -523,6 +523,8 @@ class IcmpInvestigation:
             cause = (f"{setting} på {place} ändrades från "
                      f"{fault['fromIpv4']} till {fault['toIpv4']}.")
             action = f"IPv4-konfiguration på {place} återställdes till {repair['expectedIpv4']}."
+            if kind == "IPV4_PREFIX_MISMATCH":
+                cause += " Värdadressen var oförändrad; nätmasken ändrade det direktanslutna nätet."
         trace = broken["request"]
         if broken["reply"] is not None and broken["reply"]["status"] != "DELIVERED":
             trace = broken["reply"]

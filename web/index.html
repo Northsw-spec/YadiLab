@@ -330,8 +330,8 @@
         </section>
         <section class="trace-panel" aria-label="Dold ICMP routing och Layer 2 felsökning">
           <div class="eyebrow">FELSÖKNINGSLABB · ROUTING ELLER LAYER 2?</div>
-          <h3>Varför fungerar inte ping mellan två nät?</h3>
-          <p class="muted tiny">Välj en källa och en destination som redan har bevisats nå varandra via verkligt simulerade ICMP Echo Request/Reply. Labbet injicerar ett dolt, separat verifierat fel i dokumenterad kabel, avstängd switchport, VLAN, IPv4-adress eller, i routade nät, route, prefix eller next-hop. Undersök först IP-uppgifter, routingtabeller och faktiska paket. DHCP-adressens ursprung är inte lagrat i projektet och markeras därför som EJ VERIFIERAT – aldrig automatiskt friskförklarat. Allt sker i minnet.</p>
+          <h3>Varför fungerar inte ping mellan två hosts?</h3>
+          <p class="muted tiny">Välj en källa och en destination som redan har bevisats nå varandra via verkligt simulerade ICMP Echo Request/Reply. Labbet injicerar ett dolt, separat verifierat fel i dokumenterad kabel, avstängd switchport, VLAN, IPv4-adress eller nätmask; i routade nät även statisk route eller next-hop. Undersök först IP-uppgifter, routingtabeller och faktiska paket. DHCP-adressens ursprung är inte lagrat i projektet och markeras därför som EJ VERIFIERAT – aldrig automatiskt friskförklarat. Allt sker i minnet.</p>
           <label for="icmp-investigation-source">Källa med dokumenterad IPv4</label>
           <select id="icmp-investigation-source" class="control"></select>
           <label for="icmp-investigation-destination">Målets uttryckliga IPv4</label>

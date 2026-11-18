@@ -9,10 +9,17 @@ genom den dokumenterade `IPv4Trace`, `ConnectedRoutingTable`,
 krävs också ett korrekt matchat Echo Reply på ursprunglig klientport.
 Utan en sådan faktiskt verifierad referens avvisas övningen med HTTP 422.
 
+Övningen fungerar mellan routade nät och mellan två hosts i samma
+dokumenterade subnät via en uttryckligen deklarerad switch. I LAN
+används direktansluten route lookup utan statisk route eller router.
 Endast fel från existerande dokumenterad konfigurering erbjuds:
 `LINK_DISABLED`, `PORT_DISABLED` (på använd, aktiverad switchport),
-`ACCESS_VLAN_CHANGED`, `STATIC_ROUTE_REMOVED`, `IPV4_PREFIX_CHANGED`
-och `STATIC_NEXT_HOP_CHANGED`.
+`ACCESS_VLAN_CHANGED`, `IPV4_HOST_ADDRESS_CHANGED`,
+`IPV4_PREFIX_CHANGED`, `STATIC_ROUTE_REMOVED` och
+`STATIC_NEXT_HOP_CHANGED`. I LAN kan kabel, switchport, access-VLAN,
+destinationshostens IPv4-adress eller hostens nätmask bli det enda
+dolda felet. Ett annat dokumenterat VLAN krävs för VLAN-fel.
+Statiska route- och next-hop-fel hör till routade fall.
 Motorn bygger kandidater utifrån baslinjens
 faktiskt använda kablar, aktiva switchportar och dokumenterade switch-VLAN/statiska routes.
 Prefixfel får bara väljas på ett uttryckligt aktivt IPv4-gränssnitt
@@ -21,7 +28,19 @@ minsta snävare nätmask (högst /30) som gör att minst en tidigare
 on-link peer med dokumenterad IPv4 faller utanför gränssnittets
 subnät. Om masken ogiltiggör en statisk next-hop eller inte bryter ett
 verkligt simulerat Echo Request/Reply avvisas kandidaten. IP-adressen
-ändras inte och inga nya gateways, routes eller kablar uppfinns.
+ändras inte och inga nya gateways, routes eller kablar uppfinns. En
+snävare mask som fortfarande tillåter Echo, till exempel `/24` till
+`/25` för `192.168.10.10` och `192.168.10.20`, avvisas. Felet kan
+ligga på käll- eller destinationshosten: i det senare fallet kan
+Request levereras trots att returvägen ger `NO_ROUTE`. Då skickas
+ingen ARP-förfrågan i den riktningen. `MATCH` i en riktning bevisar
+inte att Echo Reply kan återvända.
+
+Fel värdadress behåller prefixet men gör att ARP till den ursprungliga
+destinationsadressen saknar svar. Kabelavbrott och fel access-VLAN
+påverkar den deklarerade Layer 2-vägen. Slutrapporten namnger den
+verifierade konfigurationsändringen och visar uppmätt `NO_ROUTE`
+eller ARP-status.
 
 Ett **felaktigt statiskt next-hop** väljs endast för en uttryckligt
 konfigurerad route som den riktiga lyckade ICMP-baslinjen faktiskt
@@ -113,7 +132,8 @@ kopplas inte implicit in i detta ICMP-felsökningsfall.
 `sessionId`, `project`, `diagnosis`, där en enda av
 `CABLE_DOWN`, `PORT_SHUTDOWN`, `VLAN_MISMATCH`,
 `STATIC_ROUTE_MISSING`, `IPV4_PREFIX_MISMATCH`,
-`STATIC_NEXT_HOP_UNREACHABLE` är tillåten. Före diagnos krävs riktiga mätningar av **ping**,
+`STATIC_NEXT_HOP_UNREACHABLE`, `IPV4_HOST_ADDRESS_MISMATCH` är tillåtna.
+Före diagnos krävs riktiga mätningar av **ping**,
 **route** och minst en tredje kontrolltyp (**address**, **link**, **port**
 eller **vlan**). Fel gissning returnerar enbart `correct=false`
 och avslöjar inte feltypen. Högst 3 hypotesförsök accepteras.
