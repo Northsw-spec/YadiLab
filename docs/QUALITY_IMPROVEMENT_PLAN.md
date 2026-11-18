@@ -1,6 +1,6 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt för etapp 3A: `main` vid `0ef9ec60b7b4ecdce9fee18315e1ae143c0250ea`.
+Utgångspunkt för etapp 3B1: `main` vid `47c63607cb2b09b3b6b65b8c40f835e344c241c8`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
@@ -8,13 +8,54 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 |---|---|---|
 | 1 | Lokal HTTP-gräns | Integrerad i `main` |
 | 2 | Samtidighetssäker Save/Open | Integrerad i `main` |
-| 3A | Fristående DOM- och API-moduler | Implementerad och lokalt verifierad; CI/merge återstår |
-| 3B–3E | Fortsatt frontendmodularisering | Planerad |
+| 3A | Fristående DOM- och API-moduler | Integrerad i `main`; CI godkänd |
+| 3B1 | Save/Open och projektlista | Implementerad och lokalt verifierad; CI/merge återstår |
+| 3B2 och 3C–3E | Fortsatt frontendmodularisering | Planerad |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
+
+## Etapp 3B1: projektlagring utan dubbelt tillstånd
+
+`app.js` äger fortfarande `project`, `filename`, `savedName`,
+`savedSha`, `savedSnapshot`, `editRevision`, `workspaceRevision` och
+`savePending`. Den ansvarar för användarbekräftelse, Save-indikator,
+rendering och ogiltigförklaring av diagnostiksessioner vid Open.
+`web/features/projects/persistence.js` är statslös: den fryser
+filnamn, revisioner, förväntad SHA och projektets serialiserade innehåll
+vid Save-klicket, anropar API:t, sköter konfliktens eventuella andra
+anrop och läser projekt eller projektlista. Den har ingen långlivad
+projektkopia och importerar bara `api()`; importgrafen är acyklisk.
+
+Vid konflikt kontrollerar `app.js` arbetsyta, redigeringsrevision,
+filnamn och projektinnehåll innan användaren får godkänna en overwrite.
+Vid lyckad Save tillämpar den SHA och sparad snapshot endast på samma
+arbetsyta och fil. Nyare redigeringar lämnas kvar och visas som
+osparade. Ett sent Open-svar kräver samma arbetsyta, redigeringsrevision,
+filnamn, projektinnehåll och valda projektfil innan det får ersätta
+arbetsytan. Backendens fil- och processlås samt HTTP-kontrakt är
+oförändrade.
+
+Chromium-regressionen fördröjer leveransen av verkliga HTTP-svar efter
+att servern har behandlat dem och kontrollerar Save följt av redigering,
+Save följt av arbetsytebyte, dubbel Save, en diskbaserad 409-konflikt
+följd av lokal redigering och en senare giltig Save, Open följt av
+redigering samt Open följt av nytt filval. Den befintliga Save/Open-
+kontrollen över omstart finns kvar. Den nya modulen kontrolleras för
+direkt HTTP och JavaScript-MIME; negativa HTTP-tester nekar fortfarande
+okända vägar. Slutlig CI- och mergeverifiering för 3B1 återstår.
+Lokalt passerade 505 Python-tester, `npm run check` och den utökade
+Chromium-regressionen med direkt HTTP och verkliga projektfiler.
+
+**3B2 planeras separat:** JSON- och `.yadilab`-import, explicita CSV-
+tabeller, XLSX/ODS, projekt- och kalkylbladsexport, förlustfri
+validering, användarbeslut före arbetsytebyte och skydd mot sena svar.
+Import/export stannar i `app.js` under 3B1 för att hålla den känsliga
+Save/Open-ändringen avgränsad. Kvarvarande risk är den stora entrypointen
+och de delade diagnostik- och sessionsberoendena; 3C–3E följer
+beroendekartan nedan efter en separat granskning.
 
 ## Etapp 3A: modulgränser och fortsättning
 
@@ -42,8 +83,7 @@ Fortsatt beroendekarta:
 
 Den kvarvarande `app.js` är fortfarande stor och dess delade tillstånd
 är en risk vid senare extraktioner. Etapp 3A flyttar inget sådant
-tillstånd. Slutlig CI- och mergeverifiering återstår. Rekommenderat
-nästa delsteg är 3B efter separat granskning av Save/Open-beroendena.
+tillstånd. Etapp 3B1 har därefter avgränsat Save/Open-flödet.
 Vid 3A minskade `app.js` från 3 323 till 3 267 rader. Lokalt passerade
 505 Python-tester, `npm run check` och Chromium-regressionen med direkt
 HTTP, inklusive modulladdning och MIME-kontroll. Radantalet är enbart

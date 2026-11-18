@@ -127,13 +127,152 @@ def browser_open(page, base):
     canvas = canvas.replace("import {truncate} from './model.js';", '').replace('export ', '')
     dom = (ROOT / 'web/ui/dom.js').read_text(encoding='utf8').replace('export ', '')
     api = (ROOT / 'web/services/api.js').read_text(encoding='utf8').replace('export ', '')
+    persistence = (ROOT / 'web/features/projects/persistence.js').read_text(encoding='utf8')
+    persistence = persistence.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
     app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
     app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
     app = app.replace("import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';", '')
     app = app.replace("import {api} from './services/api.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + app)
+    app = app.replace("import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';", '')
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
+
+
+def hold_http_reply(page, path):
+    """Delay delivery to app code only after real HTTP and disk work finish."""
+    page.evaluate("""path => {
+      const originalFetch = window.fetch;
+      let release;
+      const gate = new Promise(resolve => { release = resolve; });
+      window.__heldReply = false;
+      window.__releaseReply = () => { release(); window.fetch = originalFetch; };
+      window.fetch = async (...args) => {
+        const response = await originalFetch(...args);
+        if (String(args[0]) === path) {
+          window.__heldReply = true;
+          await gate;
+        }
+        return response;
+      };
+    }""", path)
+
+
+def release_http_reply(page):
+    page.evaluate('window.__releaseReply()')
+
+
+def persistence_races(context, base, network_mode, store, errors):
+    """Exercise late Save/Open replies against actual server-backed files."""
+    def fresh():
+        test_page = context.new_page()
+        test_page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+        assert browser_open(test_page, base) == network_mode
+        return test_page
+
+    # A: a completed disk Save must not erase a newer local edit.
+    page = fresh()
+    page.locator('#project-filename').fill('race-save-edit')
+    page.locator('#project-filename').dispatch_event('change')
+    page.locator('#empty-add').click()
+    page.locator('#node-label').fill('Original')
+    page.locator('#node-label').dispatch_event('change')
+    save_requests = []
+    page.on('request', lambda request: save_requests.append(request)
+            if request.url.endswith('/api/save') else None)
+    hold_http_reply(page, '/api/save')
+    page.locator('#save-project').click()
+    page.wait_for_function('window.__heldReply')
+    assert page.locator('#save-project').is_disabled()
+    page.evaluate("document.querySelector('#save-project').click()")
+    assert len(save_requests) == 1
+    disk = store / 'race-save-edit.yadilab'
+    original = disk.read_bytes()
+    assert json.loads(original)['nodes'][0]['label'] == 'Original'
+    page.locator('#node-label').fill('Newer edit')
+    page.locator('#node-label').dispatch_event('change')
+    release_http_reply(page)
+    expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+    assert page.locator('#node-label').input_value() == 'Newer edit'
+    assert disk.read_bytes() == original
+    page.locator('#save-project').click()
+    expect(page.locator('#save-indicator')).to_contain_text('Sparat · race-save-edit.yadilab')
+    assert ProjectStore(store).read('race-save-edit')['project']['nodes'][0]['label'] == 'Newer edit'
+    page.close()
+
+    # C/F: a real disk conflict held until after another local edit cannot
+    # retry the stale snapshot; the UI recovers for a later explicit Save.
+    page = fresh()
+    page.locator('#saved-projects').select_option('race-save-edit')
+    page.locator('#open-project').click()
+    expect(page.locator('#save-indicator')).to_contain_text('Sparat · race-save-edit.yadilab')
+    page.locator('[data-item-type="node"][data-item-id="node-1"]').click()
+    page.locator('#node-label').fill('Local before conflict')
+    page.locator('#node-label').dispatch_event('change')
+    current = ProjectStore(store).read('race-save-edit')
+    external = json.loads(json.dumps(current['project']))
+    external['nodes'][0]['label'] = 'External change'
+    external_saved = ProjectStore(store).save('race-save-edit', external, current['sha256'])
+    hold_http_reply(page, '/api/save')
+    page.locator('#save-project').click()
+    page.wait_for_function('window.__heldReply')
+    page.locator('#node-label').fill('Local after conflict')
+    page.locator('#node-label').dispatch_event('change')
+    release_http_reply(page)
+    expect(page.locator('#toast')).to_contain_text('Arbetsytan ändrades under sparning')
+    expect(page.locator('#save-project')).to_be_enabled()
+    expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+    assert ProjectStore(store).read('race-save-edit')['sha256'] == external_saved['sha256']
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#save-project').click()
+    expect(page.locator('#save-indicator')).to_contain_text('Sparat · race-save-edit.yadilab')
+    assert ProjectStore(store).read('race-save-edit')['project']['nodes'][0]['label'] == 'Local after conflict'
+    page.close()
+
+    # B: an old Save response cannot attach its SHA to a fresh workspace.
+    page = fresh()
+    page.locator('#project-filename').fill('race-save-switch')
+    page.locator('#project-filename').dispatch_event('change')
+    page.locator('#empty-add').click()
+    hold_http_reply(page, '/api/save')
+    page.locator('#save-project').click()
+    page.wait_for_function('window.__heldReply')
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#new-project').click()
+    expect(page.locator('#empty-state')).to_be_visible()
+    release_http_reply(page)
+    expect(page.locator('#save-project')).to_be_enabled()
+    expect(page.locator('#save-indicator')).to_contain_text('Nytt projekt · ej sparat')
+    assert ProjectStore(store).read('race-save-switch')['project']['nodes']
+    page.close()
+
+    # D: editing the current workspace while Open waits rejects the old file.
+    page = fresh()
+    page.locator('#empty-add').click()
+    page.locator('#saved-projects').select_option('race-save-edit')
+    hold_http_reply(page, '/api/projects/race-save-edit')
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#open-project').click()
+    page.wait_for_function('window.__heldReply')
+    page.locator('#node-label').fill('Keep local edit')
+    page.locator('#node-label').dispatch_event('change')
+    release_http_reply(page)
+    expect(page.locator('#toast')).to_contain_text('Öppningen avbröts')
+    assert page.locator('#node-label').input_value() == 'Keep local edit'
+    expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+    page.close()
+
+    # E: changing the selected file prevents a late Open of the old choice.
+    page = fresh()
+    page.locator('#saved-projects').select_option('race-save-edit')
+    hold_http_reply(page, '/api/projects/race-save-edit')
+    page.locator('#open-project').click()
+    page.wait_for_function('window.__heldReply')
+    page.locator('#saved-projects').select_option('race-save-switch')
+    release_http_reply(page)
+    expect(page.locator('#toast')).to_contain_text('Öppningen avbröts')
+    expect(page.locator('#empty-state')).to_be_visible()
+    page.close()
 
 
 def run():
@@ -150,7 +289,7 @@ def run():
         page.on('pageerror',lambda error: errors.append(getattr(error, 'stack', str(error))))
         module_responses = {}
         def record_module(response):
-            for module in ('ui/dom.js', 'services/api.js'):
+            for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js'):
                 if response.url.endswith('/' + module):
                     module_responses[module] = response
         page.on('response', record_module)
@@ -159,7 +298,7 @@ def run():
             network_mode = browser_open(page, base)
             expect(page.locator('#empty-state')).to_be_visible()
             if network_mode == 'DIRECT_HTTP':
-                for module in ('ui/dom.js', 'services/api.js'):
+                for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js'):
                     response = module_responses.get(module)
                     assert response is not None and response.status == 200, f'{module} was not loaded'
                     assert response.headers['content-type'].split(';')[0] in (
@@ -2640,6 +2779,7 @@ def run():
             assert hashlib.sha256(ui_file.read_bytes()).hexdigest() == external_saved['sha256']
             assert ProjectStore(store).read('concurrent-ui')['project'] == external
             save_page.close()
+            persistence_races(context, base, network_mode, store, errors)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
