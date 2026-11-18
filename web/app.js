@@ -8,6 +8,7 @@ import {presentArp, presentRoute, presentPing, presentIPv4} from './features/dia
 import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';
 import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';
 import {createIcmpInvestigationController} from './features/sessions/icmp-investigation.js';
+import {createDoraSessionController} from './features/sessions/dora-session.js';
 
 let project = blank();
 let selection = null;
@@ -22,16 +23,6 @@ let dhcpBusy = false;
 let doraDiagnostic = null;
 let doraGeneration = 0;
 let doraBusy = false;
-let doraSessionId = null;
-let doraSessionGeneration = 0;
-let doraSessionBusy = false;
-let doraSessionState = null;
-let doraSessionTrace = null;
-let doraClockEvent = null;
-let doraRenewalTrace = null;
-let doraFaultEvent = null;
-let doraPortFaultEvent = null;
-let doraVlanFaultEvent = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -64,6 +55,10 @@ const investigation = createDhcpInvestigationController({
 const icmpInvestigation = createIcmpInvestigationController({
   getContext: () => ({workspaceRevision, editRevision, projectSnapshot: JSON.stringify(project)}),
   onChange: renderIcmpInvestigation,
+});
+const doraSession = createDoraSessionController({
+  getContext: () => ({workspaceRevision, editRevision, projectSnapshot: JSON.stringify(project)}),
+  onChange: () => { renderDoraDiagnostics(); renderDoraSession(); },
 });
 const canvas = new TopologyCanvas($('topology'), {
   onSelect: selected => { selection = selected; render(); },
@@ -127,21 +122,7 @@ function invalidateIcmpInvestigation() { icmpInvestigation.invalidate(); }
 function invalidateDoraSession() {
   invalidateIcmpInvestigation();
   invalidateInvestigation();
-  doraSessionGeneration += 1;
-  const previous = doraSessionId;
-  doraSessionId = null;
-  doraSessionBusy = false;
-  doraSessionState = null;
-  doraSessionTrace = null;
-  doraClockEvent = null;
-  doraRenewalTrace = null;
-  doraFaultEvent = null;
-  doraPortFaultEvent = null;
-  doraVlanFaultEvent = null;
-  if (previous) {
-    // Best-effort release; backend also refuses any changed project snapshot.
-    void api('/api/dhcp/session/stop', {sessionId: previous}).catch(() => {});
-  }
+  doraSession.invalidate();
 }
 function changed({keepTrace = false} = {}) {
   editRevision += 1;
@@ -355,6 +336,7 @@ function renderDhcpDiagnostics() {
 }
 
 function renderDoraDiagnostics() {
+  const {id: doraSessionId, busy: doraSessionBusy} = doraSession.getState();
   const {clientOptions, serverOptions} = populateDhcpPortSelectors('dora');
   $('run-dora').disabled = doraBusy || doraSessionBusy || doraSessionId !== null
     || !clientOptions.length || !serverOptions.length;
@@ -605,6 +587,10 @@ function renderInvestigation() {
 }
 
 function renderDoraSession() {
+  const {id: doraSessionId, busy: doraSessionBusy, state: doraSessionState,
+    trace: doraSessionTrace, clockEvent: doraClockEvent, renewalTrace: doraRenewalTrace,
+    faultEvent: doraFaultEvent, portFaultEvent: doraPortFaultEvent,
+    vlanFaultEvent: doraVlanFaultEvent} = doraSession.getState();
   const active = doraSessionId !== null;
   const clients = dhcpPortChoices('client');
   const servers = dhcpPortChoices('server');
@@ -758,7 +744,7 @@ function renderDoraSession() {
   $('dora-session-start').disabled = active || busy || !clients.length || !servers.length;
   $('dora-session-run').disabled = !active || busy || !clients.length;
   $('dora-session-reset').disabled = !active || busy;
-  $('dora-session-stop').disabled = !active || busy;
+  $('dora-session-stop').disabled = !active;
   $('dora-session-advance').disabled = !active || busy;
   $('dora-session-advance-seconds').disabled = !active || busy;
   for (const id of ['dora-server', 'dora-pool-start', 'dora-pool-end']) {
@@ -1873,99 +1859,31 @@ function diagnoseInvestigation() {
 function repairInvestigation() { void investigation.repair(); }
 function stopInvestigation() { void investigation.stop(); }
 
-async function startDoraSession() {
-  if (doraSessionBusy || doraSessionId !== null || doraBusy) return;
-  doraClockEvent = null;
-  doraRenewalTrace = null;
-  doraFaultEvent = null;
-  doraPortFaultEvent = null;
-  doraVlanFaultEvent = null;
-  const inputs = doraSessionInput();
-  const [client, server, poolStart, poolEnd] = inputs;
+function startDoraSession() {
+  if (doraBusy) return;
+  const [client, server, poolStart, poolEnd] = doraSessionInput();
   if (!client || !server || !poolStart || !poolEnd) {
-    doraSessionTrace = {error: 'Välj klient, server och både poolgränserna uttryckligen.'};
-    renderDoraSession();
+    doraSession.setEventError('trace', 'Välj klient, server och både poolgränserna uttryckligen.');
     return;
   }
   const [serverNode, serverPort] = JSON.parse(server);
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++doraSessionGeneration;
-  doraSessionBusy = true;
-  doraSessionTrace = null;
-  renderDoraSession();
-  const stillCurrent = () => generation === doraSessionGeneration
-    && edit === editRevision && workspace === workspaceRevision
-    && JSON.stringify(project) === snapshot
-    && JSON.stringify(doraSessionInput()) === JSON.stringify(inputs);
-  try {
-    const state = await api('/api/dhcp/session/start', {
-      project: JSON.parse(snapshot), serverNode, serverPort, poolStart, poolEnd,
-    });
-    if (stillCurrent()) {
-      doraSessionId = state.sessionId;
-      doraSessionState = state;
-    } else {
-      // Stale Start may have allocated a server session; explicitly release it.
-      void api('/api/dhcp/session/stop', {sessionId: state.sessionId}).catch(() => {});
-    }
-  } catch (error) {
-    if (stillCurrent()) doraSessionTrace = {error: error.message};
-  } finally {
-    if (generation === doraSessionGeneration) {
-      doraSessionBusy = false;
-      renderDoraDiagnostics();
-      renderDoraSession();
-    }
-  }
+  void doraSession.start({serverNode, serverPort, poolStart, poolEnd},
+    () => JSON.stringify(doraSessionInput()));
 }
-async function runDoraSession() {
-  if (!doraSessionId || doraSessionBusy) return;
-  const inputs = doraSessionInput();
-  const [client, , , , rawTransaction, rawLease] = inputs;
+function runDoraSession() {
+  const [client, , , , rawTransaction, rawLease] = doraSessionInput();
   const transactionId = sessionInteger(rawTransaction, 1, 4294967295);
   const leaseSeconds = sessionInteger(rawLease, 60, 604800);
   if (!client || transactionId === null || leaseSeconds === null) {
-    doraSessionTrace = {error: 'Välj klient, giltigt transaktions-ID och leasetid 60–604800.'};
-    renderDoraSession();
+    doraSession.setEventError('trace', 'Välj klient, giltigt transaktions-ID och leasetid 60–604800.');
     return;
   }
   const [clientNode, clientPort] = JSON.parse(client);
-  const id = doraSessionId;
-  const edit = editRevision, workspace = workspaceRevision;
-  const snapshot = JSON.stringify(project);
-  const generation = ++doraSessionGeneration;
-  doraSessionBusy = true;
-  doraSessionTrace = null;
-  renderDoraSession();
-  const stillCurrent = () => generation === doraSessionGeneration
-    && doraSessionId === id && edit === editRevision
-    && workspace === workspaceRevision
-    && JSON.stringify(project) === snapshot
-    && JSON.stringify(doraSessionInput()) === JSON.stringify(inputs);
-  try {
-    const data = await api('/api/dhcp/session/run', {
-      sessionId: id, project: JSON.parse(snapshot), clientNode, clientPort,
-      transactionId, leaseSeconds,
-    });
-    if (stillCurrent()) {
-      doraSessionState = data;
-      doraSessionTrace = data.result;
-      doraClockEvent = null;
-      doraRenewalTrace = null;
-    }
-  } catch (error) {
-    if (stillCurrent()) doraSessionTrace = {error: error.message};
-  } finally {
-    if (generation === doraSessionGeneration) {
-      doraSessionBusy = false;
-      renderDoraSession();
-    }
-  }
+  void doraSession.run({clientNode, clientPort, transactionId, leaseSeconds},
+    () => JSON.stringify(doraSessionInput()));
 }
-async function setDoraSwitchFault(kind, restore) {
-  if (!doraSessionId || doraSessionBusy || doraBusy) return;
-  if (kind !== 'port' && kind !== 'vlan') return;
+function setDoraSwitchFault(kind, restore) {
+  if (doraBusy || !['port', 'vlan'].includes(kind)) return;
   const selectorId = kind === 'port' ? 'dora-session-port-fault' : 'dora-session-vlan-port';
   const selected = $(selectorId).value;
   if (!selected) return;
@@ -1973,231 +1891,41 @@ async function setDoraSwitchFault(kind, restore) {
   const target = kind === 'vlan' ? $('dora-session-vlan-target').value : null;
   if (kind === 'vlan' && !restore && !target) return;
   const parameter = kind === 'port'
-    ? {disabled: !restore}
-    : {vlanId: restore ? null : Number(target)};
-  const id = doraSessionId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++doraSessionGeneration;
-  doraSessionBusy = true;
-  if (kind === 'port') doraPortFaultEvent = null;
-  else doraVlanFaultEvent = null;
-  renderDoraSession();
-  try {
-    const state = await api('/api/dhcp/session/' + (kind === 'port' ? 'port-fault' : 'vlan-fault'), {
-      sessionId: id, project: JSON.parse(snapshot), nodeId, portId, ...parameter,
-    });
-    if (generation === doraSessionGeneration && doraSessionId === id
-        && edit === editRevision && workspace === workspaceRevision
-        && JSON.stringify(project) === snapshot
-        && $(selectorId).value === selected) {
-      doraSessionState = state;
-      if (kind === 'port') doraPortFaultEvent = {nodeId, portId, ...parameter};
-      else doraVlanFaultEvent = {nodeId, portId, ...parameter};
-      doraSessionTrace = null;
-      doraRenewalTrace = null;
-      doraClockEvent = null;
-      doraFaultEvent = null;
-    }
-  } catch (error) {
-    if (generation === doraSessionGeneration && doraSessionId === id) {
-      if (kind === 'port') doraPortFaultEvent = {error: error.message};
-      else doraVlanFaultEvent = {error: error.message};
-    }
-  } finally {
-    if (generation === doraSessionGeneration) {
-      doraSessionBusy = false;
-      renderDoraSession();
-    }
-  }
+    ? {disabled: !restore} : {vlanId: restore ? null : Number(target)};
+  const readInputs = () => JSON.stringify([$(selectorId).value,
+    kind === 'vlan' ? $('dora-session-vlan-target').value : null]);
+  void doraSession.switchFault(kind, nodeId, portId, parameter, readInputs);
 }
-
-async function setDoraLinkFault(disabled) {
-  if (!doraSessionId || doraSessionBusy || doraBusy) return;
+function setDoraLinkFault(disabled) {
+  if (doraBusy) return;
   const linkId = $('dora-session-fault-link').value;
   if (!linkId || typeof disabled !== 'boolean') {
-    doraFaultEvent = {error: 'Välj en uttryckligt dokumenterad aktiv kabel.'};
-    renderDoraSession();
+    doraSession.setEventError('faultEvent', 'Välj en uttryckligt dokumenterad aktiv kabel.');
     return;
   }
-  const id = doraSessionId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++doraSessionGeneration;
-  doraSessionBusy = true;
-  doraFaultEvent = null;
-  renderDoraSession();
-  try {
-    const state = await api('/api/dhcp/session/link-fault', {
-      sessionId: id, project: JSON.parse(snapshot), linkId, disabled,
-    });
-    if (generation === doraSessionGeneration && doraSessionId === id
-        && edit === editRevision && workspace === workspaceRevision
-        && JSON.stringify(project) === snapshot
-        && $('dora-session-fault-link').value === linkId) {
-      doraSessionState = state;
-      doraFaultEvent = {linkId, disabled};
-      doraSessionTrace = null;
-      doraRenewalTrace = null;
-      doraClockEvent = null;
-    }
-  } catch (error) {
-    if (generation === doraSessionGeneration && doraSessionId === id) {
-      doraFaultEvent = {error: error.message};
-    }
-  } finally {
-    if (generation === doraSessionGeneration) {
-      doraSessionBusy = false;
-      renderDoraSession();
-    }
-  }
+  void doraSession.linkFault(linkId, disabled, () => $('dora-session-fault-link').value);
 }
-
-async function renewDoraSession() {
-  if (!doraSessionId || doraSessionBusy) return;
-  const inputs = doraSessionInput();
-  const [client, , , , rawTransaction] = inputs;
+function renewDoraSession() {
+  const [client, , , , rawTransaction] = doraSessionInput();
   const transactionId = sessionInteger(rawTransaction, 1, 4294967295);
   if (!client || transactionId === null) {
-    doraRenewalTrace = {error: 'Välj en giltig klient och ett transaktions-ID 1–4294967295.'};
-    renderDoraSession();
+    doraSession.setEventError('renewalTrace', 'Välj en giltig klient och ett transaktions-ID 1–4294967295.');
     return;
   }
   const [clientNode, clientPort] = JSON.parse(client);
-  const id = doraSessionId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++doraSessionGeneration;
-  doraSessionBusy = true;
-  doraRenewalTrace = null;
-  renderDoraSession();
-  const stillCurrent = () => generation === doraSessionGeneration
-    && doraSessionId === id && edit === editRevision
-    && workspace === workspaceRevision
-    && JSON.stringify(project) === snapshot
-    && JSON.stringify(doraSessionInput()) === JSON.stringify(inputs);
-  try {
-    const data = await api('/api/dhcp/session/renew', {
-      sessionId: id, project: JSON.parse(snapshot),
-      clientNode, clientPort, transactionId,
-    });
-    if (stillCurrent()) {
-      doraSessionState = data;
-      doraRenewalTrace = data.result;
-      doraSessionTrace = null;
-      doraClockEvent = null;
-    }
-  } catch (error) {
-    if (stillCurrent()) doraRenewalTrace = {error: error.message};
-  } finally {
-    if (generation === doraSessionGeneration) {
-      doraSessionBusy = false;
-      renderDoraSession();
-    }
-  }
+  void doraSession.renew({clientNode, clientPort, transactionId},
+    () => JSON.stringify(doraSessionInput()));
 }
-
-async function advanceDoraSession() {
-  if (!doraSessionId || doraSessionBusy) return;
+function advanceDoraSession() {
   const seconds = sessionInteger($('dora-session-advance-seconds').value.trim(), 1, 604800);
   if (seconds === null) {
-    doraClockEvent = {error: 'Ange ett heltal från 1 till 604800 sekunder.'};
-    renderDoraSession();
+    doraSession.setEventError('clockEvent', 'Ange ett heltal från 1 till 604800 sekunder.');
     return;
   }
-  const id = doraSessionId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++doraSessionGeneration;
-  doraSessionBusy = true;
-  renderDoraSession();
-  try {
-    const state = await api('/api/dhcp/session/advance', {
-      sessionId: id, project: JSON.parse(snapshot), seconds,
-    });
-    if (generation === doraSessionGeneration && doraSessionId === id
-        && edit === editRevision && workspace === workspaceRevision
-        && JSON.stringify(project) === snapshot) {
-      doraSessionState = state;
-      doraSessionTrace = null;
-      doraClockEvent = state;
-      doraRenewalTrace = null;
-    }
-  } catch (error) {
-    if (generation === doraSessionGeneration && doraSessionId === id) {
-      doraClockEvent = {error: error.message};
-    }
-  } finally {
-    if (generation === doraSessionGeneration) {
-      doraSessionBusy = false;
-      renderDoraSession();
-    }
-  }
+  void doraSession.advance(seconds, () => $('dora-session-advance-seconds').value.trim());
 }
-
-async function resetDoraSession() {
-  if (!doraSessionId || doraSessionBusy) return;
-  const id = doraSessionId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++doraSessionGeneration;
-  doraSessionBusy = true;
-  renderDoraSession();
-  try {
-    const state = await api('/api/dhcp/session/reset', {
-      sessionId: id, project: JSON.parse(snapshot),
-    });
-    if (generation === doraSessionGeneration && doraSessionId === id
-        && edit === editRevision && workspace === workspaceRevision
-        && JSON.stringify(project) === snapshot) {
-      doraSessionState = state;
-      doraSessionTrace = null;
-      doraClockEvent = null;
-      doraRenewalTrace = null;
-      doraFaultEvent = null;
-      doraPortFaultEvent = null;
-      doraVlanFaultEvent = null;
-    }
-  } catch (error) {
-    if (generation === doraSessionGeneration && doraSessionId === id) {
-      doraSessionTrace = {error: error.message};
-    }
-  } finally {
-    if (generation === doraSessionGeneration) {
-      doraSessionBusy = false;
-      renderDoraSession();
-    }
-  }
-}
-async function stopDoraSession() {
-  if (!doraSessionId || doraSessionBusy) return;
-  const id = doraSessionId, generation = ++doraSessionGeneration;
-  doraSessionBusy = true;
-  renderDoraSession();
-  try {
-    await api('/api/dhcp/session/stop', {sessionId: id});
-    if (generation === doraSessionGeneration) {
-      doraSessionId = null;
-      doraSessionState = null;
-      doraSessionTrace = null;
-      doraClockEvent = null;
-      doraRenewalTrace = null;
-      doraFaultEvent = null;
-      doraPortFaultEvent = null;
-      doraVlanFaultEvent = null;
-    }
-  } catch (error) {
-    if (generation === doraSessionGeneration) {
-      doraSessionTrace = {error: error.message};
-    }
-  } finally {
-    if (generation === doraSessionGeneration) {
-      doraSessionBusy = false;
-      renderDoraDiagnostics();
-      renderDoraSession();
-    }
-  }
-}
+function resetDoraSession() { void doraSession.reset(); }
+function stopDoraSession() { void doraSession.stop(); }
 
 async function runDora() {
   if (doraBusy) return;
@@ -2734,16 +2462,9 @@ $('dora-session-vlan-set').addEventListener('click', () => setDoraSwitchFault('v
 $('dora-session-vlan-restore').addEventListener('click', () => setDoraSwitchFault('vlan', true));
 for (const id of ['dora-session-port-fault', 'dora-session-vlan-port',
                   'dora-session-vlan-target']) {
-  $(id).addEventListener('change', () => {
-    doraPortFaultEvent = null;
-    doraVlanFaultEvent = null;
-    renderDoraSession();
-  });
+  $(id).addEventListener('change', () => doraSession.clearInputResults('port'));
 }
-$('dora-session-fault-link').addEventListener('change', () => {
-  doraFaultEvent = null;
-  renderDoraSession();
-});
+$('dora-session-fault-link').addEventListener('change', () => doraSession.clearInputResults('link'));
 $('dora-session-advance').addEventListener('click', advanceDoraSession);
 $('dora-session-reset').addEventListener('click', resetDoraSession);
 $('dora-session-stop').addEventListener('click', stopDoraSession);
@@ -2752,11 +2473,8 @@ for (const id of ['dora-client', 'dora-server', 'dora-pool-start', 'dora-pool-en
                   'dora-transaction-id', 'dora-lease-seconds']) {
   $(id).addEventListener(id === 'dora-client' || id === 'dora-server' ? 'change' : 'input', () => {
     invalidateDoraDiagnostics();
-    if (doraSessionId !== null && ['dora-client', 'dora-transaction-id',
-                                     'dora-lease-seconds'].includes(id)) {
-      doraSessionGeneration += 1;
-      doraSessionTrace = null;
-      doraRenewalTrace = null;
+    if (['dora-client', 'dora-transaction-id', 'dora-lease-seconds'].includes(id)) {
+      doraSession.clearInputResults('client');
     }
     renderDoraDiagnostics();
     renderDoraSession();
