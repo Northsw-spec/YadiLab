@@ -1407,6 +1407,8 @@ def run():
             expect(icmp_page.locator('#icmp-investigation-verdict')).to_contain_text(
                 'DIAGNOS BEKRÄFTAD')
             expect(icmp_page.locator('#icmp-investigation-repair')).to_be_enabled()
+            expect(icmp_page.locator('#icmp-investigation-recovery')).not_to_contain_text(
+                'FELSÖKNINGSRAPPORT')
             with icmp_page.expect_response('**/api/icmp/investigation/repair') as repair_action:
                 icmp_page.locator('#icmp-investigation-repair').click()
             fixed = repair_action.value.json()
@@ -1417,8 +1419,13 @@ def run():
             assert fixed['replyMatched'] is True
             assert fixed['faultCategory'] == inferred
             assert fixed['repair']['scope'] == 'PREVIEW_ONLY'
+            assert set(fixed['report']) == {'symptom', 'rootCause', 'evidence',
+                                            'action', 'verification'}
             expect(icmp_page.locator('#icmp-investigation-recovery')).to_contain_text(
                 'RESULTAT: RECOVERED')
+            for label in ('Symptom:', 'Rotorsak:', 'Teknisk evidens:', 'Åtgärd:',
+                          'Verifiering:', 'matchande Echo Reply'):
+                expect(icmp_page.locator('#icmp-investigation-recovery')).to_contain_text(label)
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
             assert sorted(x.name for x in store.glob('*.yadilab')) == ['lab.yadilab']
             with icmp_page.expect_response('**/api/icmp/investigation/stop') as icmp_stop:

@@ -243,7 +243,7 @@ class IcmpInvestigation:
                 raise ProjectValidationError(
                     "icmp investigation: category is not verified for this topology")
         self._kind, self._fault = choice
-        _, self._repair_hint, inject, _ = _mutation(self.project, self._fault)
+        self._fault_detail, self._repair_hint, inject, _ = _mutation(self.project, self._fault)
         self._faulted = deepcopy(self.project)
         inject(self._faulted)
         self._faulted = validate_project(self._faulted)
@@ -458,7 +458,7 @@ class IcmpInvestigation:
         restored = EchoExchange(self.project).ping(
             self.source_node, self.source_port, self.destination_ipv4,
             self.ttl, 102, 2)
-        verified = (broken["status"] != "REPLIED"
+        verified = (broken["status"] != "REPLIED" and not broken["replyMatched"]
                     and restored["status"] == "REPLIED"
                     and restored["replyMatched"])
         self._repaired = verified
@@ -469,7 +469,61 @@ class IcmpInvestigation:
             "replyMatched": restored["replyMatched"],
             "faultCategory": self._kind if verified else None,
             "repair": deepcopy(self._repair_hint) if verified else None,
+            "report": self._report(broken, restored) if verified else None,
             **self.state(),
+        }
+
+    def _report(self, broken: dict, restored: dict) -> dict:
+        fault, repair = self._fault_detail, self._repair_hint
+        kind = self._kind
+        place = f"{fault['nodeId']}/{fault['portId']}" if "portId" in fault else None
+        if kind == "CABLE_DOWN":
+            cause = f"Kabel {fault['linkId']} var avstängd."
+            action = f"Kabel {repair['linkId']} aktiverades igen."
+        elif kind == "PORT_SHUTDOWN":
+            cause = f"Switchport {place} var administrativt avstängd."
+            action = f"Switchport {place} aktiverades igen."
+        elif kind == "VLAN_MISMATCH":
+            cause = (f"Access-VLAN på {place} ändrades från "
+                     f"{repair['expectedVlan']['vlan']} till {fault['toVlan']}.")
+            action = f"Access-VLAN på {place} återställdes till {repair['expectedVlan']['vlan']}."
+        elif kind == "STATIC_ROUTE_MISSING":
+            cause = f"Statisk route {fault['routeId']} på {fault['nodeId']} saknades."
+            action = f"Route {repair['routeId']} på {repair['nodeId']} återställdes."
+        elif kind == "STATIC_NEXT_HOP_UNREACHABLE":
+            cause = (f"Next-hop för route {fault['routeId']} på {fault['nodeId']} "
+                     f"ändrades från {fault['fromNextHop']} till {fault['toNextHop']}.")
+            action = (f"Next-hop för route {repair['routeId']} återställdes till "
+                      f"{repair['expectedNextHop']}.")
+        else:
+            setting = "IPv4-prefix" if kind == "IPV4_PREFIX_MISMATCH" else "IPv4-adress"
+            cause = (f"{setting} på {place} ändrades från "
+                     f"{fault['fromIpv4']} till {fault['toIpv4']}.")
+            action = f"IPv4-konfiguration på {place} återställdes till {repair['expectedIpv4']}."
+        trace = broken["request"]
+        if broken["reply"] is not None and broken["reply"]["status"] != "DELIVERED":
+            trace = broken["reply"]
+        failed_step = next((step for step in trace["steps"]
+                            if step["arp"]["status"] not in ("RESOLVED", "NOT_NEEDED")), None)
+        evidence = (f"Echo Request: {broken['request']['status']}; "
+                    f"Echo Reply: {broken['reply']['status'] if broken['reply'] else 'inget svar'}. ")
+        if failed_step is not None:
+            evidence += (f"På {failed_step['node']} gav ARP för "
+                         f"{failed_step['nextHopIpv4']} status "
+                         f"{failed_step['arp']['status']}.")
+        elif trace["status"] == "NO_ROUTE":
+            evidence += f"Routing för {trace['destinationIpv4']} gav NO_ROUTE."
+        else:
+            evidence += f"Paketspåret slutade med {trace['status']}."
+        return {
+            "symptom": (f"Simulerat Echo från {self.source_ipv4} till "
+                        f"{self.destination_ipv4} misslyckades ({broken['status']})."),
+            "rootCause": cause,
+            "evidence": evidence,
+            "action": action,
+            "verification": (f"Efter återställning levererades Echo Request och ett matchande "
+                             f"Echo Reply från {self.destination_ipv4} till {self.source_ipv4} "
+                             f"({restored['status']})."),
         }
 
 
