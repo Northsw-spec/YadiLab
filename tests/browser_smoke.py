@@ -139,6 +139,8 @@ def browser_open(page, base):
     investigation = investigation.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     icmp_investigation = (ROOT / 'web/features/sessions/icmp-investigation.js').read_text(encoding='utf8')
     icmp_investigation = icmp_investigation.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
+    dora_session = (ROOT / 'web/features/sessions/dora-session.js').read_text(encoding='utf8')
+    dora_session = dora_session.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
     app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
     app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
@@ -150,7 +152,8 @@ def browser_open(page, base):
     app = app.replace("import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';", '')
     app = app.replace("import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';", '')
     app = app.replace("import {createIcmpInvestigationController} from './features/sessions/icmp-investigation.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + investigation + '\n' + icmp_investigation + '\n' + app)
+    app = app.replace("import {createDoraSessionController} from './features/sessions/dora-session.js';", '')
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + investigation + '\n' + icmp_investigation + '\n' + dora_session + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
 
 
@@ -554,6 +557,400 @@ def investigation_lifecycle_races(context, base, network_mode, errors):
     expect(page.locator('#investigation-recovery')).not_to_contain_text('RESULTAT: RECOVERED')
     assert not errors, errors
     page.close()
+
+
+def dora_session_races(context, network_mode, errors):
+    """Real DORA sessions, delayed HTTP delivery, and exact server cleanup."""
+    class Clock:
+        now = 100.0
+
+        def __call__(self):
+            return self.now
+
+    clock = Clock()
+    with tempfile.TemporaryDirectory() as directory:
+        store = ProjectStore(directory)
+        project = dhcp_vlan_clients()
+        # Three documented access VLANs permit a real changed target choice.
+        next(port for port in project['nodes'][1]['ports'] if port['id'] == 'p-2')['vlan']['vlan'] = 30
+        store.save('dora-race', project)
+        saved_file = Path(directory) / 'dora-race.yadilab'
+        digest = hashlib.sha256(saved_file.read_bytes()).hexdigest()
+        server = LabHTTPServer(('127.0.0.1', 0), store,
+                               clock=clock, cleanup_interval=.01)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = f'http://127.0.0.1:{server.server_port}/'
+        try:
+            def load(page):
+                page.once('dialog', lambda dialog: dialog.accept())
+                with page.expect_response('**/api/validate') as imported:
+                    page.locator('#import-file').set_input_files({
+                        'name': 'dora-race.json', 'mimeType': 'application/json',
+                        'buffer': json.dumps(project).encode('utf-8'),
+                    })
+                assert imported.value.status == 200
+                page.locator('#dora-client').select_option('["client","eth0"]')
+                page.locator('#dora-server').select_option('["server","eth0"]')
+                page.locator('#dora-pool-start').fill('192.0.2.70')
+                page.locator('#dora-pool-end').fill('192.0.2.71')
+                page.locator('#dora-transaction-id').fill('101')
+                page.locator('#dora-lease-seconds').fill('3600')
+
+            def fresh():
+                page = context.new_page()
+                page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+                assert browser_open(page, base) == network_mode
+                load(page)
+                return page
+
+            def replace(page):
+                page.once('dialog', lambda dialog: dialog.accept())
+                page.locator('#new-project').click()
+                load(page)
+
+            def start(page):
+                with page.expect_response('**/api/dhcp/session/start') as response:
+                    page.locator('#dora-session-start').click()
+                assert response.value.status == 200
+                sid = response.value.json()['sessionId']
+                assert sid in server.dhcp_sessions._sessions
+                return sid
+
+            def run(page):
+                with page.expect_response('**/api/dhcp/session/run') as response:
+                    page.locator('#dora-session-run').click()
+                assert response.value.status == 200
+                return response.value.json()
+
+            def prepare_renew(page):
+                run(page)
+                page.locator('#dora-session-advance-seconds').fill('1800')
+                with page.expect_response('**/api/dhcp/session/advance') as advanced:
+                    page.locator('#dora-session-advance').click()
+                assert advanced.value.json()['clockSeconds'] == 1800
+                expect(page.locator('#dora-session-renew')).to_be_enabled()
+
+            def stop(page, sid):
+                with page.expect_response('**/api/dhcp/session/stop') as response:
+                    page.locator('#dora-session-stop').click()
+                assert response.value.status == 200
+                assert response.value.json() == {'status': 'STOPPED'}
+                assert sid not in server.dhcp_sessions._sessions
+
+            def change(page, selector, value):
+                page.evaluate("""({selector, value}) => {
+                  const field = document.querySelector(selector);
+                  field.value = value;
+                  field.dispatchEvent(new Event(field.tagName === 'SELECT' ? 'change' : 'input',
+                    {bubbles: true}));
+                }""", {'selector': selector, 'value': value})
+
+            # Double Start, then a project replacement before the allocated
+            # ID reaches app code. The exact orphan is stopped.
+            page = fresh()
+            starts = []
+            page.on('request', lambda request: starts.append(request) if
+                    request.url.endswith('/api/dhcp/session/start') else None)
+            hold_http_reply(page, '/api/dhcp/session/start')
+            with page.expect_response('**/api/dhcp/session/start') as allocated:
+                page.locator('#dora-session-start').click()
+            page.wait_for_function('window.__heldReply')
+            page.locator('#dora-session-start').dispatch_event('click')
+            assert len(starts) == 1
+            page.once('dialog', lambda dialog: dialog.accept())
+            page.locator('#new-project').click()
+            with page.expect_response('**/api/dhcp/session/stop') as cleanup:
+                release_http_reply(page)
+            old = allocated.value.json()['sessionId']
+            assert cleanup.value.status == 200
+            assert old not in server.dhcp_sessions._sessions
+            expect(page.locator('#dora-session-status')).to_contain_text('Ingen aktiv DHCP-session')
+            page.close()
+
+            # A changed Start input also makes an allocated server ID stale.
+            page = fresh()
+            hold_http_reply(page, '/api/dhcp/session/start')
+            with page.expect_response('**/api/dhcp/session/start') as allocated:
+                page.locator('#dora-session-start').click()
+            page.wait_for_function('window.__heldReply')
+            change(page, '#dora-pool-end', '192.0.2.72')
+            with page.expect_response('**/api/dhcp/session/stop') as cleanup:
+                release_http_reply(page)
+            assert cleanup.value.status == 200
+            old = allocated.value.json()['sessionId']
+            assert old not in server.dhcp_sessions._sessions
+            expect(page.locator('#dora-session-status')).to_contain_text('Ingen aktiv DHCP-session')
+            page.close()
+
+            # A processed Run retains the real lease even when its client
+            # choice changes before delivery; its old trace is not relabelled.
+            page = fresh()
+            sid = start(page)
+            hold_http_reply(page, '/api/dhcp/session/run')
+            with page.expect_response('**/api/dhcp/session/run') as processed:
+                page.locator('#dora-session-run').click()
+            assert processed.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            change(page, '#dora-client', '["client-2","eth0"]')
+            release_http_reply(page)
+            assert processed.value.json()['leaseCount'] == 1
+            expect(page.locator('#dora-session-status')).to_contain_text('1 BOUND-lease')
+            expect(page.locator('#dora-session-leases')).to_contain_text('client/eth0')
+            expect(page.locator('#dora-session-result')).not_to_contain_text('DORA-status: ACK_RECEIVED')
+            assert server.dhcp_sessions._sessions[sid].state()['operationCount'] == 1
+            stop(page, sid)
+            page.close()
+
+            # A delayed Renew updates the actual lease, but a changed XID
+            # must not receive the old renewal trace.
+            page = fresh()
+            sid = start(page)
+            prepare_renew(page)
+            hold_http_reply(page, '/api/dhcp/session/renew')
+            with page.expect_response('**/api/dhcp/session/renew') as renewed:
+                page.locator('#dora-session-renew').click()
+            assert renewed.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            change(page, '#dora-transaction-id', '102')
+            release_http_reply(page)
+            assert renewed.value.json()['result']['status'] == 'ACK_RECEIVED'
+            expect(page.locator('#dora-session-leases')).to_contain_text('förnyelser 1')
+            expect(page.locator('#dora-session-renew-result')).not_to_contain_text('DHCP-förnyelse:')
+            stop(page, sid)
+            page.close()
+
+            # Stop may overtake Advance, Run, or Renew. Old replies and
+            # finally blocks cannot revive the removed session.
+            for path, setup, button in (
+                ('run', lambda page: None, '#dora-session-run'),
+                ('advance', lambda page: page.locator('#dora-session-advance-seconds').fill('1'),
+                 '#dora-session-advance'),
+                ('renew', prepare_renew, '#dora-session-renew'),
+            ):
+                page = fresh()
+                sid = start(page)
+                setup(page)
+                hold_http_reply(page, '/api/dhcp/session/' + path)
+                with page.expect_response('**/api/dhcp/session/' + path) as processed:
+                    page.locator(button).click()
+                assert processed.value.status == 200
+                page.wait_for_function('window.__heldReply')
+                stop(page, sid)
+                release_http_reply(page)
+                expect(page.locator('#dora-session-status')).to_contain_text('Ingen aktiv DHCP-session')
+                page.close()
+
+            # Real fault mutations survive a changed selector in the server
+            # state but do not masquerade as a result for the new target.
+            for path, button, selector, before, after, field in (
+                ('link-fault', '#dora-session-fault-break', '#dora-session-fault-link',
+                 'to-server', 'to-client', 'faultedLinks'),
+                ('port-fault', '#dora-session-port-down', '#dora-session-port-fault',
+                 '["sw","s"]', '["sw","c"]', 'faultedPorts'),
+                ('vlan-fault', '#dora-session-vlan-set', '#dora-session-vlan-target',
+                 '20', '30', 'faultedAccessVlans'),
+                ('vlan-fault', '#dora-session-vlan-set', '#dora-session-vlan-port',
+                 '["sw","c"]', '["sw","p-2"]', 'faultedAccessVlans'),
+            ):
+                page = fresh()
+                sid = start(page)
+                if path == 'vlan-fault':
+                    page.locator('#dora-session-vlan-port').select_option('["sw","c"]')
+                page.locator(selector).select_option(before)
+                hold_http_reply(page, '/api/dhcp/session/' + path)
+                with page.expect_response('**/api/dhcp/session/' + path) as processed:
+                    page.locator(button).click()
+                assert processed.value.status == 200
+                page.wait_for_function('window.__heldReply')
+                change(page, selector, after)
+                release_http_reply(page)
+                assert server.dhcp_sessions._sessions[sid].state()[field]
+                expect(page.locator('#dora-session-status')).to_contain_text('Aktiv DHCP-session')
+                stop(page, sid)
+                page.close()
+
+            # Reset processed before a workspace replacement cannot restore
+            # old leases or old status in the replacement project.
+            page = fresh()
+            old = start(page)
+            run(page)
+            hold_http_reply(page, '/api/dhcp/session/reset')
+            with page.expect_response('**/api/dhcp/session/reset') as reset:
+                page.locator('#dora-session-reset').click()
+            assert reset.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            with page.expect_response('**/api/dhcp/session/stop'):
+                replace(page)
+            release_http_reply(page)
+            assert reset.value.json()['leaseCount'] == 0
+            expect(page.locator('#dora-session-status')).to_contain_text('Ingen aktiv DHCP-session')
+            assert old not in server.dhcp_sessions._sessions
+            page.close()
+
+            # New, Open, and Import each invalidate an in-flight Run after
+            # the server has processed it; no old lease enters the workspace.
+            for replacement in ('new', 'open', 'import'):
+                page = fresh()
+                old = start(page)
+                hold_http_reply(page, '/api/dhcp/session/run')
+                with page.expect_response('**/api/dhcp/session/run') as processed:
+                    page.locator('#dora-session-run').click()
+                assert processed.value.status == 200
+                page.wait_for_function('window.__heldReply')
+                with page.expect_response('**/api/dhcp/session/stop') as cleanup:
+                    if replacement == 'new':
+                        page.once('dialog', lambda dialog: dialog.accept())
+                        page.locator('#new-project').click()
+                    elif replacement == 'open':
+                        page.locator('#saved-projects').select_option('dora-race')
+                        page.once('dialog', lambda dialog: dialog.accept())
+                        with page.expect_response('**/api/projects/dora-race') as opened:
+                            page.locator('#open-project').click()
+                        assert opened.value.status == 200
+                    else:
+                        page.on('dialog', lambda dialog: dialog.accept())
+                        with page.expect_response('**/api/validate') as imported:
+                            page.locator('#import-file').set_input_files({
+                                'name': 'dora-race.json', 'mimeType': 'application/json',
+                                'buffer': json.dumps(project).encode('utf-8'),
+                            })
+                        assert imported.value.status == 200
+                assert cleanup.value.status == 200
+                release_http_reply(page)
+                assert processed.value.json()['leaseCount'] == 1
+                assert old not in server.dhcp_sessions._sessions
+                expect(page.locator('#dora-session-status')).to_contain_text('Ingen aktiv DHCP-session')
+                expect(page.locator('#dora-session-leases')).to_contain_text('Ingen aktiv lease-tabell')
+                page.close()
+
+            # A real validation 422 from A, delayed until B exists, may not
+            # expire B or unlock B's current operation.
+            page = fresh()
+            old = start(page)
+            page.evaluate("""() => {
+              const original = window.fetch;
+              window.fetch = (url, init) => {
+                if (url === '/api/dhcp/session/run') {
+                  const body = JSON.parse(init.body);
+                  body.transactionId = 0;
+                  window.fetch = original;
+                  return original(url, {...init, body: JSON.stringify(body)});
+                }
+                return original(url, init);
+              };
+            }""")
+            hold_http_reply(page, '/api/dhcp/session/run')
+            with page.expect_response('**/api/dhcp/session/run') as stale_error:
+                page.locator('#dora-session-run').click()
+            assert stale_error.value.status == 422
+            page.wait_for_function('window.__heldReply')
+            with page.expect_response('**/api/dhcp/session/stop'):
+                replace(page)
+            newer = start(page)
+            release_http_reply(page)
+            assert stale_error.value.json()['error'] == 'INVALID_PROJECT'
+            assert old not in server.dhcp_sessions._sessions
+            assert newer in server.dhcp_sessions._sessions
+            expect(page.locator('#dora-session-status')).to_contain_text('Aktiv DHCP-session')
+            stop(page, newer)
+            page.close()
+
+            # A delayed Stop for A cannot clear B, including while B is busy.
+            page = fresh()
+            old = start(page)
+            hold_http_reply(page, '/api/dhcp/session/stop', first_only=True)
+            with page.expect_response('**/api/dhcp/session/stop') as stopped:
+                page.locator('#dora-session-stop').click()
+            assert stopped.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            replace(page)
+            newer = start(page)
+            page.evaluate('window.__releaseOldStop = window.__releaseReply')
+            hold_http_reply(page, '/api/dhcp/session/run')
+            with page.expect_response('**/api/dhcp/session/run') as b_run:
+                page.locator('#dora-session-run').click()
+            assert b_run.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            page.evaluate('window.__releaseOldStop()')
+            assert stopped.value.json() == {'status': 'STOPPED'}
+            expect(page.locator('#dora-session-run')).to_be_disabled()
+            release_http_reply(page)
+            assert newer != old and newer in server.dhcp_sessions._sessions
+            expect(page.locator('#dora-session-status')).to_contain_text('Aktiv DHCP-session')
+            stop(page, newer)
+            page.close()
+
+            # A real Stop is processed, but its response is lost in fetch.
+            # The retry receives an exact real 422 and permits a new B.
+            page = fresh()
+            old = start(page)
+            page.evaluate("""() => {
+              const original = window.fetch;
+              window.__lostDoraStop = null;
+              window.fetch = async (url, init) => {
+                if (url !== '/api/dhcp/session/stop') return original(url, init);
+                window.fetch = original;
+                const response = await original(url, init);
+                window.__lostDoraStop = {
+                  status: response.status, body: await response.clone().json(),
+                };
+                throw new TypeError('Stop reply lost after server processing');
+              };
+            }""")
+            with page.expect_response('**/api/dhcp/session/stop') as processed_stop:
+                page.locator('#dora-session-stop').click()
+            assert processed_stop.value.status == 200
+            page.wait_for_function('window.__lostDoraStop !== null')
+            assert page.evaluate('window.__lostDoraStop') == {
+                'status': 200, 'body': {'status': 'STOPPED'}}
+            assert old not in server.dhcp_sessions._sessions
+            expect(page.locator('#dora-session-result')).to_contain_text('Kunde inte bekräfta Stop')
+            with page.expect_response('**/api/dhcp/session/stop') as missing:
+                page.locator('#dora-session-stop').click()
+            assert missing.value.status == 422
+            assert missing.value.json() == {'error': 'INVALID_PROJECT',
+                'message': 'dhcp session: unknown or expired session; start a new session'}
+            expect(page.locator('#dora-session-start')).to_be_enabled()
+            newer = start(page)
+            assert newer != old and newer in server.dhcp_sessions._sessions
+            stop(page, newer)
+            page.close()
+
+            # The server's existing idle worker reaps an abandoned ID.
+            page = fresh()
+            abandoned = start(page)
+            page.close()
+            assert abandoned in server.dhcp_sessions._sessions
+            expired = threading.Event()
+            original_cleanup = server.dhcp_sessions.cleanup_expired
+
+            def observed_cleanup():
+                count = original_cleanup()
+                if abandoned not in server.dhcp_sessions._sessions:
+                    expired.set()
+                return count
+
+            server.dhcp_sessions.cleanup_expired = observed_cleanup
+            clock.now += IDLE_TIMEOUT_SECONDS
+            assert expired.wait(2), 'server worker did not reap abandoned DORA session'
+            page = fresh()
+            current = start(page)
+            clock.now += IDLE_TIMEOUT_SECONDS
+            with page.expect_response('**/api/dhcp/session/run') as stale:
+                page.locator('#dora-session-run').click()
+            assert stale.value.status == 422
+            expect(page.locator('#dora-session-start')).to_be_enabled()
+            assert current not in server.dhcp_sessions._sessions
+            page.close()
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert not errors, errors
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+            assert not worker.is_alive()
+            assert not server._cleanup_thread.is_alive()
 
 
 def icmp_investigation_races(context, network_mode, errors):
@@ -1328,7 +1725,8 @@ def run():
                            'features/projects/transfer.js', 'features/diagnostics/queries.js',
                            'features/diagnostics/presenters.js',
                            'features/sessions/dhcp-investigation.js',
-                           'features/sessions/icmp-investigation.js'):
+                           'features/sessions/icmp-investigation.js',
+                           'features/sessions/dora-session.js'):
                 if response.url.endswith('/' + module):
                     module_responses[module] = response
         page.on('response', record_module)
@@ -1341,7 +1739,8 @@ def run():
                                'features/projects/transfer.js', 'features/diagnostics/queries.js',
                                'features/diagnostics/presenters.js',
                                'features/sessions/dhcp-investigation.js',
-                               'features/sessions/icmp-investigation.js'):
+                               'features/sessions/icmp-investigation.js',
+                               'features/sessions/dora-session.js'):
                     response = module_responses.get(module)
                     assert response is not None and response.status == 200, f'{module} was not loaded'
                     assert response.headers['content-type'].split(';')[0] in (
@@ -3828,6 +4227,7 @@ def run():
             investigation_lifecycle_races(context, base, network_mode, errors)
             abandoned_investigation_cleanup(context, network_mode, errors)
             icmp_investigation_races(context, network_mode, errors)
+            dora_session_races(context, network_mode, errors)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
