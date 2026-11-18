@@ -1,6 +1,6 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt för etapp 3E: `main` vid `5687b63d72e2bb60928ccbe38627cf3836847e4b`.
+Utgångspunkt för etapp 4A: `main` vid `17acb51c8c64c3b4b7a1026514cb8b0a2177a127`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
@@ -17,12 +17,16 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 3D2 | ICMP Investigation-sessionens livscykel | Integrerad i `main`; CI godkänd |
 | 3D3 | DHCP/DORA-sessionens livscykel | Integrerad i `main`; CI godkänd |
 | 3D4 | ARP/Ethernet-sessionens livscykel | Integrerad i `main`; CI godkänd |
-| 3E | Frontend-entrypoint och integrationsgränser | LOCAL_PASS; CI_PENDING; NOT_MERGED |
-| 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
+| 3E | Frontend-entrypoint och integrationsgränser | Integrerad i `main`; CI godkänd |
+| 4A | Skrivskyddad källtrogen tabellförhandsvisning | Kontrakt fastställt; ej implementerad |\n| 4B–4D | Explicit mappning, relationer och evidensutvärdering | Kontrakt fastställt; egna startgrindar |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
+
+## Etapp 4: bindande implementationskontrakt
+
+Läs [IMPORT_SOURCE_CONTRACT.md](IMPORT_SOURCE_CONTRACT.md) före nästa kodetapp. Etapp 4A är den enda omedelbart tillåtna kodleveransen: skrivskyddad inspektion av CSV/XLSX/ODS utan nätverkstolkning, kandidatprojekt eller Save. 4B–4D är separata etapper med verifieringsgrindar och får inte implementeras på spekulation. Detta avsnitt anger planeringsstatus, inte verifierat genomförande.
 
 ## Etapp 3E: ICMP-panelens presentationsgräns
 
