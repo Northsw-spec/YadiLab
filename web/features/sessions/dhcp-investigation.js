@@ -13,6 +13,8 @@ export function createDhcpInvestigationController({getContext, onChange}) {
   let clockEvent = null;
   const pendingStops = new Set();
   const stopping = new Map();
+  const missingSession = problem => problem.code === 'INVALID_PROJECT'
+    && problem.message === 'investigation: unknown or expired session';
 
   const view = () => structuredClone({id, state, generation, busy, log, verdict,
     recovery, error, clockEvent, pendingStopCount: pendingStops.size});
@@ -43,11 +45,11 @@ export function createDhcpInvestigationController({getContext, onChange}) {
     id = null; state = null; busy = false; log = [];
     verdict = null; recovery = null; error = null; clockEvent = null;
   };
-  const invalidate = () => {
+  const invalidate = (serverGone = false) => {
     generation += 1;
     const previous = id;
     clear();
-    if (previous) void requestStop(previous);
+    if (previous && !serverGone) void requestStop(previous);
     changed();
   };
   const setInputError = message => {
@@ -99,7 +101,12 @@ export function createDhcpInvestigationController({getContext, onChange}) {
       });
       if (current()) apply(data);
     } catch (problem) {
-      if (current()) reject(problem);
+      if (current()) {
+        if (missingSession(problem)) {
+          invalidate(true);
+          setInputError('Sessionen har upphört på servern. Starta en ny övning.');
+        } else reject(problem);
+      }
     } finally {
       if (token === generation) {
         if (!sameContext(context, readInputs, inputSignature)) invalidate();

@@ -1,7 +1,7 @@
 """Bounded, process-local Layer-2 simulation sessions over one canonical project.
 
 Each session owns exactly one ArpSession and its existing EthernetFabric.
-No source project writes, shared protocol cache, IP reachability or background work.
+No source project writes, shared protocol cache, IP reachability or per-session worker.
 """
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import hashlib
 import json
 import secrets
 from threading import RLock
+from .session_idle import IdleSessions, session_activity
 
 from .arp import ArpSession
 from .ethernet_frame import EthernetFrame
@@ -83,15 +84,16 @@ class SimulationSession:
         }
 
 
-class SimulationRegistry:
+class SimulationRegistry(IdleSessions):
     """One bounded server-process registry; operations serialized by its lock."""
 
-    def __init__(self):
+    def __init__(self, *, clock=None):
         self._sessions: dict[str, SimulationSession] = {}
         self._lock = RLock()
+        self._init_idle(clock)
 
     def _get(self, session_id: object) -> SimulationSession:
-        if not isinstance(session_id, str) or session_id not in self._sessions:
+        if not self._live(session_id):
             raise ProjectValidationError(
                 "simulation: unknown or expired session; start a new session"
             )
@@ -101,14 +103,17 @@ class SimulationRegistry:
         # Validate completely before allocating a session or consuming capacity.
         session = SimulationSession(project)
         with self._lock:
+            self._reap_expired()
             if len(self._sessions) >= MAX_SESSIONS:
                 raise ProjectValidationError(
                     "simulation: too many active sessions; stop an existing session"
                 )
             session_id = secrets.token_urlsafe(24)
             self._sessions[session_id] = session
+            self._track(session_id)
             return {"sessionId": session_id, **session.state()}
 
+    @session_activity
     def run(self, session_id: object, project: object, operation: str,
             source_node: str, source_port: str, target: str) -> dict:
         with self._lock:
@@ -117,6 +122,7 @@ class SimulationRegistry:
             return {"sessionId": session_id,
                     **session.run(operation, source_node, source_port, target)}
 
+    @session_activity
     def reset(self, session_id: object, project: object) -> dict:
         with self._lock:
             session = self._get(session_id)
@@ -127,4 +133,5 @@ class SimulationRegistry:
         with self._lock:
             self._get(session_id)
             del self._sessions[session_id]
+            self._forget(session_id)
             return {"status": "STOPPED"}

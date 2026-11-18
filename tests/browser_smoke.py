@@ -31,6 +31,7 @@ from network_core.icmp_investigation import _candidates
 from network_core.icmp_ping import EchoExchange
 from network_core.server import LabHTTPServer
 from network_core.storage import ProjectStore
+from network_core.session_idle import IDLE_TIMEOUT_SECONDS
 from xlsx_fixture import make_workbook, workbook_parts, zip_parts
 from ods_fixture import make_ods, ods_parts, zip_parts as zip_ods_parts
 from spreadsheet_v13_fixture import TABLES_13, expected_v13, xlsx_v13, ods_v13
@@ -172,6 +173,117 @@ def hold_http_reply(page, path, first_only=False):
 
 def release_http_reply(page):
     page.evaluate('window.__releaseReply()')
+
+
+def abandoned_investigation_cleanup(context, network_mode, errors):
+    """Real Chromium and HTTP; only the server's monotonic worker reaps IDs."""
+    class Clock:
+        now = 100.0
+
+        def __call__(self):
+            return self.now
+
+    clock = Clock()
+    with tempfile.TemporaryDirectory() as directory:
+        server = LabHTTPServer(('127.0.0.1', 0), ProjectStore(directory),
+                               clock=clock, cleanup_interval=.01)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = f'http://127.0.0.1:{server.server_port}/'
+        cleaned = threading.Event()
+        original_cleanup = server.investigations.cleanup_expired
+
+        def observe_cleanup():
+            count = original_cleanup()
+            if count:
+                cleaned.set()
+            return count
+
+        server.investigations.cleanup_expired = observe_cleanup
+        try:
+            def fresh():
+                page = context.new_page()
+                page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+                assert browser_open(page, base) == network_mode
+                page.once('dialog', lambda dialog: dialog.accept())
+                with page.expect_response('**/api/validate') as imported:
+                    page.locator('#import-file').set_input_files({
+                        'name': 'abandoned-dhcp.json', 'mimeType': 'application/json',
+                        'buffer': json.dumps(dhcp_vlan_clients()).encode('utf-8'),
+                    })
+                assert imported.value.status == 200
+                page.locator('#dora-client').select_option('["client","eth0"]')
+                page.locator('#dora-server').select_option('["server","eth0"]')
+                page.locator('#dora-pool-start').fill('192.0.2.70')
+                page.locator('#dora-pool-end').fill('192.0.2.71')
+                page.locator('#dora-lease-seconds').fill('60')
+                return page
+
+            page = fresh()
+            with page.expect_response('**/api/dhcp/investigation/start') as started:
+                page.locator('#investigation-start').click()
+            old = started.value.json()['sessionId']
+            assert old in server.investigations._sessions
+            page.close()  # No Stop request and no subsequent HTTP request.
+            assert old in server.investigations._sessions
+            clock.now += IDLE_TIMEOUT_SECONDS
+            assert cleaned.wait(2), 'server did not reap the abandoned browser session'
+            assert old not in server.investigations._sessions
+
+            page = fresh()
+            with page.expect_response('**/api/dhcp/investigation/start') as restarted:
+                page.locator('#investigation-start').click()
+            current = restarted.value.json()['sessionId']
+            assert current != old
+            page.evaluate("""() => {
+              const original = window.fetch;
+              window.fetch = (url, init) => {
+                if (url === '/api/dhcp/investigation/stop') {
+                  window.fetch = original;
+                  return Promise.reject(new TypeError('lost Stop request'));
+                }
+                return original(url, init);
+              };
+            }""")
+            page.locator('#investigation-stop').click()
+            expect(page.locator('#investigation-status')).to_contain_text('Kunde inte avsluta')
+            page.close()
+            assert current in server.investigations._sessions
+            cleaned.clear()
+            clock.now += IDLE_TIMEOUT_SECONDS
+            assert cleaned.wait(2), 'failed Stop left a permanent server resource'
+            assert current not in server.investigations._sessions
+
+            page = fresh()
+            with page.expect_response('**/api/dhcp/investigation/start') as live_start:
+                page.locator('#investigation-start').click()
+            live = live_start.value.json()['sessionId']
+            clock.now += IDLE_TIMEOUT_SECONDS - 1
+            with page.expect_response('**/api/dhcp/investigation/probe') as active:
+                page.locator('#investigation-run-probe').click()
+            assert active.value.json()['sessionId'] == live
+            clock.now += 1
+            assert server.investigations.cleanup_expired() == 0
+            cleaned.clear()
+            clock.now += IDLE_TIMEOUT_SECONDS
+            assert cleaned.wait(2)
+            with page.expect_response('**/api/dhcp/investigation/probe') as expired:
+                page.locator('#investigation-run-probe').click()
+            assert expired.value.status == 422
+            assert 'faulted' not in expired.value.body().decode('utf-8')
+            expect(page.locator('#investigation-status')).to_contain_text('Sessionen har upphört')
+            expect(page.locator('#investigation-start')).to_be_enabled()
+            with page.expect_response('**/api/dhcp/investigation/start') as new_start:
+                page.locator('#investigation-start').click()
+            assert new_start.value.status == 200
+            page.close()
+            assert not errors, errors
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+            assert not worker.is_alive()
+            assert not server._cleanup_thread.is_alive()
 
 
 def investigation_lifecycle_races(context, base, network_mode, errors):
@@ -3267,6 +3379,7 @@ def run():
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)
             investigation_lifecycle_races(context, base, network_mode, errors)
+            abandoned_investigation_cleanup(context, network_mode, errors)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
