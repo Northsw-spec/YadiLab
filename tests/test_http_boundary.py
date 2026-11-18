@@ -60,6 +60,22 @@ class LocalHTTPBoundaryTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(self.store.read("local")["project"], example())
 
+    def test_static_modules_are_explicitly_allowed_without_directory_access(self):
+        headers = (("Host", self.host),)
+        for path in ("/ui/dom.js", "/services/api.js"):
+            with self.subTest(path=path):
+                status, response_headers, body = self.request("GET", path, headers)
+                self.assertEqual(status, 200)
+                self.assertIn(response_headers["Content-Type"].split(";", 1)[0],
+                              ("text/javascript", "application/javascript"))
+                self.assertIn(b"export ", body)
+        for path in ("/ui/", "/services/", "/ui/../services/api.js",
+                     "/network_core/server.py", "/docs/QUALITY_IMPROVEMENT_PLAN.md"):
+            with self.subTest(path=path):
+                status, _, body = self.request("GET", path, headers)
+                self.assertEqual(status, 404)
+                self.assertNotIn(b"export ", body)
+
     def test_reject_bad_host_before_project_read_or_write(self):
         self.store.save("private", example())
         bad_hosts = ("evil.example", "localhost", "127.0.0.1",

@@ -1,47 +1,7 @@
 import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';
 import {TopologyCanvas} from './canvas.js';
-
-const $ = id => document.getElementById(id);
-const el = (tag, attrs = {}, ...children) => {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    if (key.startsWith('on') && typeof value === 'function') node.addEventListener(key.slice(2).toLowerCase(), value);
-    else if (key === 'className') node.className = value;
-    else if (key === 'text') node.textContent = value;
-    else if (key === 'value') node.value = value;
-    else if (key === 'checked') node.checked = Boolean(value);
-    else if (key === 'disabled') node.disabled = Boolean(value);
-    else if (key === 'dataset') Object.assign(node.dataset, value);
-    else node.setAttribute(key, String(value));
-  }
-  for (const item of children.flat(3)) {
-    if (item == null || item === false) continue;
-    node.append(item instanceof Node ? item : document.createTextNode(String(item)));
-  }
-  return node;
-};
-const field = (title, control) => el('div', {className: 'field'}, el('label', {htmlFor: control.id || ''}, title), control);
-const heading = title => el('h3', {className: 'section-title'}, title);
-const small = text => el('p', {className: 'muted tiny'}, text);
-const button = (text, onclick, variant = 'btn-outline', attrs = {}) =>
-  el('button', {type: 'button', className: `btn ${variant}`, onclick, ...attrs}, text);
-const input = (value, change, attrs = {}) => {
-  const control = el('input', {type: 'text', className: 'control', value: value ?? '', ...attrs});
-  control.addEventListener('change', () => change(control.value));
-  return control;
-};
-const dropdown = (options, selected, change, attrs = {}) => {
-  const control = el('select', {className: 'control', ...attrs});
-  for (const option of options) control.append(el('option', {value: option.value}, option.label));
-  control.value = selected == null ? '' : String(selected);
-  control.addEventListener('change', () => change(control.value));
-  return control;
-};
-const check = (label, checked, onChange) => {
-  const control = el('input', {type: 'checkbox', checked});
-  control.addEventListener('change', () => onChange(control.checked));
-  return el('label', {className: 'check-line'}, control, label);
-};
+import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';
+import {api} from './services/api.js';
 
 let project = blank();
 let selection = null;
@@ -137,22 +97,6 @@ function notify(message, error = false) {
   box.style.borderColor = error ? '#a66b73' : '#487085';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { box.hidden = true; }, 6500);
-}
-
-async function api(path, payload = undefined) {
-  const response = await fetch(path, payload === undefined ? undefined : {
-    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
-  });
-  let data;
-  try { data = await response.json(); }
-  catch { throw new Error(`Oväntat svar från lokal server (${response.status})`); }
-  if (!response.ok) {
-    const error = new Error(data.message || 'Åtgärden misslyckades');
-    error.code = data.error;
-    error.currentSha256 = data.currentSha256;
-    throw error;
-  }
-  return data;
 }
 
 function isDirty() {
