@@ -3,6 +3,7 @@ import {TopologyCanvas} from './canvas.js';
 import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';
 import {api} from './services/api.js';
 import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';
+import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport} from './features/projects/transfer.js';
 
 let project = blank();
 let selection = null;
@@ -1908,93 +1909,71 @@ async function openProject() {
     notify(`Öppnade verklig projektfil: ${loaded.filename}.yadilab · SHA-256 ${loaded.sha256.slice(0,14)}…`);
   } catch (error) { notify(`Kunde inte öppna: ${error.message}`,true); }
 }
-async function decodeUtf8(file) {
-  // File.text() silently substitutes malformed bytes; canonical imports must
-  // either preserve the input or report an error without replacing the project.
-  return new TextDecoder('utf-8', {fatal: true}).decode(await file.arrayBuffer());
+function transferContext() {
+  return {workspaceRevision, editRevision, snapshot: JSON.stringify(project), filename};
+}
+function transferCurrent(context) {
+  return workspaceRevision === context.workspaceRevision && editRevision === context.editRevision &&
+    filename === context.filename && JSON.stringify(project) === context.snapshot;
+}
+function transferStale() {
+  notify('Åtgärden avbröts: arbetsytan ändrades under import eller export. Försök igen.', true);
 }
 async function importProjects(files) {
   if (!files?.length) return;
+  const context = transferContext();
   try {
-    let result;
-    if (files.every(file => file.name.endsWith('.csv'))) {
-      if (files.length > 4) throw new Error('Välj högst fyra CSV-tabeller.');
-      const projectName = prompt('Projektnamn för CSV-importen:', project.name);
+    const kind = importKind(files);
+    let projectName;
+    if (kind !== 'project') {
+      const label = kind === 'csv' ? 'CSV' : kind.toUpperCase();
+      projectName = prompt(`Projektnamn för ${label}-importen:`, project.name);
       if (projectName === null) return;
-      const sources = [];
-      for (const file of files) {
-        if (file.size > 8 * 1024 * 1024) throw new Error('CSV-fil är större än 8 MiB.');
-        sources.push({name: file.name, text: await decodeUtf8(file)});
-      }
-      result = await api('/api/import/csv', {projectName, files: sources});
-    } else if (files.length === 1 && /\.(xlsx|ods)$/.test(files[0].name.toLowerCase())) {
-      const workbook = files[0];
-      const isOds = workbook.name.toLowerCase().endsWith('.ods');
-      if (workbook.size > 5 * 1024 * 1024) {
-        throw new Error('Arbetsboken är större än 5 MiB.');
-      }
-      const projectName = prompt((isOds ? 'Projektnamn för ODS-importen:' : 'Projektnamn för XLSX-importen:'), project.name);
-      if (projectName === null) return;
-      const bytes = new Uint8Array(await workbook.arrayBuffer());
-      let binary = '';
-      for (let offset = 0; offset < bytes.length; offset += 32768) {
-        binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
-      }
-      result = await api(isOds ? '/api/import/ods' : '/api/import/xlsx',
-        {filename:workbook.name, projectName, contentBase64:btoa(binary)});
-    } else if (files.length === 1 && ['.json', '.yadilab'].some(extension => files[0].name.toLowerCase().endsWith(extension))) {
-      if (files[0].size > 8 * 1024 * 1024) throw new Error('Filen är större än 8 MiB.');
-      result = await api('/api/validate', JSON.parse(await decodeUtf8(files[0])));
-    } else {
-      throw new Error('Välj en .json/.yadilab, en .xlsx/.ods med namngivna blad, eller explicita CSV-tabeller: Devices.csv, Interfaces.csv, Links.csv och eventuellt Zones.csv.');
     }
-    // Validate completely before asking to replace the current workspace.
-    // Cancel or invalid CSV/XLSX must not disturb unsaved edits or disk bytes.
+    const prepared = await prepareImport(files, kind, projectName);
+    if (!transferCurrent(context)) return transferStale();
+    const result = await submitImport(prepared);
+    if (!transferCurrent(context)) return transferStale();
     const incoming = result.project;
     if (!confirmDiscard()) return;
     if (!confirm(`Importen innehåller ${incoming.nodes.length} enheter och ${incoming.links.length} uttryckligt deklarerade länkar. Ersätta nuvarande arbetsyta? Ingen fil skrivs automatiskt.`)) return;
     resetProject(incoming);
     notify(`Importerade ${incoming.nodes.length} enheter, ${incoming.links.length} länkar och ${incoming.zones.length} zoner. Inget sparades automatiskt.`);
-  } catch (error) { notify(`Import avvisad: ${error.message}`, true); }
+  } catch (error) {
+    if (!transferCurrent(context)) return transferStale();
+    notify(`Import avvisad: ${error.message}`, true);
+  }
 }
-
+function downloadExport({content, type, filename}) {
+  const url = URL.createObjectURL(new Blob([content], {type}));
+  const anchor = el('a', {href: url, download: filename});
+  document.body.append(anchor);
+  anchor.click(); anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
 async function exportSpreadsheet(format) {
-  const snapshot = JSON.stringify(project);
+  const context = transferContext();
   try {
-    const reply = await api('/api/export/spreadsheet', {project, format});
-    if (snapshot !== JSON.stringify(project)) return; // No stale workbook downloads.
-    if (reply.filename !== 'network-documentation.' + format ||
-        typeof reply.contentBase64 !== 'string') {
-      throw new Error('Servern returnerade felaktigt exportformat.');
-    }
-    const raw = atob(reply.contentBase64);
-    const bytes = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-    const type = format === 'xlsx'
-      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      : 'application/vnd.oasis.opendocument.spreadsheet';
-    const url = URL.createObjectURL(new Blob([bytes], {type}));
-    const anchor = el('a', {href:url, download:reply.filename});
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    const result = await prepareSpreadsheetExport(context.snapshot, format);
+    if (!transferCurrent(context)) return transferStale();
+    downloadExport(result);
     notify('Kalkylbladsexport initierad. Projektet har inte sparats. Webbläsarens faktiska nedladdning är inte verifierad.');
   } catch (error) {
+    if (!transferCurrent(context)) return transferStale();
     notify('Kalkylbladsexport avvisad: ' + error.message, true);
   }
 }
 async function exportProject() {
+  const context = transferContext();
   try {
-    const validated = await api('/api/validate',project);
-    const bytes = JSON.stringify(validated.project,null,2) + '\n';
-    const url = URL.createObjectURL(new Blob([bytes],{type:'application/json'}));
-    const a = el('a',{href:url,download:`${filename}.yadilab`});
-    document.body.append(a);
-    a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url),30000);
+    const result = await prepareProjectExport(context.snapshot);
+    if (!transferCurrent(context)) return transferStale();
+    downloadExport({...result, filename: `${context.filename}.yadilab`});
     notify('Export/nedladdning initierad. Webbläsarens faktiska skrivning till disk är inte verifierad.');
-  } catch (error) { notify(`Export avvisad: ${error.message}`,true); }
+  } catch (error) {
+    if (!transferCurrent(context)) return transferStale();
+    notify(`Export avvisad: ${error.message}`, true);
+  }
 }
 function doraSessionInput() {
   return [
