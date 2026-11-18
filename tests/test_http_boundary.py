@@ -65,6 +65,7 @@ class LocalHTTPBoundaryTests(unittest.TestCase):
         for path in ("/ui/dom.js", "/services/api.js",
                      "/features/projects/persistence.js", "/features/projects/transfer.js",
                      "/features/diagnostics/queries.js", "/features/diagnostics/presenters.js",
+                     "/features/diagnostics/icmp-investigation-panel.js",
                      "/features/sessions/dhcp-investigation.js",
                      "/features/sessions/icmp-investigation.js",
                      "/features/sessions/dora-session.js",
@@ -77,6 +78,7 @@ class LocalHTTPBoundaryTests(unittest.TestCase):
                 self.assertIn(b"export ", body)
         for path in ("/ui/", "/services/", "/features/", "/features/projects/",
                      "/features/diagnostics/", "/features/diagnostics/queries.js/extra",
+                     "/features/diagnostics/icmp-investigation-panel.js/extra",
                      "/features/sessions/", "/features/sessions/dhcp-investigation.js/extra",
                      "/features/sessions/unknown.js",
                      "/features/sessions/icmp-investigation.js/extra",

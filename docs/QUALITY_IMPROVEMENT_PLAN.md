@@ -1,6 +1,6 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt för etapp 3D4: `main` vid `f70a0d1980894d6e8f944387269ee79680c165ca`.
+Utgångspunkt för etapp 3E: `main` vid `5687b63d72e2bb60928ccbe38627cf3836847e4b`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
@@ -16,13 +16,43 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 3D-SGC | Server Session Garbage Collection | Integrerad i `main`; CI godkänd |
 | 3D2 | ICMP Investigation-sessionens livscykel | Integrerad i `main`; CI godkänd |
 | 3D3 | DHCP/DORA-sessionens livscykel | Integrerad i `main`; CI godkänd |
-| 3D4 | ARP/Ethernet-sessionens livscykel | LOCAL_PASS; CI_PENDING; NOT_MERGED |
-| 3E | Fortsatt frontendmodularisering | Planerad |
+| 3D4 | ARP/Ethernet-sessionens livscykel | Integrerad i `main`; CI godkänd |
+| 3E | Frontend-entrypoint och integrationsgränser | LOCAL_PASS; CI_PENDING; NOT_MERGED |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
+
+## Etapp 3E: ICMP-panelens presentationsgräns
+
+Tidigare låg ICMP Investigation-panelens observationsformatering,
+DOM-val, knappstatus, diagnos, återställning och svensk rapport direkt i
+`app.js`. Den läste projektet och ICMP-controllerns kopierade vy men
+ägde inget av deras tillstånd. Hela detta presentationsblock finns nu i
+`web/features/diagnostics/icmp-investigation-panel.js`. Modulen importerar
+bara `ui/dom.js` och får projektet och sessionsvyn som explicita argument.
+`app.js` avgör fortsatt när panelen renderas och äger fortsatt det enda
+kanoniska projektet, Save/Open, revisioner och händelser. De fyra
+sessionscontrollers är oförändrade.
+
+`app.js` gick från 2 421 till 2 237 rader. Det är endast en mätpunkt;
+den förbättrade gränsen är att ICMP-presentationen inte längre ligger
+bland projektmutation och sessionsanrop. `renderInspector()` ligger kvar
+eftersom den muterar projektet och hanterar många port- och routeval.
+Troubleshooting- och DORA-panelerna har fler inbördes kopplade
+inmatningsval, så de flyttades inte i denna avgränsade etapp.
+
+Den faktiska ES-importgrafen kontrolleras automatiskt från `app.js`:
+varje import måste peka på en befintlig lokal fil, alla moduler måste
+vara nåbara och grafen får inte innehålla cykler. `index.html` har
+fortfarande bara en modul-entrypoint. Den nya modulen tillåts endast på
+sin exakta HTTP-sökväg och måste laddas som JavaScript i Chromium.
+Riktade U01–U10-kontroller täcker upprepad rendering, bevarade val,
+serverbehandlad misslyckad Echo, korrekt diagnos och återställd Echo,
+New/Open/Import samt oförändrade sparade bytes.
+Lokalt passerade 515 Python-tester, `npm run check` och hela Chromium-smoke
+i `DIRECT_HTTP`. PR-CI är ännu inte verifierad.
 
 ## Etapp 3D4: ARP/Ethernet-session
 
@@ -57,7 +87,8 @@ Ethernet- och Save/Open-flöden bevaras. En verklig projektfil jämförs med
 SHA-256. Modulen tillåts bara på sin exakta statiska sökväg; katalog,
 okända vägar och extra segment nekas.
 Lokalt passerade 514 Python-tester, `npm run check` och hela Chromium-smoke
-i `DIRECT_HTTP`, inklusive L01–L22. PR-CI är ännu inte verifierad.
+i `DIRECT_HTTP`, inklusive L01–L22. PR #58 är nu integrerad i `main`
+med godkänd CI.
 
 ## Etapp 3D3: DHCP/DORA-session
 

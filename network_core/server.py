@@ -158,6 +158,7 @@ class Handler(BaseHTTPRequestHandler):
                           "/ui/dom.js", "/services/api.js", "/features/projects/persistence.js",
                           "/features/projects/transfer.js",
                           "/features/diagnostics/queries.js", "/features/diagnostics/presenters.js",
+                          "/features/diagnostics/icmp-investigation-panel.js",
                           "/features/sessions/dhcp-investigation.js",
                           "/features/sessions/icmp-investigation.js",
                           "/features/sessions/dora-session.js",

@@ -137,6 +137,8 @@ def browser_open(page, base):
     queries = (ROOT / 'web/features/diagnostics/queries.js').read_text(encoding='utf8')
     queries = queries.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     presenters = (ROOT / 'web/features/diagnostics/presenters.js').read_text(encoding='utf8').replace('export ', '')
+    icmp_panel = (ROOT / 'web/features/diagnostics/icmp-investigation-panel.js').read_text(encoding='utf8')
+    icmp_panel = icmp_panel.replace("import {$, el} from '../../ui/dom.js';", '').replace('export ', '')
     investigation = (ROOT / 'web/features/sessions/dhcp-investigation.js').read_text(encoding='utf8')
     investigation = investigation.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     icmp_investigation = (ROOT / 'web/features/sessions/icmp-investigation.js').read_text(encoding='utf8')
@@ -158,7 +160,8 @@ def browser_open(page, base):
     app = app.replace("import {createIcmpInvestigationController} from './features/sessions/icmp-investigation.js';", '')
     app = app.replace("import {createDoraSessionController} from './features/sessions/dora-session.js';", '')
     app = app.replace("import {createSimulationSessionController} from './features/sessions/simulation-session.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + investigation + '\n' + icmp_investigation + '\n' + dora_session + '\n' + simulation_session + '\n' + app)
+    app = app.replace("import {renderIcmpInvestigationPanel} from './features/diagnostics/icmp-investigation-panel.js';", '')
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + icmp_panel + '\n' + investigation + '\n' + icmp_investigation + '\n' + dora_session + '\n' + simulation_session + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
 
 
@@ -562,6 +565,133 @@ def investigation_lifecycle_races(context, base, network_mode, errors):
     expect(page.locator('#investigation-recovery')).not_to_contain_text('RESULTAT: RECOVERED')
     assert not errors, errors
     page.close()
+
+
+def icmp_panel_integration(context, network_mode, errors):
+    """Repeated ICMP panel rendering over real server evidence and a saved file."""
+    with tempfile.TemporaryDirectory() as directory:
+        store = ProjectStore(directory)
+        project = icmp_routed_lab()
+        store.save('icmp-panel', project)
+        saved_file = Path(directory) / 'icmp-panel.yadilab'
+        digest = hashlib.sha256(saved_file.read_bytes()).hexdigest()
+        server = LabHTTPServer(('127.0.0.1', 0), store)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = f'http://127.0.0.1:{server.server_port}/'
+        try:
+            def import_project(page):
+                with page.expect_response('**/api/validate') as imported:
+                    page.locator('#import-file').set_input_files({
+                        'name': 'icmp-panel.json', 'mimeType': 'application/json',
+                        'buffer': json.dumps(project).encode('utf-8'),
+                    })
+                assert imported.value.status == 200
+
+            def fresh():
+                page = context.new_page()
+                page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+                assert browser_open(page, base) == network_mode
+                page.on('dialog', lambda dialog: dialog.accept())
+                import_project(page)
+                page.locator('#icmp-investigation-source').select_option('["a","eth0"]')
+                page.locator('#icmp-investigation-destination').fill('203.0.113.20')
+                page.locator('#icmp-investigation-ttl').fill('5')
+                return page
+
+            def start(page):
+                with patch('network_core.icmp_investigation.secrets.randbelow', return_value=0):
+                    with page.expect_response('**/api/icmp/investigation/start') as started:
+                        page.locator('#icmp-investigation-start').click()
+                assert started.value.status == 200
+                sid = started.value.json()['sessionId']
+                assert sid in server.icmp_investigations._sessions
+                return sid
+
+            def probe(page, kind):
+                page.locator('#icmp-investigation-probe').select_option(kind)
+                with page.expect_response('**/api/icmp/investigation/probe') as measured:
+                    page.locator('#icmp-investigation-measure').click()
+                assert measured.value.status == 200
+                return measured.value.json()
+
+            # U01/U02/U07/U08: render repeatedly with explicit choices. No
+            # extra listener, server measurement, or session replacement.
+            page = fresh()
+            sid = start(page)
+            page.locator('#icmp-investigation-probe').select_option('link')
+            page.locator('#icmp-investigation-link').select_option('la')
+            page.locator('#icmp-investigation-diagnosis').select_option('CABLE_DOWN')
+            for _ in range(4):
+                page.locator('#icmp-investigation-probe').select_option('route')
+                page.locator('#icmp-investigation-route-node').select_option('a')
+                page.locator('#icmp-investigation-probe').select_option('link')
+                expect(page.locator('#icmp-investigation-link')).to_have_value('la')
+                expect(page.locator('#icmp-investigation-route-node')).to_have_value('a')
+                expect(page.locator('#icmp-investigation-diagnosis')).to_have_value('CABLE_DOWN')
+            assert server.icmp_investigations._sessions[sid].state()['observations'] == 0
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Aktiv dold övning')
+
+            # U03/U05: the real faulted Echo fails; a completed link reading
+            # remains labelled with its original link after a selector change.
+            failed = probe(page, 'ping')['observation']
+            assert failed['status'] != 'REPLIED' and failed['replyMatched'] is False
+            expect(page.locator('#icmp-investigation-observations')).to_contain_text('giltig Echo Reply: nej')
+            probe(page, 'route')
+            page.locator('#icmp-investigation-probe').select_option('link')
+            link = probe(page, 'link')['observation']
+            assert link['linkId'] == 'la'
+            page.locator('#icmp-investigation-link').select_option('lb')
+            expect(page.locator('#icmp-investigation-observations')).to_contain_text('KABEL la')
+            probe(page, 'link')
+            expect(page.locator('#icmp-investigation-observations')).to_contain_text('KABEL lb')
+            assert server.icmp_investigations._sessions[sid].state()['observations'] == 4
+
+            # U04: real diagnosis and repaired two-way Echo produce the
+            # Swedish report. Repeated panel renders leave server state intact.
+            with page.expect_response('**/api/icmp/investigation/diagnose') as diagnosed:
+                page.locator('#icmp-investigation-diagnose').click()
+            assert diagnosed.value.json()['correct'] is True
+            expect(page.locator('#icmp-investigation-verdict')).to_contain_text('DIAGNOS BEKRÄFTAD')
+            with page.expect_response('**/api/icmp/investigation/repair') as repaired:
+                page.locator('#icmp-investigation-repair').click()
+            assert repaired.value.json()['status'] == 'RECOVERED'
+            assert repaired.value.json()['replyMatched'] is True
+            expect(page.locator('#icmp-investigation-recovery')).to_contain_text('FELSÖKNINGSRAPPORT')
+            expect(page.locator('#icmp-investigation-recovery')).to_contain_text('Giltigt ICMP Echo Reply: ja')
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            with page.expect_response('**/api/icmp/investigation/stop'):
+                page.locator('#new-project').click()
+            expect(page.locator('#icmp-investigation-observations')).to_contain_text('Börja med IP-uppgifter')
+            page.close()
+
+            # U06/U10: Open and Import replace an observed workspace without
+            # keeping an old panel result or changing the saved file bytes.
+            for replacement in ('open', 'import'):
+                page = fresh()
+                old = start(page)
+                probe(page, 'ping')
+                with page.expect_response('**/api/icmp/investigation/stop') as stopped:
+                    if replacement == 'open':
+                        page.locator('#saved-projects').select_option('icmp-panel')
+                        with page.expect_response('**/api/projects/icmp-panel') as opened:
+                            page.locator('#open-project').click()
+                        assert opened.value.status == 200
+                    else:
+                        import_project(page)
+                assert stopped.value.status == 200
+                assert old not in server.icmp_investigations._sessions
+                expect(page.locator('#icmp-investigation-status')).to_contain_text('Ingen ICMP-övning')
+                expect(page.locator('#icmp-investigation-observations')).to_contain_text('Börja med IP-uppgifter')
+                assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+                page.close()
+            assert not errors, errors
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+            assert not worker.is_alive()
+            assert not server._cleanup_thread.is_alive()
 
 
 def dora_session_races(context, network_mode, errors):
@@ -2102,6 +2232,7 @@ def run():
             for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
                            'features/projects/transfer.js', 'features/diagnostics/queries.js',
                            'features/diagnostics/presenters.js',
+                           'features/diagnostics/icmp-investigation-panel.js',
                            'features/sessions/dhcp-investigation.js',
                            'features/sessions/icmp-investigation.js',
                            'features/sessions/dora-session.js',
@@ -2117,6 +2248,7 @@ def run():
                 for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
                                'features/projects/transfer.js', 'features/diagnostics/queries.js',
                                'features/diagnostics/presenters.js',
+                               'features/diagnostics/icmp-investigation-panel.js',
                                'features/sessions/dhcp-investigation.js',
                                'features/sessions/icmp-investigation.js',
                                'features/sessions/dora-session.js',
@@ -4607,6 +4739,7 @@ def run():
             investigation_lifecycle_races(context, base, network_mode, errors)
             abandoned_investigation_cleanup(context, network_mode, errors)
             icmp_investigation_races(context, network_mode, errors)
+            icmp_panel_integration(context, network_mode, errors)
             dora_session_races(context, network_mode, errors)
             simulation_session_races(context, network_mode, errors)
             assert not errors, errors
