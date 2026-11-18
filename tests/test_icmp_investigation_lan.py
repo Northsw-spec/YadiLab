@@ -3,6 +3,7 @@ from copy import deepcopy
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from network_core.icmp_investigation import IcmpInvestigation, LAN_KINDS, _candidates
@@ -74,6 +75,18 @@ class LanInvestigationTests(unittest.TestCase):
                 self.assertIn("ARP", fixed["report"]["evidence"])
                 self.assertEqual(case.project, before)
 
+    def test_normal_lan_selection_can_choose_more_than_cable_faults(self):
+        project = lan_lab()
+        with patch("network_core.icmp_investigation.secrets.randbelow",
+                   side_effect=lambda count: count - 1):
+            case = IcmpInvestigation(project, "a", "eth0", "192.168.10.20", 5)
+        self.assertEqual(case._kind, "VLAN_MISMATCH")
+        self.assertNotIn("VLAN_MISMATCH", json.dumps(case.state()))
+        with patch("network_core.icmp_investigation.secrets.randbelow",
+                   return_value=0):
+            first = IcmpInvestigation(project, "a", "eth0", "192.168.10.20", 5)
+        self.assertEqual(first._kind, "CABLE_DOWN")
+
     def test_candidate_rejection_and_unchanged_save_open_bytes(self):
         project = lan_lab(second_vlan=False)
         baseline = EchoExchange(project).ping("a", "eth0", "192.168.10.20", 5, 1, 1)
@@ -94,7 +107,8 @@ class LanInvestigationTests(unittest.TestCase):
             store.save("lan", project)
             original = store.path("lan").read_bytes()
             reopened = store.read("lan")["project"]
-            case = IcmpInvestigation(reopened, "a", "eth0", "192.168.10.20", 5)
+            case = IcmpInvestigation(reopened, "a", "eth0", "192.168.10.20", 5,
+                                     _test_kind="CABLE_DOWN")
             self.assertEqual(case._kind, "CABLE_DOWN")
             case.probe("ping", {})
             case.probe("route", {"nodeId": "a", "destinationIpv4": "192.168.10.20"})

@@ -256,13 +256,9 @@ class IcmpInvestigation:
             raise ProjectValidationError(
                 "icmp investigation: no verified reversible link/port/VLAN/address/route/prefix/next-hop fault")
         if _test_kind is None:
-            if direct_lan:
-                first = next(kind for kind in LAN_KINDS
-                             if any(candidate[0] == kind for candidate in allowed))
-                preferred = [candidate for candidate in allowed if candidate[0] == first]
-                choice = preferred[secrets.randbelow(len(preferred))]
-            else:
-                choice = allowed[secrets.randbelow(len(allowed))]
+            # Every candidate has independently proven failure and recovery.
+            # Do not silently force LAN exercises to always be cable faults.
+            choice = allowed[secrets.randbelow(len(allowed))]
         else:
             choice = next((candidate for candidate in allowed
                            if candidate[0] == _test_kind), None)

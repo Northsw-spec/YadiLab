@@ -1455,7 +1455,9 @@ def run():
             with lan_page.expect_response('**/api/icmp/investigation/start') as lan_start:
                 lan_page.locator('#icmp-investigation-start').click()
             assert lan_start.value.status == 200
-            assert 'CABLE_DOWN' not in json.dumps(lan_start.value.json())
+            assert not any(kind in json.dumps(lan_start.value.json()) for kind in
+                           ('CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH',
+                            'IPV4_HOST_ADDRESS_MISMATCH'))
             lan_page.locator('#icmp-investigation-probe').select_option('ping')
             with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_ping:
                 lan_page.locator('#icmp-investigation-measure').click()
@@ -1478,8 +1480,45 @@ def run():
                 measured = lan_link.value.json()['observation']
                 if not measured['observedEnabled']:
                     disconnected.append(link_id)
-            assert len(disconnected) == 1
-            lan_page.locator('#icmp-investigation-diagnosis').select_option('CABLE_DOWN')
+            # Infer the hidden cause from independent documented-versus-
+            # simulated observations; the normal exercise chooses at random.
+            lan_page.locator('#icmp-investigation-probe').select_option('port')
+            shut_ports, changed_addresses = [], []
+            for nid, pid in (('sw', 'a'), ('sw', 'b'), ('b', 'eth0')):
+                lan_page.locator('#icmp-investigation-port').select_option(
+                    json.dumps([nid, pid], separators=(',', ':')))
+                with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_port:
+                    lan_page.locator('#icmp-investigation-measure').click()
+                measured = lan_port.value.json()['observation']
+                if measured['documentedEnabled'] and not measured['observedEnabled']:
+                    shut_ports.append((nid, pid))
+                if measured['documentedIpv4'] != measured['observedIpv4']:
+                    changed_addresses.append((nid, pid))
+            lan_page.locator('#icmp-investigation-probe').select_option('vlan')
+            changed_vlans = []
+            for nid, pid in (('sw', 'a'), ('sw', 'b')):
+                lan_page.locator('#icmp-investigation-vlan').select_option(
+                    json.dumps([nid, pid], separators=(',', ':')))
+                with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_vlan:
+                    lan_page.locator('#icmp-investigation-measure').click()
+                measured = lan_vlan.value.json()['observation']
+                if measured['documentedVlan'] != measured['observedVlan']:
+                    changed_vlans.append((nid, pid))
+            assert sum(bool(x) for x in
+                       (disconnected, shut_ports, changed_vlans, changed_addresses)) == 1
+            if disconnected:
+                assert len(disconnected) == 1
+                inferred, failure_point = 'CABLE_DOWN', disconnected[0]
+            elif shut_ports:
+                assert len(shut_ports) == 1
+                inferred, failure_point = 'PORT_SHUTDOWN', shut_ports[0][1]
+            elif changed_vlans:
+                assert len(changed_vlans) == 1
+                inferred, failure_point = 'VLAN_MISMATCH', changed_vlans[0][1]
+            else:
+                assert changed_addresses == [('b', 'eth0')]
+                inferred, failure_point = 'IPV4_HOST_ADDRESS_MISMATCH', 'eth0'
+            lan_page.locator('#icmp-investigation-diagnosis').select_option(inferred)
             with lan_page.expect_response('**/api/icmp/investigation/diagnose') as lan_diagnose:
                 lan_page.locator('#icmp-investigation-diagnose').click()
             assert lan_diagnose.value.json()['correct'] is True
@@ -1489,7 +1528,8 @@ def run():
             assert repaired_lan['status'] == 'RECOVERED'
             assert repaired_lan['restoredEchoStatus'] == 'REPLIED'
             assert repaired_lan['replyMatched'] is True
-            assert disconnected[0] in repaired_lan['report']['rootCause']
+            assert repaired_lan['faultCategory'] == inferred
+            assert failure_point in repaired_lan['report']['rootCause']
             expect(lan_page.locator('#icmp-investigation-recovery')).to_contain_text(
                 'matchande Echo Reply')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
