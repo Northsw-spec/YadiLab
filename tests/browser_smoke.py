@@ -131,6 +131,9 @@ def browser_open(page, base):
     persistence = persistence.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     transfer = (ROOT / 'web/features/projects/transfer.js').read_text(encoding='utf8')
     transfer = transfer.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
+    queries = (ROOT / 'web/features/diagnostics/queries.js').read_text(encoding='utf8')
+    queries = queries.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
+    presenters = (ROOT / 'web/features/diagnostics/presenters.js').read_text(encoding='utf8').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
     app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
     app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
@@ -138,27 +141,30 @@ def browser_open(page, base):
     app = app.replace("import {api} from './services/api.js';", '')
     app = app.replace("import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';", '')
     app = app.replace("import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport} from './features/projects/transfer.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + app)
+    app = app.replace("import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';", '')
+    app = app.replace("import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';", '')
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
 
 
-def hold_http_reply(page, path):
+def hold_http_reply(page, path, first_only=False):
     """Delay delivery to app code only after real HTTP and disk work finish."""
-    page.evaluate("""path => {
+    page.evaluate("""({path, firstOnly}) => {
       const originalFetch = window.fetch;
+      let seen = 0;
       let release;
       const gate = new Promise(resolve => { release = resolve; });
       window.__heldReply = false;
       window.__releaseReply = () => { release(); window.fetch = originalFetch; };
       window.fetch = async (...args) => {
         const response = await originalFetch(...args);
-        if (String(args[0]) === path) {
+        if (String(args[0]) === path && (!firstOnly || ++seen === 1)) {
           window.__heldReply = true;
           await gate;
         }
         return response;
       };
-    }""", path)
+    }""", {'path': path, 'firstOnly': first_only})
 
 
 def release_http_reply(page):
@@ -390,6 +396,93 @@ def transfer_races(context, base, network_mode, store, errors):
     assert hashlib.sha256((store / 'csv-demo.yadilab').read_bytes()).hexdigest() == saved_hash
 
 
+def diagnostic_races(context, base, network_mode, errors):
+    """Use the routed saved lab and delay actual diagnostic HTTP replies."""
+    source = json.dumps(['node-1', 'port-1'], separators=(',', ':'))
+
+    def fresh():
+        test_page = context.new_page()
+        test_page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+        assert browser_open(test_page, base) == network_mode
+        test_page.locator('#saved-projects').select_option('lab')
+        test_page.locator('#open-project').click()
+        expect(test_page.locator('#save-indicator')).to_contain_text('Sparat · lab.yadilab')
+        return test_page
+
+    # A/B: real ARP learns MACs and highlights only currently documented wires.
+    page = fresh()
+    page.locator('#arp-source').select_option(source)
+    page.locator('#arp-target-ip').fill('192.0.2.20')
+    page.locator('#run-arp').click()
+    expect(page.locator('#arp-result')).to_contain_text('ARP-status: RESOLVED')
+    expect(page.locator('#arp-result')).to_contain_text('Inlärda switch-MAC-tabeller:')
+    assert page.locator('.network-edge.highlight').count() > 0
+    hold_http_reply(page, '/api/diagnostics/arp')
+    page.locator('#run-arp').click()
+    page.wait_for_function('window.__heldReply')
+    page.locator('#new-project').click()
+    release_http_reply(page)
+    expect(page.locator('#arp-result')).to_contain_text('Ingen aktuell ARP-simulering')
+    assert page.locator('.network-edge.highlight').count() == 0
+    page.close()
+
+    # C: changing the route destination invalidates a delayed match.
+    page = fresh()
+    page.locator('#route-source').select_option('node-1')
+    page.locator('#route-destination-ip').fill('192.0.2.20')
+    hold_http_reply(page, '/api/routing/connected')
+    page.locator('#run-route-lookup').click()
+    page.wait_for_function('window.__heldReply')
+    page.locator('#route-destination-ip').fill('198.51.100.55')
+    release_http_reply(page)
+    expect(page.locator('#route-result')).to_contain_text('Ingen aktuell route lookup')
+    page.close()
+
+    # D: an old IPv4 hop sequence cannot survive a TTL edit.
+    page = fresh()
+    page.locator('#ipv4-source').select_option(source)
+    page.locator('#ipv4-destination').fill('192.0.2.20')
+    page.locator('#ipv4-ttl').fill('1')
+    hold_http_reply(page, '/api/ipv4/trace')
+    page.locator('#run-ipv4-trace').click()
+    page.wait_for_function('window.__heldReply')
+    page.locator('#ipv4-ttl').fill('2')
+    release_http_reply(page)
+    expect(page.locator('#ipv4-result')).to_contain_text('Ingen aktuell IPv4-simulering')
+    page.close()
+
+    # E: an old Echo result cannot claim a reply for a changed destination.
+    page = fresh()
+    page.locator('#ping-source').select_option(source)
+    page.locator('#ping-destination').fill('192.0.2.20')
+    hold_http_reply(page, '/api/icmp/echo')
+    page.locator('#run-ping').click()
+    page.wait_for_function('window.__heldReply')
+    page.locator('#ping-destination').fill('198.51.100.55')
+    release_http_reply(page)
+    expect(page.locator('#ping-result')).to_contain_text('Ingen aktuell ICMP Echo-utväxling')
+    page.close()
+
+    # F/G: second result wins, and a late 422 cannot erase a later success.
+    for first, second, expected in (
+        ('192.0.2.20', '198.51.100.55', 'Routingstatus: NO_ROUTE'),
+        ('2001:db8::1', '192.0.2.20', 'Routingstatus: MATCH'),
+    ):
+        page = fresh()
+        page.locator('#route-source').select_option('node-1')
+        page.locator('#route-destination-ip').fill(first)
+        hold_http_reply(page, '/api/routing/connected', first_only=True)
+        page.locator('#run-route-lookup').click()
+        page.wait_for_function('window.__heldReply')
+        page.locator('#route-destination-ip').fill(second)
+        page.locator('#run-route-lookup').click()
+        expect(page.locator('#route-result')).to_contain_text(expected)
+        release_http_reply(page)
+        expect(page.locator('#route-result')).to_contain_text(expected)
+        assert 'avvisad' not in page.locator('#route-result').inner_text()
+        page.close()
+
+
 def run():
     with tempfile.TemporaryDirectory() as td, sync_playwright() as playwright:
         store = Path(td)
@@ -405,7 +498,8 @@ def run():
         module_responses = {}
         def record_module(response):
             for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
-                           'features/projects/transfer.js'):
+                           'features/projects/transfer.js', 'features/diagnostics/queries.js',
+                           'features/diagnostics/presenters.js'):
                 if response.url.endswith('/' + module):
                     module_responses[module] = response
         page.on('response', record_module)
@@ -415,7 +509,8 @@ def run():
             expect(page.locator('#empty-state')).to_be_visible()
             if network_mode == 'DIRECT_HTTP':
                 for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
-                               'features/projects/transfer.js'):
+                               'features/projects/transfer.js', 'features/diagnostics/queries.js',
+                               'features/diagnostics/presenters.js'):
                     response = module_responses.get(module)
                     assert response is not None and response.status == 200, f'{module} was not loaded'
                     assert response.headers['content-type'].split(';')[0] in (
@@ -2898,6 +2993,7 @@ def run():
             save_page.close()
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
+            diagnostic_races(context, base, network_mode, errors)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')

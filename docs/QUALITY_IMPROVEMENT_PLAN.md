@@ -1,6 +1,6 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt för etapp 3B2: `main` vid `acb7c78baf8c2225dae712b624304844b760774e`.
+Utgångspunkt för etapp 3C: `main` vid `6aad43bfa9fb00702870e5da04c661405b66e6ac`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
@@ -10,13 +10,47 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 2 | Samtidighetssäker Save/Open | Integrerad i `main` |
 | 3A | Fristående DOM- och API-moduler | Integrerad i `main`; CI godkänd |
 | 3B1 | Save/Open och projektlista | Integrerad i `main`; CI godkänd |
-| 3B2 | Säker import/export | Implementerad och lokalt verifierad; CI/merge återstår |
-| 3C–3E | Fortsatt frontendmodularisering | Planerad |
+| 3B2 | Säker import/export | Integrerad i `main`; CI godkänd |
+| 3C | ARP-, routing-, IPv4- och ICMP-vyer | Implementerad och lokalt verifierad; CI/merge återstår |
+| 3D–3E | Fortsatt frontendmodularisering | Planerad |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
+
+## Etapp 3C: fyra diagnostikflöden
+
+`web/features/diagnostics/queries.js` skickar separata projektsnapshots
+till befintliga API-endpoints för ARP, route lookup, IPv4 trace och ICMP
+Echo. `presenters.js` returnerar statusklass och samma svenska resultattext
+för respektive svar. Ingen av modulerna äger tillstånd eller DOM, och
+ingen nätverksmotor har flyttats eller duplicerats.
+
+`app.js` äger fortsatt projekt, revisioner, användarval,
+diagnostikresultat, länkmarkeringar, canvas och alla sessioner. Varje
+startad diagnos får en generation per typ samt fångar arbetsyterevision,
+redigeringsrevision, projektets serialiserade innehåll och alla relevanta
+inmatningsvärden. Både lyckade och felaktiga API-svar förkastas om något
+har ändrats eller en senare körning startats. Ändrade inmatningar
+ogiltigförklarar den visade diagnosen; ARP rensar då även markerade
+länkar. Samma kontroller gäller fördröjda 422-fel och överlappande
+anrop. API:t får en fristående kopia av klickets projektsnapshot.
+
+Chromium kontrollerar normal ARP med MAC-tabell och fysisk länkmarkering,
+fördröjd ARP efter arbetsytebyte, ändrad route-destination, ändrad IPv4
+TTL, ändrat ICMP-mål, två överlappande route lookups och ett äldre
+HTTP-fel som svarar efter en giltig route lookup. Befintliga tester
+kontrollerar statusar, svenska protokollförklaringar, länkreferenser,
+Save/Open, import/export och sessionsfunktioner. Den exakta statiska
+HTTP-listan omfattar bara de två nya modulerna.
+Lokalt passerade 505 Python-tester, `npm run check` och den utökade
+Chromium-regressionen med direkt HTTP och riktiga API-svar.
+
+3D återstår för DHCP-/ICMP-övningarnas och de långlivade sessionernas
+livscykler; deras delade generationer och server-ID:n får inte brytas
+isär utan egna race-tester. 3E återstår för en tunnare entrypoint.
+Slutlig CI- och mergeverifiering för 3C återstår.
 
 ## Etapp 3B2: import/export med arbetsyteskydd
 
@@ -44,9 +78,8 @@ omstartstester körs fortfarande. HTTP-servern tillåter endast den
 exakta nya modulvägen; kataloger och andra sökvägar nekas.
 Lokalt passerade 505 Python-tester, `npm run check` och den utökade
 Chromium-regressionen med direkt HTTP och kontrollerade nedladdningsbytes.
-Kvarvarande arbete: 3C för diagnostikens tydliga modulgränser, därefter
-3D för sessionslivscykler och 3E för en tunnare entrypoint. Slutlig
-CI- och mergeverifiering av 3B2 återstår.
+Etapp 3B2 har därefter integrerats i `main` med godkänd CI. 3C behandlas
+ovan; 3D och 3E återstår.
 
 ## Etapp 3B1: projektlagring utan dubbelt tillstånd
 

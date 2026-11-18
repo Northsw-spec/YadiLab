@@ -4,6 +4,8 @@ import {$, el, field, heading, small, button, input, dropdown, check} from './ui
 import {api} from './services/api.js';
 import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';
 import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport} from './features/projects/transfer.js';
+import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';
+import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';
 
 let project = blank();
 let selection = null;
@@ -62,6 +64,13 @@ let savedSnapshot = JSON.stringify(project);
 let editRevision = 0;
 let workspaceRevision = 0;
 let savePending = false;
+const diagnosticRuns = {arp: 0, route: 0, ipv4: 0, ping: 0};
+const diagnosticFields = {
+  arp: ['arp-source', 'arp-target-ip'],
+  route: ['route-source', 'route-destination-ip'],
+  ipv4: ['ipv4-source', 'ipv4-destination', 'ipv4-ttl'],
+  ping: ['ping-source', 'ping-destination', 'ping-ttl', 'ping-identifier', 'ping-sequence'],
+};
 let toastTimer;
 const canvas = new TopologyCanvas($('topology'), {
   onSelect: selected => { selection = selected; render(); },
@@ -291,41 +300,10 @@ function renderArpDiagnostics() {
   $('run-arp').disabled = interfaces.length === 0;
 
   const output = $('arp-result');
-  output.classList.remove('ok', 'fail');
-  if (!arpDiagnostic) {
-    output.textContent = 'Ingen aktuell ARP-simulering. Varje körning startar med tomma MAC- och ARP-tabeller.';
-    return;
-  }
-  if (arpDiagnostic.error) {
-    output.classList.add('fail');
-    output.textContent = `ARP-simulering avvisad: ${arpDiagnostic.error}\nIngen ARP-upplösning bevisad.`;
-    return;
-  }
-  const {result, macTables, arpTable} = arpDiagnostic;
-  if (result.status === 'RESOLVED') output.classList.add('ok');
-  else output.classList.add('fail');
-  const traces = (name, transmissions) => `${name}: ${transmissions.length} fysisk(a) överföring(ar)\n`
-    + (transmissions.length ? transmissions.map(t =>
-        `  ${t.linkId}: ${t.from.node}/${t.from.port} → ${t.to.node}/${t.to.port}`
-        + (t.vlanId == null ? '' : ` · VLAN ${t.vlanId}${t.tagged ? ' (taggad)' : ' (otaggad)'}`)
-      ).join('\n') : '  Inga');
-  const drops = ['requestVlanDrops', 'replyVlanDrops'].flatMap(key =>
-    (result[key] || []).map(item => `  ${key}: ${item.switch}/${item.port} · ${item.reason} · VLAN ${item.vlanId ?? 'otaggad'}`));
-  const tables = macTables.flatMap(table => [
-    `  ${table.switchId}${table.vlanId == null ? ' (otaggad)' : ` VLAN ${table.vlanId}`}:`,
-    ...Object.entries(table.entries).map(([mac, port]) => `    ${mac} → ${port}`),
-  ]);
-  const cache = Object.entries(arpTable).map(([ip, mac]) => `  ${ip} → ${mac}`);
-  output.textContent = [
-    `ARP-status: ${result.status}`,
-    result.meaning,
-    traces('Förfrågan', result.requestTransmissions),
-    traces('Svar', result.replyTransmissions),
-    'VLAN-droppar:\n' + (drops.length ? drops.join('\n') : '  Inga observerade'),
-    'Inlärda switch-MAC-tabeller:\n' + (tables.length ? tables.join('\n') : '  Inga inlärda poster'),
-    'ARP-cache på avsändarporten:\n' + (cache.length ? cache.join('\n') : '  Tom'),
-    'Endast denna tillfälliga simulering. Inte ping, IP-routing eller verklig NIC-acceptans.',
-  ].join('\n\n');
+  const presentation = presentArp(arpDiagnostic);
+  output.classList.toggle('ok', presentation.status === 'ok');
+  output.classList.toggle('fail', presentation.status === 'fail');
+  output.textContent = presentation.text;
 }
 
 function dhcpPortChoices(role) {
@@ -1032,34 +1010,10 @@ function renderRouteLookup() {
   $('run-route-lookup').disabled = !nodes.length;
 
   const output = $('route-result');
-  output.classList.remove('ok', 'fail');
-  if (!routeLookup) {
-    output.textContent = 'Ingen aktuell route lookup. Tabellen är konfigurerad information, inte simulerad IP-leverans.';
-    return;
-  }
-  if (routeLookup.error) {
-    output.classList.add('fail');
-    output.textContent = `Route lookup avvisad: ${routeLookup.error}\nIngen IP-leverans har simulerats.`;
-    return;
-  }
-  const {status, sourceNode, destinationIpv4, routes, candidates, selectedRoute, meaning} = routeLookup;
-  if (status === 'MATCH') output.classList.add('ok');
-  else output.classList.add('fail');
-  const describe = route =>
-    `  ${route.destination} · ${route.type} · ${route.outInterface.node}/${route.outInterface.port}`
-    + ` · lokal IP ${route.sourceIpv4} · next-hop: ${route.nextHop ?? 'ingen (on-link)'}`;
-  output.textContent = [
-    `Routingstatus: ${status}`,
-    `Enhet: ${sourceNode} · Destination: ${destinationIpv4}`,
-    meaning,
-    'Konfigurerade connected och statiska routes:\n' + (routes.length ? routes.map(describe).join('\n') : '  Inga'),
-    status === 'MATCH' ?
-      'Vald längsta prefixmatchning:\n' + describe(selectedRoute) :
-      status === 'AMBIGUOUS' ?
-      'Lika specifika kandidatvägar, inget antaget beslut:\n' + candidates.map(describe).join('\n') :
-      'Ingen matchande route.',
-    'Ingen faktisk paketöverföring eller ARP-förfrågan utfördes. Grafväg, VLAN, länkstatus och NIC-acceptans är inte verifierade.',
-  ].join('\n\n');
+  const presentation = presentRoute(routeLookup);
+  output.classList.toggle('ok', presentation.status === 'ok');
+  output.classList.toggle('fail', presentation.status === 'fail');
+  output.textContent = presentation.text;
 }
 
 function icmpInvestigationDescription(item) {
@@ -1395,62 +1349,10 @@ function renderPing() {
   $('run-ping').disabled = !sources.length;
 
   const output = $('ping-result');
-  output.classList.remove('ok','fail');
-  if (!pingDiagnostic) {
-    output.textContent = 'Ingen aktuell ICMP Echo-utväxling. Varje körning har isolerad ARP- och MAC-inlärning.';
-    return;
-  }
-  if (pingDiagnostic.error) {
-    output.classList.add('fail');
-    output.textContent = `ICMP Echo avvisad: ${pingDiagnostic.error}\nIngen tur-och-retur-leverans verifierad.`;
-    return;
-  }
-  const data = pingDiagnostic;
-  output.classList.add(data.status === 'REPLIED' ? 'ok' : 'fail');
-  const lines = [
-    `Ping-status: ${data.status}`,
-    data.meaning,
-    `Echo id=${data.identifier} seq=${data.sequence}`,
-    `Echo Reply matchad: ${data.replyMatched ? 'JA' : 'NEJ'}`,
-  ];
-  if (!data.icmpError) {
-    lines.push('ICMP-routerfel: inget paket genererat eller mottaget.');
-  } else {
-    const error = data.icmpError;
-    const kind = error.type === 11 ? 'Time Exceeded' : error.type === 3 ?
-      'Destination Unreachable (Network)' : 'Unsupported';
-    lines.push(`ICMP-routerfel: ${kind} · typ ${error.type}/kod ${error.code} · ${error.status}`);
-    lines.push(`  Genererande router: ${error.sourceNode}/${error.sourcePort}`);
-    lines.push(`  Citerat original-IP: ${error.quotedSourceIpv4} → ${error.quotedDestinationIpv4}`);
-    lines.push(`  Felpaketets returtransport: ${error.trace.status}`);
-    for (const [i,step] of error.trace.steps.entries()) {
-      lines.push(`    Hopp ${i+1}: ${step.node}/${step.outPort}, ${step.route.type} ${step.route.destination}`);
-      lines.push(`    ARP: ${step.arp.status} · ${step.arp.resolvedMac || 'MAC ej upplöst'}`);
-      lines.push(`    Kablar: ${step.ipv4Transmissions.map(t=>t.linkId).join(', ') || 'inga'}`);
-    }
-    if (error.status !== 'RECEIVED') {
-      lines.push('ICMP-felet nådde INTE ursprungsporten; endast felsymptom observerades.');
-    }
-  }
-  for (const [label, trace] of [['Request',data.request],['Reply',data.reply]]) {
-    if (!trace) {
-      lines.push(`${label}: ingen faktisk datagramöverföring`);
-      continue;
-    }
-    lines.push(`${label}: ${trace.status} · IP ${trace.sourceIpv4} → ${trace.destinationIpv4}`
-      + ` · TTL ${trace.initialTtl} → ${trace.finalTtl}`);
-    for (const [i,step] of trace.steps.entries()) {
-      lines.push(`  Hopp ${i+1}: ${step.node}/${step.outPort}, ${step.route.type} ${step.route.destination}`);
-      lines.push(`    ARP: ${step.arp.status} · ${step.arp.resolvedMac || 'MAC ej upplöst'}`);
-      lines.push(`    IPv4-kablar: ${step.ipv4Transmissions.map(t=>t.linkId).join(', ') || 'inga'}`);
-      for (const d of [...(step.arp.requestVlanDrops || []),
-          ...(step.arp.replyVlanDrops || []),...step.vlanDrops]) {
-        lines.push(`    VLAN-drop: ${d.switch}/${d.port} ${d.reason}`);
-      }
-    }
-  }
-  lines.push('Svarstid: ej uppmätt. ICMP-fel visas endast när paketet faktiskt returnerat. Inga externa nät verifieras.');
-  output.textContent = lines.join('\n');
+  const presentation = presentPing(pingDiagnostic);
+  output.classList.toggle('ok', presentation.status === 'ok');
+  output.classList.toggle('fail', presentation.status === 'fail');
+  output.textContent = presentation.text;
 }
 
 function renderIPv4Trace() {
@@ -1466,43 +1368,10 @@ function renderIPv4Trace() {
   $('run-ipv4-trace').disabled = !sources.length;
 
   const output = $('ipv4-result');
-  output.classList.remove('ok', 'fail');
-  if (!ipv4Diagnostic) {
-    output.textContent = 'Ingen aktuell IPv4-simulering. Paketet skickas bara på uttrycklig begäran.';
-    return;
-  }
-  if (ipv4Diagnostic.error) {
-    output.classList.add('fail');
-    output.textContent = `IPv4-simulering avvisad: ${ipv4Diagnostic.error}\nIngen leverans är verifierad.`;
-    return;
-  }
-  const r = ipv4Diagnostic;
-  output.classList.add(r.status === 'DELIVERED' ? 'ok' : 'fail');
-  const lines = [
-    `IPv4-status: ${r.status}`,
-    r.meaning,
-    `IP ${r.sourceIpv4} → ${r.destinationIpv4}; TTL ${r.initialTtl} → ${r.finalTtl}`,
-    r.receiver ? `Mottagande port: ${r.receiver.node}/${r.receiver.port}` : 'Ingen verifierad mottagande IPv4-port.',
-  ];
-  for (const [i, step] of r.steps.entries()) {
-    lines.push(`Hopp ${i+1}: ${step.node}/${step.outPort}, TTL ${step.ttlSent}`);
-    lines.push(`  ${step.route.type} ${step.route.destination}`
-      + ` · next-hop ${step.nextHopIpv4}`
-      + (step.route.routeId ? ` · ${step.route.routeId}` : ''));
-    lines.push(`  ARP: ${step.arp.status}, ${step.arp.resolvedMac || 'MAC ej upplöst'}`);
-    const a = [...step.arp.requestTransmissions, ...step.arp.replyTransmissions];
-    lines.push(`  ARP på kablar: ${a.map(t=>t.linkId).join(', ') || 'inga'}`);
-    lines.push(`  IPv4-ramar: ${step.ipv4Transmissions.length}`);
-    for (const wire of step.ipv4Transmissions) lines.push(
-      `    ${wire.linkId}: ${wire.from.node}/${wire.from.port} → ${wire.to.node}/${wire.to.port}`
-      + (wire.vlanId == null ? '' : ` · VLAN ${wire.vlanId}`));
-    const drops = [...(step.arp.requestVlanDrops || []),
-      ...(step.arp.replyVlanDrops || []), ...step.vlanDrops];
-    for (const drop of drops) lines.push(
-      `  VLAN-drop: ${drop.switch}/${drop.port} ${drop.reason}`);
-  }
-  lines.push('Ingen ICMP Echo/Time Exceeded, IP-tjänst, returväg eller applikationsleverans simuleras.');
-  output.textContent = lines.join('\n');
+  const presentation = presentIPv4(ipv4Diagnostic);
+  output.classList.toggle('ok', presentation.status === 'ok');
+  output.classList.toggle('fail', presentation.status === 'fail');
+  output.textContent = presentation.text;
 }
 
 function renderInspector() {
@@ -2614,10 +2483,35 @@ async function runDhcp() {
   }
 }
 
+function diagnosticInputs(kind) {
+  return diagnosticFields[kind].map(id => $(id).value.trim());
+}
+function beginDiagnostic(kind) {
+  return {kind, run: ++diagnosticRuns[kind], workspaceRevision, editRevision,
+    snapshot: JSON.stringify(project), inputs: diagnosticInputs(kind)};
+}
+function diagnosticCurrent(context) {
+  return diagnosticRuns[context.kind] === context.run &&
+    workspaceRevision === context.workspaceRevision && editRevision === context.editRevision &&
+    JSON.stringify(project) === context.snapshot &&
+    JSON.stringify(diagnosticInputs(context.kind)) === JSON.stringify(context.inputs);
+}
+function clearDiagnostic(kind) {
+  diagnosticRuns[kind] += 1;
+  if (kind === 'arp') {
+    arpDiagnostic = null; arpHighlightedLinks = []; render();
+  } else if (kind === 'route') {
+    routeLookup = null; renderRouteLookup();
+  } else if (kind === 'ipv4') {
+    ipv4Diagnostic = null; renderIPv4Trace();
+  } else {
+    pingDiagnostic = null; renderPing();
+  }
+}
 async function runArp() {
-  const selected = $('arp-source').value;
-  const targetIpv4 = $('arp-target-ip').value.trim();
+  const [selected, targetIpv4] = diagnosticInputs('arp');
   if (!selected) return;
+  const context = beginDiagnostic('arp');
   if (!targetIpv4) {
     arpDiagnostic = {error:'Ange mål-IPv4 uttryckligen.'};
     arpHighlightedLinks = [];
@@ -2625,17 +2519,15 @@ async function runArp() {
     return;
   }
   const [sourceNode, sourcePort] = JSON.parse(selected);
-  const snapshot = JSON.stringify(project);
   try {
-    const result = await api('/api/diagnostics/arp',
-      {project, sourceNode, sourcePort, targetIpv4});
-    if (snapshot !== JSON.stringify(project)) return; // Never show a stale trace.
+    const result = await queryArp(context.snapshot, sourceNode, sourcePort, targetIpv4);
+    if (!diagnosticCurrent(context)) return;
     arpDiagnostic = result;
     arpHighlightedLinks = [...new Set([
       ...result.result.requestTransmissions, ...result.result.replyTransmissions,
     ].map(t => t.linkId))];
   } catch (error) {
-    if (snapshot !== JSON.stringify(project)) return;
+    if (!diagnosticCurrent(context)) return;
     arpDiagnostic = {error: error.message};
     arpHighlightedLinks = [];
   }
@@ -2999,14 +2891,11 @@ async function runTroubleshooting() {
 }
 
 async function runPing() {
-  const selected = $('ping-source').value;
+  const [selected, destinationIpv4, rawTtl, rawIdentifier, rawSequence] = diagnosticInputs('ping');
   if (!selected) return;
-  const [sourceNode,sourcePort] = JSON.parse(selected);
-  const destinationIpv4 = $('ping-destination').value.trim();
-  const rawTtl = $('ping-ttl').value.trim();
-  const rawIdentifier = $('ping-identifier').value.trim();
-  const rawSequence = $('ping-sequence').value.trim();
-  const number = s => /^[0-9]+$/.test(s) ? Number(s) : NaN;
+  const context = beginDiagnostic('ping');
+  const [sourceNode, sourcePort] = JSON.parse(selected);
+  const number = value => /^[0-9]+$/.test(value) ? Number(value) : NaN;
   const ttl = number(rawTtl), identifier = number(rawIdentifier), sequence = number(rawSequence);
   if (!destinationIpv4 || !Number.isInteger(ttl) || ttl < 1 || ttl > 255 ||
       !Number.isInteger(identifier) || identifier < 0 || identifier > 65535 ||
@@ -3015,71 +2904,55 @@ async function runPing() {
     renderPing();
     return;
   }
-  const snapshot = JSON.stringify(project);
-  const inputSnapshot = [selected,destinationIpv4,rawTtl,rawIdentifier,rawSequence].join('|');
   try {
-    const result = await api('/api/icmp/echo',
-      {project, sourceNode, sourcePort, destinationIpv4, ttl, identifier, sequence});
-    if (snapshot !== JSON.stringify(project) ||
-        [ $('ping-source').value, $('ping-destination').value.trim(),
-          $('ping-ttl').value.trim(), $('ping-identifier').value.trim(),
-          $('ping-sequence').value.trim() ].join('|') !== inputSnapshot) return;
+    const result = await queryPing(context.snapshot, sourceNode, sourcePort,
+      destinationIpv4, ttl, identifier, sequence);
+    if (!diagnosticCurrent(context)) return;
     pingDiagnostic = result;
   } catch (error) {
-    if (snapshot !== JSON.stringify(project)) return;
+    if (!diagnosticCurrent(context)) return;
     pingDiagnostic = {error:error.message};
   }
   renderPing();
 }
 
 async function runIPv4Trace() {
-  const selected = $('ipv4-source').value;
+  const [selected, destinationIpv4, rawTtl] = diagnosticInputs('ipv4');
   if (!selected) return;
-  const [sourceNode,sourcePort] = JSON.parse(selected);
-  const destinationIpv4 = $('ipv4-destination').value.trim();
-  const rawTTL = $('ipv4-ttl').value.trim();
-  if (!destinationIpv4 || !/^[0-9]+$/.test(rawTTL)) {
+  const context = beginDiagnostic('ipv4');
+  const [sourceNode, sourcePort] = JSON.parse(selected);
+  if (!destinationIpv4 || !/^[0-9]+$/.test(rawTtl)) {
     ipv4Diagnostic = {error:'Ange uttrycklig destinations-IPv4 och heltals-TTL 1–255.'};
     renderIPv4Trace();
     return;
   }
-  const ttl = Number(rawTTL);
-  const snapshot = JSON.stringify(project);
   try {
-    const result = await api('/api/ipv4/trace',
-      {project, sourceNode, sourcePort, destinationIpv4, ttl});
-    if (snapshot !== JSON.stringify(project) ||
-        $('ipv4-source').value !== selected ||
-        $('ipv4-destination').value.trim() !== destinationIpv4 ||
-        $('ipv4-ttl').value.trim() !== rawTTL) return;
+    const result = await queryIPv4(context.snapshot, sourceNode, sourcePort,
+      destinationIpv4, Number(rawTtl));
+    if (!diagnosticCurrent(context)) return;
     ipv4Diagnostic = result;
   } catch (error) {
-    if (snapshot !== JSON.stringify(project)) return;
+    if (!diagnosticCurrent(context)) return;
     ipv4Diagnostic = {error:error.message};
   }
   renderIPv4Trace();
 }
 
 async function runRouteLookup() {
-  const nodeId = $('route-source').value;
-  const destinationIpv4 = $('route-destination-ip').value.trim();
+  const [nodeId, destinationIpv4] = diagnosticInputs('route');
   if (!nodeId) return;
+  const context = beginDiagnostic('route');
   if (!destinationIpv4) {
     routeLookup = {error:'Ange destinations-IPv4 uttryckligen.'};
     renderRouteLookup();
     return;
   }
-  const snapshot = JSON.stringify(project);
   try {
-    const response = await api('/api/routing/connected', {project, nodeId, destinationIpv4});
-    if (snapshot !== JSON.stringify(project)) return;
-    if ($('route-source').value !== nodeId ||
-        $('route-destination-ip').value.trim() !== destinationIpv4) return;
-    routeLookup = response;
+    const result = await queryRoute(context.snapshot, nodeId, destinationIpv4);
+    if (!diagnosticCurrent(context)) return;
+    routeLookup = result;
   } catch (error) {
-    if (snapshot !== JSON.stringify(project)) return;
-    if ($('route-source').value !== nodeId ||
-        $('route-destination-ip').value.trim() !== destinationIpv4) return;
+    if (!diagnosticCurrent(context)) return;
     routeLookup = {error:error.message};
   }
   renderRouteLookup();
@@ -3155,6 +3028,12 @@ $('route-destination-ip').addEventListener('input', () => {
   routeLookup = null; renderRouteLookup();
 });
 $('run-arp').addEventListener('click', runArp);
+for (const kind of ['arp', 'route', 'ipv4', 'ping']) {
+  for (const id of diagnosticFields[kind]) {
+    $(id).addEventListener('input', () => clearDiagnostic(kind));
+    if ($(id).tagName === 'SELECT') $(id).addEventListener('change', () => clearDiagnostic(kind));
+  }
+}
 $('run-dhcp').addEventListener('click', runDhcp);
 $('run-dora').addEventListener('click', runDora);
 $('investigation-start').addEventListener('click', startInvestigation);
@@ -3216,15 +3095,6 @@ $('session-arp').addEventListener('click', () => runSimulationOperation('arp'));
 $('session-ethernet').addEventListener('click', () => runSimulationOperation('ethernet'));
 $('session-reset').addEventListener('click', resetSimulationSession);
 $('session-stop').addEventListener('click', stopSimulationSession);
-$('arp-source').addEventListener('change', () => {
-  arpDiagnostic = null; arpHighlightedLinks = []; renderArpDiagnostics();
-  canvas.setData(project, selection, pendingPort, highlightedLinks);
-});
-$('arp-target-ip').addEventListener('input', () => {
-  if (!arpDiagnostic) return;
-  arpDiagnostic = null; arpHighlightedLinks = []; renderArpDiagnostics();
-  canvas.setData(project, selection, pendingPort, highlightedLinks);
-});
 $('trace-target').addEventListener('change', () => { $('trace-target').dataset.userSelected = 'true'; });
 $('zoom-in').addEventListener('click', () => canvas.zoom(1.2));
 $('zoom-out').addEventListener('click', () => canvas.zoom(1 / 1.2));
