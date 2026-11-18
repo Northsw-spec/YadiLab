@@ -64,7 +64,8 @@ class LocalHTTPBoundaryTests(unittest.TestCase):
         headers = (("Host", self.host),)
         for path in ("/ui/dom.js", "/services/api.js",
                      "/features/projects/persistence.js", "/features/projects/transfer.js",
-                     "/features/diagnostics/queries.js", "/features/diagnostics/presenters.js"):
+                     "/features/diagnostics/queries.js", "/features/diagnostics/presenters.js",
+                     "/features/sessions/dhcp-investigation.js"):
             with self.subTest(path=path):
                 status, response_headers, body = self.request("GET", path, headers)
                 self.assertEqual(status, 200)
@@ -73,6 +74,7 @@ class LocalHTTPBoundaryTests(unittest.TestCase):
                 self.assertIn(b"export ", body)
         for path in ("/ui/", "/services/", "/features/", "/features/projects/",
                      "/features/diagnostics/", "/features/diagnostics/queries.js/extra",
+                     "/features/sessions/", "/features/sessions/dhcp-investigation.js/extra",
                      "/features/projects/transfer.js/extra",
                      "/features/projects/../projects/persistence.js",
                      "/ui/../services/api.js",

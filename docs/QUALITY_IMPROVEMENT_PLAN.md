@@ -1,6 +1,6 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt för etapp 3C: `main` vid `6aad43bfa9fb00702870e5da04c661405b66e6ac`.
+Utgångspunkt för etapp 3D1: `main` vid `2916ca7c9c3f3c5edf7dbb5d07a35f97f632dcb8`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
@@ -11,13 +11,54 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 3A | Fristående DOM- och API-moduler | Integrerad i `main`; CI godkänd |
 | 3B1 | Save/Open och projektlista | Integrerad i `main`; CI godkänd |
 | 3B2 | Säker import/export | Integrerad i `main`; CI godkänd |
-| 3C | ARP-, routing-, IPv4- och ICMP-vyer | Implementerad och lokalt verifierad; CI/merge återstår |
-| 3D–3E | Fortsatt frontendmodularisering | Planerad |
+| 3C | ARP-, routing-, IPv4- och ICMP-vyer | Integrerad i `main`; CI godkänd |
+| 3D1 | DHCP Investigation-sessionens livscykel | Lokalt verifierad; ej mergad |
+| 3D2–3E | Fortsatt frontendmodularisering | Planerad |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
+
+## Etapp 3D1: DHCP Investigation
+
+`web/features/sessions/dhcp-investigation.js` äger övningens enda
+sessions-ID, serverstatus, generation, busy-flagga, observationslogg,
+diagnos, återställningsresultat, fel och klockhändelse. `app.js` äger
+fortsatt det kanoniska projektet, revisionerna, inmatningsfält och DOM.
+Den ger controllern en projektsnapshot och visar en kopierad tillståndsvy.
+Övriga DHCP- och ICMP-sessioner har inte flyttats.
+
+Vid varje anrop fångas sessionens ID, generation, arbetsyte- och
+redigeringsrevision, projektsnapshot och relevanta inmatningar. Svaret
+används bara om alla fortfarande hör till samma övning. Stop kan avbryta
+en pågående operation; ett sent svar för den operationen kan då inte
+återställa logg, klocka, diagnos eller resultat. Invalidation tömmer
+frontendens övning direkt och skickar riktad Stop för dess tidigare ID.
+Om Start redan skapade en serverresurs men svaret blivit inaktuellt,
+skickas Stop för ID:t i det sena svaret. Samtidig Stop för samma ID delas
+av ett enda anrop. Misslyckad städning sparar ID:t för ett senare försök;
+ett skickat Stop räknas aldrig som bevis för att servern tog bort resursen.
+Serverns egen låsning och projektsnapshotkontroll är oförändrade.
+
+Chromium-regressionen täcker befintligt fullständigt förlopp med DORA,
+lease, T1/T2, observationsinsamling, diagnos, verklig DHCP-återställning
+och Stop. Nya negativa fall håller riktiga HTTP-svar efter serverns
+bearbetning: Start och projektbyte, dubbel Start, Probe och invalidation,
+Advance följt av ny session, ett verkligt sent Diagnose-422 efter
+projektbyte, Repair följt av Stop, sen Stop efter ny Start samt API-fel
+med ny giltig mätning och misslyckad Stop följd av lyckat nytt försök.
+Den kontrollerar serverns sessions-ID där
+endpointen medger det. Lokalt passerade 505 Python-tester,
+`npm run check` och Chromium med direkt HTTP.
+
+En osäkerhet återstår när Stop misslyckas på nätverksnivå: frontend kan
+inte avgöra om servern hann radera ID:t. Controllern behåller då ID:t för
+försök vid nästa Start i samma öppna sida. Om sidan stängs kan ID:t
+förloras. Servern begränsar antalet aktiva sessioner men har ingen
+verifierad automatisk sessionsstädning vid borttappat ID.
+Nästa avgränsade delsteg är 3D2: granska
+övriga långlivade sessioner med samma kontrakts- och raceanalys.
 
 ## Etapp 3C: fyra diagnostikflöden
 
