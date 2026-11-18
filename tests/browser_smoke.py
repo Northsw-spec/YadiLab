@@ -134,6 +134,8 @@ def browser_open(page, base):
     queries = (ROOT / 'web/features/diagnostics/queries.js').read_text(encoding='utf8')
     queries = queries.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     presenters = (ROOT / 'web/features/diagnostics/presenters.js').read_text(encoding='utf8').replace('export ', '')
+    investigation = (ROOT / 'web/features/sessions/dhcp-investigation.js').read_text(encoding='utf8')
+    investigation = investigation.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
     app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
     app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
@@ -143,7 +145,8 @@ def browser_open(page, base):
     app = app.replace("import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport} from './features/projects/transfer.js';", '')
     app = app.replace("import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';", '')
     app = app.replace("import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + app)
+    app = app.replace("import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';", '')
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + investigation + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
 
 
@@ -169,6 +172,273 @@ def hold_http_reply(page, path, first_only=False):
 
 def release_http_reply(page):
     page.evaluate('window.__releaseReply()')
+
+
+def investigation_lifecycle_races(context, base, network_mode, errors):
+    """Exercise real allocated server sessions while delaying browser delivery."""
+    fixture = dhcp_vlan_clients()
+    encoded = json.dumps(fixture).encode('utf-8')
+
+    def fresh():
+        page = context.new_page()
+        page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+        assert browser_open(page, base) == network_mode
+        page.once('dialog', lambda dialog: dialog.accept())
+        with page.expect_response('**/api/validate') as imported:
+            page.locator('#import-file').set_input_files({
+                'name': 'race-dhcp.json', 'mimeType': 'application/json', 'buffer': encoded,
+            })
+        assert imported.value.status == 200
+        page.locator('#dora-client').select_option('["client","eth0"]')
+        page.locator('#dora-server').select_option('["server","eth0"]')
+        page.locator('#dora-pool-start').fill('192.0.2.70')
+        page.locator('#dora-pool-end').fill('192.0.2.71')
+        page.locator('#dora-lease-seconds').fill('60')
+        return page
+
+    def start(page):
+        with page.expect_response('**/api/dhcp/investigation/start') as response:
+            page.locator('#investigation-start').click()
+        assert response.value.status == 200
+        session_id = response.value.json()['sessionId']
+        expect(page.locator('#investigation-status')).to_contain_text('Aktiv övning')
+        return session_id
+
+    def server_status(page, session_id):
+        return page.evaluate("""async id => (await fetch('/api/dhcp/investigation/stop', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({sessionId: id})})).status""", session_id)
+
+    # A/B/J: server allocates A before Start is delivered; two clicks yield one
+    # allocation. Switching workspaces must issue targeted Stop for A.
+    page = fresh()
+    starts = []
+    page.on('request', lambda request: starts.append(request) if
+            request.url.endswith('/api/dhcp/investigation/start') else None)
+    hold_http_reply(page, '/api/dhcp/investigation/start')
+    with page.expect_response('**/api/dhcp/investigation/start') as allocated:
+        page.locator('#investigation-start').click()
+    page.wait_for_function('window.__heldReply', timeout=5000)
+    expect(page.locator('#investigation-start')).to_be_disabled()
+    page.locator('#investigation-start').dispatch_event('click')
+    assert len(starts) == 1
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#new-project').click()
+    with page.expect_response('**/api/dhcp/investigation/stop') as cleaned:
+        release_http_reply(page)
+    old_id = allocated.value.json()['sessionId']
+    assert cleaned.value.status == 200
+    assert server_status(page, old_id) == 422
+    expect(page.locator('#investigation-status')).to_contain_text('Ingen felsökningsövning')
+    page.close()
+
+    # C/I: a real probe response processed by the server cannot resurrect the
+    # observation after project invalidation.
+    page = fresh()
+    old_id = start(page)
+    hold_http_reply(page, '/api/dhcp/investigation/probe')
+    with page.expect_response('**/api/dhcp/investigation/probe') as probed:
+        page.locator('#investigation-run-probe').click()
+    assert probed.value.status == 200
+    page.wait_for_function('window.__heldReply')
+    with page.expect_response('**/api/dhcp/investigation/stop') as cleaned:
+        page.once('dialog', lambda dialog: dialog.accept())
+        page.locator('#new-project').click()
+    assert cleaned.value.status == 200
+    release_http_reply(page)
+    expect(page.locator('#investigation-observations')).to_contain_text('Inga observationer')
+    assert server_status(page, old_id) == 422
+    page.close()
+
+    # D: Advance for A is complete at the server, but B must retain its own
+    # clock after the old reply arrives.
+    page = fresh()
+    page.locator('#investigation-difficulty').select_option('EXPIRY_RECOVERY')
+    old_id = start(page)
+    page.locator('#investigation-probe').select_option('renew')
+    with page.expect_response('**/api/dhcp/investigation/probe'):
+        page.locator('#investigation-run-probe').click()
+    expect(page.locator('#investigation-advance')).to_be_enabled()
+    hold_http_reply(page, '/api/dhcp/investigation/advance')
+    with page.expect_response('**/api/dhcp/investigation/advance') as advanced:
+        page.locator('#investigation-advance').click()
+    page.wait_for_function('window.__heldReply')
+    with page.expect_response('**/api/dhcp/investigation/stop') as stopped:
+        page.locator('#investigation-stop').click()
+    assert stopped.value.status == 200
+    new_id = start(page)
+    assert new_id != old_id
+    release_http_reply(page)
+    assert advanced.value.json()['clockSeconds'] == 53
+    expect(page.locator('#investigation-status')).to_contain_text('Aktiv övning')
+    expect(page.locator('#investigation-observations')).to_contain_text('Inga observationer')
+    assert page.locator('#investigation-clock-result').inner_text().find('53') == -1
+    assert server_status(page, old_id) == 422
+    with page.expect_response('**/api/dhcp/investigation/stop'):
+        page.locator('#investigation-stop').click()
+    page.close()
+
+    # G: the HTTP Stop for A is held after the server removed it. A workspace
+    # switch permits B to start; the late A response must not clear B.
+    page = fresh()
+    old_id = start(page)
+    hold_http_reply(page, '/api/dhcp/investigation/stop', first_only=True)
+    with page.expect_response('**/api/dhcp/investigation/stop') as stopped:
+        page.locator('#investigation-stop').click()
+    assert stopped.value.status == 200
+    page.wait_for_function('window.__heldReply')
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#new-project').click()
+    page.once('dialog', lambda dialog: dialog.accept())
+    with page.expect_response('**/api/validate'):
+        page.locator('#import-file').set_input_files({
+            'name': 'race-dhcp.json', 'mimeType': 'application/json', 'buffer': encoded,
+        })
+    page.locator('#dora-client').select_option('["client","eth0"]')
+    page.locator('#dora-server').select_option('["server","eth0"]')
+    page.locator('#dora-pool-start').fill('192.0.2.70')
+    page.locator('#dora-pool-end').fill('192.0.2.71')
+    page.locator('#dora-lease-seconds').fill('60')
+    new_id = start(page)
+    assert new_id != old_id
+    release_http_reply(page)
+    expect(page.locator('#investigation-status')).to_contain_text('Aktiv övning')
+    assert server_status(page, old_id) == 422
+    with page.expect_response('**/api/dhcp/investigation/stop'):
+        page.locator('#investigation-stop').click()
+    page.close()
+
+    # H: real API validation failure releases busy and allows a valid probe.
+    page = fresh()
+    start(page)
+    page.locator('#investigation-probe').select_option('link')
+    page.locator('#investigation-link').select_option('to-server')
+    page.evaluate("""() => {
+      const original = window.fetch;
+      window.fetch = (url, init) => {
+        if (url === '/api/dhcp/investigation/probe') {
+          const body = JSON.parse(init.body);
+          body.target = {linkId: 'not-a-link'};
+          window.fetch = original;
+          return original(url, {...init, body: JSON.stringify(body)});
+        }
+        return original(url, init);
+      };
+    }""")
+    with page.expect_response('**/api/dhcp/investigation/probe') as failed:
+        page.locator('#investigation-run-probe').click()
+    assert failed.value.status == 422
+    expect(page.locator('#investigation-observations')).to_contain_text('MÄTNING AVVISAD: inspection: undeclared link')
+    expect(page.locator('#investigation-run-probe')).to_be_enabled()
+    with page.expect_response('**/api/dhcp/investigation/probe') as succeeded:
+        page.locator('#investigation-run-probe').click()
+    assert succeeded.value.status == 200
+    expect(page.locator('#investigation-observations')).to_contain_text('LÄNKMÄTNING to-server')
+    page.evaluate("""() => {
+      const original = window.fetch;
+      window.fetch = (url, init) => {
+        if (url === '/api/dhcp/investigation/stop') {
+          const body = JSON.parse(init.body);
+          body.sessionId = 'expired-race-id';
+          window.fetch = original;
+          return original(url, {...init, body: JSON.stringify(body)});
+        }
+        return original(url, init);
+      };
+    }""")
+    with page.expect_response('**/api/dhcp/investigation/stop') as failed_stop:
+        page.locator('#investigation-stop').click()
+    assert failed_stop.value.status == 422
+    expect(page.locator('#investigation-status')).to_contain_text('Kunde inte avsluta sessionen')
+    expect(page.locator('#investigation-stop')).to_be_enabled()
+    with page.expect_response('**/api/dhcp/investigation/stop') as retried_stop:
+        page.locator('#investigation-stop').click()
+    assert retried_stop.value.status == 200
+    assert not errors, errors
+    page.close()
+
+    def ready_for_diagnosis(page):
+        start(page)
+        for kind in ('lease', 'renew'):
+            page.locator('#investigation-probe').select_option(kind)
+            with page.expect_response('**/api/dhcp/investigation/probe') as measured:
+                page.locator('#investigation-run-probe').click()
+            assert measured.value.status == 200
+        page.locator('#investigation-probe').select_option('link')
+        page.locator('#investigation-link').select_option('to-server')
+        with page.expect_response('**/api/dhcp/investigation/probe') as link:
+            page.locator('#investigation-run-probe').click()
+        page.locator('#investigation-probe').select_option('port')
+        page.locator('#investigation-port').select_option('["sw","s"]')
+        with page.expect_response('**/api/dhcp/investigation/probe') as port:
+            page.locator('#investigation-run-probe').click()
+        page.locator('#investigation-probe').select_option('vlan')
+        page.locator('#investigation-port').select_option('["sw","c"]')
+        with page.expect_response('**/api/dhcp/investigation/probe') as vlan:
+            page.locator('#investigation-run-probe').click()
+        link_value = link.value.json()['observation']
+        port_value = port.value.json()['observation']
+        vlan_value = vlan.value.json()['observation']
+        if link_value['observedCarrier'] == 'DOWN':
+            cause = ('PORT_SHUTDOWN' if port_value['observedAdmin'] == 'DOWN'
+                     else 'CABLE_DOWN')
+        else:
+            assert vlan_value['observedVlan'] == 20
+            cause = 'VLAN_MISMATCH'
+        expect(page.locator('#investigation-submit')).to_be_enabled()
+        return cause
+
+    # E: the server returns a genuine 422 for an invalid session ID. A
+    # delayed error after workspace replacement must not appear in the new UI.
+    page = fresh()
+    ready_for_diagnosis(page)
+    page.locator('#investigation-diagnosis').select_option('CABLE_DOWN')
+    page.evaluate("""() => {
+      const original = window.fetch;
+      window.fetch = (url, init) => {
+        if (url === '/api/dhcp/investigation/diagnose') {
+          const body = JSON.parse(init.body);
+          body.sessionId = 'expired-race-id';
+          window.fetch = original;
+          return original(url, {...init, body: JSON.stringify(body)});
+        }
+        return original(url, init);
+      };
+    }""")
+    hold_http_reply(page, '/api/dhcp/investigation/diagnose')
+    with page.expect_response('**/api/dhcp/investigation/diagnose') as rejected:
+        page.locator('#investigation-submit').click()
+    assert rejected.value.status == 422
+    page.wait_for_function('window.__heldReply')
+    with page.expect_response('**/api/dhcp/investigation/stop'):
+        page.once('dialog', lambda dialog: dialog.accept())
+        page.locator('#new-project').click()
+    release_http_reply(page)
+    expect(page.locator('#investigation-verdict')).not_to_contain_text('avvisad')
+    expect(page.locator('#investigation-status')).to_contain_text('Ingen felsökningsövning')
+    page.close()
+
+    # F: repair really succeeds on the server before its response is held,
+    # then Stop must make that late RECOVERED result invisible.
+    page = fresh()
+    cause = ready_for_diagnosis(page)
+    page.locator('#investigation-diagnosis').select_option(cause)
+    with page.expect_response('**/api/dhcp/investigation/diagnose') as confirmed:
+        page.locator('#investigation-submit').click()
+    assert confirmed.value.json()['correct'] is True
+    hold_http_reply(page, '/api/dhcp/investigation/repair')
+    with page.expect_response('**/api/dhcp/investigation/repair') as recovered:
+        page.locator('#investigation-repair').click()
+    page.wait_for_function('window.__heldReply')
+    with page.expect_response('**/api/dhcp/investigation/stop') as stopped:
+        page.locator('#investigation-stop').click()
+    assert stopped.value.status == 200
+    release_http_reply(page)
+    assert recovered.value.json()['status'] == 'RECOVERED'
+    expect(page.locator('#investigation-status')).to_contain_text('Ingen felsökningsövning')
+    expect(page.locator('#investigation-recovery')).not_to_contain_text('RESULTAT: RECOVERED')
+    assert not errors, errors
+    page.close()
 
 
 def persistence_races(context, base, network_mode, store, errors):
@@ -499,7 +769,8 @@ def run():
         def record_module(response):
             for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
                            'features/projects/transfer.js', 'features/diagnostics/queries.js',
-                           'features/diagnostics/presenters.js'):
+                           'features/diagnostics/presenters.js',
+                           'features/sessions/dhcp-investigation.js'):
                 if response.url.endswith('/' + module):
                     module_responses[module] = response
         page.on('response', record_module)
@@ -510,7 +781,8 @@ def run():
             if network_mode == 'DIRECT_HTTP':
                 for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
                                'features/projects/transfer.js', 'features/diagnostics/queries.js',
-                               'features/diagnostics/presenters.js'):
+                               'features/diagnostics/presenters.js',
+                               'features/sessions/dhcp-investigation.js'):
                     response = module_responses.get(module)
                     assert response is not None and response.status == 200, f'{module} was not loaded'
                     assert response.headers['content-type'].split(';')[0] in (
@@ -2994,6 +3266,7 @@ def run():
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)
+            investigation_lifecycle_races(context, base, network_mode, errors)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')

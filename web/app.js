@@ -6,6 +6,7 @@ import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './
 import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport} from './features/projects/transfer.js';
 import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';
 import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';
+import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';
 
 let project = blank();
 let selection = null;
@@ -30,15 +31,6 @@ let doraRenewalTrace = null;
 let doraFaultEvent = null;
 let doraPortFaultEvent = null;
 let doraVlanFaultEvent = null;
-let investigationId = null;
-let investigationState = null;
-let investigationGeneration = 0;
-let investigationBusy = false;
-let investigationLog = [];
-let investigationVerdict = null;
-let investigationRecovery = null;
-let investigationError = null;
-let investigationClockEvent = null;
 let sessionId = null;
 let sessionGeneration = 0;
 let sessionBusy = false;
@@ -72,6 +64,10 @@ const diagnosticFields = {
   ping: ['ping-source', 'ping-destination', 'ping-ttl', 'ping-identifier', 'ping-sequence'],
 };
 let toastTimer;
+const investigation = createDhcpInvestigationController({
+  getContext: () => ({workspaceRevision, editRevision, projectSnapshot: JSON.stringify(project)}),
+  onChange: renderInvestigation,
+});
 const canvas = new TopologyCanvas($('topology'), {
   onSelect: selected => { selection = selected; render(); },
   onPort: handlePort,
@@ -127,19 +123,7 @@ function invalidateDoraDiagnostics() {
   doraGeneration += 1;
   doraDiagnostic = null;
 }
-function invalidateInvestigation() {
-  investigationGeneration += 1;
-  const previous = investigationId;
-  investigationId = null;
-  investigationState = null;
-  investigationBusy = false;
-  investigationLog = [];
-  investigationVerdict = null;
-  investigationRecovery = null;
-  investigationError = null;
-  investigationClockEvent = null;
-  if (previous) void api('/api/dhcp/investigation/stop', {sessionId: previous}).catch(() => {});
-}
+function invalidateInvestigation() { investigation.invalidate(); }
 
 function invalidateIcmpInvestigation() {
   icmpInvestigationGeneration += 1;
@@ -503,12 +487,15 @@ function investigationDescription(probe, observation) {
 }
 
 function renderInvestigation() {
+  const {id: investigationId, state: investigationState, busy: investigationBusy,
+    log: investigationLog, verdict: investigationVerdict, recovery: investigationRecovery,
+    error: investigationError, clockEvent: investigationClockEvent} = investigation.getState();
   const active = investigationId !== null;
   const busy = investigationBusy;
   const startValues = doraSessionInput();
   $('investigation-start').disabled = active || busy
     || !startValues[0] || !startValues[1] || !startValues[2] || !startValues[3];
-  $('investigation-stop').disabled = !active || busy;
+  $('investigation-stop').disabled = !active;
   $('investigation-difficulty').disabled = active || busy;
   const nextClock = investigationState?.nextClockTargetSeconds;
   $('investigation-advance').disabled = !active || busy
@@ -1855,91 +1842,25 @@ function sessionInteger(value, min, max) {
   return /^[0-9]+$/.test(value) && Number.isSafeInteger(Number(value))
     && Number(value) >= min && Number(value) <= max ? Number(value) : null;
 }
-async function startInvestigation() {
-  if (investigationId || investigationBusy) return;
+function investigationStartInputs() {
+  return JSON.stringify([...doraSessionInput(), $('investigation-difficulty').value]);
+}
+function startInvestigation() {
   const inputs = doraSessionInput();
   const difficulty = $('investigation-difficulty').value;
   const [client, server, poolStart, poolEnd, , rawLease] = inputs;
   const leaseSeconds = sessionInteger(rawLease, 60, 604800);
   if (!client || !server || !poolStart || !poolEnd || leaseSeconds === null) {
-    investigationError = 'Välj klient, server, explicit pool och giltig leasetid i DHCP-panelen.';
-    renderInvestigation();
+    investigation.setInputError('Välj klient, server, explicit pool och giltig leasetid i DHCP-panelen.');
     return;
   }
   const [clientNode, clientPort] = JSON.parse(client);
   const [serverNode, serverPort] = JSON.parse(server);
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++investigationGeneration;
-  investigationBusy = true;
-  investigationError = null;
-  investigationLog = [];
-  investigationVerdict = null;
-  investigationRecovery = null;
-  investigationClockEvent = null;
-  renderInvestigation();
-  const stillCurrent = () => generation === investigationGeneration
-    && edit === editRevision && workspace === workspaceRevision
-    && JSON.stringify(project) === snapshot
-    && JSON.stringify(doraSessionInput()) === JSON.stringify(inputs)
-    && $('investigation-difficulty').value === difficulty;
-  try {
-    const data = await api('/api/dhcp/investigation/start', {
-      project: JSON.parse(snapshot), clientNode, clientPort, serverNode, serverPort,
-      poolStart, poolEnd, leaseSeconds, difficulty,
-    });
-    if (stillCurrent()) {
-      investigationId = data.sessionId;
-      investigationState = data;
-    } else {
-      void api('/api/dhcp/investigation/stop', {sessionId: data.sessionId}).catch(() => {});
-    }
-  } catch (error) {
-    if (stillCurrent()) investigationError = error.message;
-  } finally {
-    if (generation === investigationGeneration) {
-      investigationBusy = false;
-      renderInvestigation();
-    }
-  }
+  void investigation.start({clientNode, clientPort, serverNode, serverPort,
+    poolStart, poolEnd, leaseSeconds, difficulty}, investigationStartInputs);
 }
-
-async function advanceInvestigation() {
-  if (!investigationId || investigationBusy || !investigationState?.canAdvance) return;
-  const target = investigationState.nextClockTargetSeconds;
-  const seconds = target - investigationState.clockSeconds;
-  if (!Number.isInteger(seconds) || seconds <= 0) return;
-  const id = investigationId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++investigationGeneration;
-  investigationBusy = true;
-  investigationClockEvent = null;
-  renderInvestigation();
-  const stillCurrent = () => generation === investigationGeneration
-    && investigationId === id && edit === editRevision
-    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
-  try {
-    const data = await api('/api/dhcp/investigation/advance', {
-      sessionId: id, project: JSON.parse(snapshot), seconds,
-    });
-    if (stillCurrent()) {
-      investigationState = data;
-      investigationClockEvent = data;
-      investigationLog.push({probe: 'advance', observation: data});
-    }
-  } catch (error) {
-    if (stillCurrent()) investigationClockEvent = {error: error.message};
-  } finally {
-    if (generation === investigationGeneration) {
-      investigationBusy = false;
-      renderInvestigation();
-    }
-  }
-}
-
-async function probeInvestigation() {
-  if (!investigationId || investigationBusy || investigationState?.repaired) return;
+function advanceInvestigation() { void investigation.advance(); }
+function probeInvestigation() {
   const kind = $('investigation-probe').value;
   let target = {};
   if (kind === 'link') {
@@ -1950,118 +1871,18 @@ async function probeInvestigation() {
     const [nodeId, portId] = JSON.parse($('investigation-port').value);
     target = {nodeId, portId};
   }
-  const id = investigationId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++investigationGeneration;
-  investigationBusy = true;
-  investigationError = null;
-  renderInvestigation();
-  const stillCurrent = () => generation === investigationGeneration
-    && investigationId === id && edit === editRevision
-    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
-  try {
-    const data = await api('/api/dhcp/investigation/probe', {
-      sessionId: id, project: JSON.parse(snapshot), probe: kind, target,
-    });
-    if (stillCurrent()) {
-      investigationState = data;
-      investigationLog.push({probe:kind, observation:data.observation});
-    }
-  } catch (error) {
-    if (stillCurrent()) investigationLog.push({error:error.message});
-  } finally {
-    if (generation === investigationGeneration) {
-      investigationBusy = false;
-      renderInvestigation();
-    }
-  }
+  const readInputs = () => JSON.stringify([
+    $('investigation-probe').value, $('investigation-link').value,
+    $('investigation-port').value,
+  ]);
+  void investigation.probe(kind, target, readInputs);
 }
-
-async function diagnoseInvestigation() {
-  if (!investigationId || investigationBusy || investigationState?.diagnosed) return;
-  const id = investigationId, diagnosis = $('investigation-diagnosis').value;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++investigationGeneration;
-  investigationBusy = true;
-  renderInvestigation();
-  const stillCurrent = () => generation === investigationGeneration
-    && investigationId === id && edit === editRevision
-    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
-  try {
-    const data = await api('/api/dhcp/investigation/diagnose', {
-      sessionId: id, project: JSON.parse(snapshot), diagnosis,
-    });
-    if (stillCurrent()) {
-      investigationState = data;
-      investigationVerdict = data;
-    }
-  } catch (error) {
-    if (stillCurrent()) investigationVerdict = {error:error.message};
-  } finally {
-    if (generation === investigationGeneration) {
-      investigationBusy = false;
-      renderInvestigation();
-    }
-  }
+function diagnoseInvestigation() {
+  const diagnosis = $('investigation-diagnosis').value;
+  void investigation.diagnose(diagnosis, () => $('investigation-diagnosis').value);
 }
-
-async function repairInvestigation() {
-  if (!investigationId || investigationBusy || !investigationState?.diagnosed
-      || investigationState.repaired) return;
-  const id = investigationId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++investigationGeneration;
-  investigationBusy = true;
-  renderInvestigation();
-  const stillCurrent = () => generation === investigationGeneration
-    && investigationId === id && edit === editRevision
-    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
-  try {
-    const data = await api('/api/dhcp/investigation/repair', {
-      sessionId: id, project: JSON.parse(snapshot),
-    });
-    if (stillCurrent()) {
-      investigationState = data;
-      investigationRecovery = data;
-    }
-  } catch (error) {
-    if (stillCurrent()) investigationRecovery = {error:error.message};
-  } finally {
-    if (generation === investigationGeneration) {
-      investigationBusy = false;
-      renderInvestigation();
-    }
-  }
-}
-
-async function stopInvestigation() {
-  if (!investigationId || investigationBusy) return;
-  const id = investigationId, generation = ++investigationGeneration;
-  investigationBusy = true;
-  renderInvestigation();
-  try {
-    await api('/api/dhcp/investigation/stop', {sessionId:id});
-    if (generation === investigationGeneration) {
-      investigationId = null;
-      investigationState = null;
-      investigationLog = [];
-      investigationVerdict = null;
-      investigationRecovery = null;
-      investigationClockEvent = null;
-      investigationError = null;
-    }
-  } catch (error) {
-    if (generation === investigationGeneration) investigationError = error.message;
-  } finally {
-    if (generation === investigationGeneration) {
-      investigationBusy = false;
-      renderInvestigation();
-    }
-  }
-}
+function repairInvestigation() { void investigation.repair(); }
+function stopInvestigation() { void investigation.stop(); }
 
 async function startDoraSession() {
   if (doraSessionBusy || doraSessionId !== null || doraBusy) return;
@@ -3080,6 +2901,7 @@ for (const id of ['dora-client', 'dora-server', 'dora-pool-start', 'dora-pool-en
     }
     renderDoraDiagnostics();
     renderDoraSession();
+    renderInvestigation();
   });
 }
 
