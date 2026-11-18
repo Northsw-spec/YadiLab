@@ -40,6 +40,8 @@ class LabHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, address: tuple[str, int], store: ProjectStore):
+        if address[0] != "127.0.0.1":
+            raise ValueError("local HTTP server must bind to 127.0.0.1")
         self.store = store
         self.simulations = SimulationRegistry()
         self.dhcp_sessions = DhcpSessionRegistry()
@@ -50,6 +52,25 @@ class LabHTTPServer(ThreadingHTTPServer):
 
 class Handler(BaseHTTPRequestHandler):
     server: LabHTTPServer
+
+    def _trusted_request(self) -> bool:
+        # The listener is local, but a browser can be directed to it through
+        # an attacker-controlled DNS name. Compare the literal authority with
+        # the actual bound address and port before touching any API or file.
+        authority = f"{self.server.server_address[0]}:{self.server.server_port}"
+        hosts = self.headers.get_all("Host", [])
+        origins = self.headers.get_all("Origin", [])
+        sites = self.headers.get_all("Sec-Fetch-Site", [])
+        allowed = (len(hosts) == 1 and hosts[0] == authority
+                   and len(origins) <= 1
+                   and (not origins or origins[0] == f"http://{authority}")
+                   and len(sites) <= 1
+                   and (not sites or sites[0] in ("same-origin", "none"))
+                   and self.path.startswith("/") and not self.path.startswith("//"))
+        if not allowed:
+            self._json(HTTPStatus.FORBIDDEN, {
+                "error": "FORBIDDEN", "message": "Local HTTP origin is not allowed"})
+        return allowed
 
     def _json(self, code: int, data: dict | list) -> None:
         body = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
@@ -84,6 +105,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "INTERNAL", "message": "Local operation failed"})
 
     def do_GET(self) -> None:
+        if not self._trusted_request():
+            return
         path = unquote(urlsplit(self.path).path)
         try:
             if path == "/api/health":
@@ -126,6 +149,16 @@ class Handler(BaseHTTPRequestHandler):
             self._respond_error(e)
 
     def do_POST(self) -> None:
+        if not self._trusted_request():
+            return
+        # JSON is intentionally non-simple for browser CORS. Local scripts
+        # without Origin remain supported; cross-site forms cannot submit.
+        media_types = self.headers.get_all("Content-Type", [])
+        media = media_types[0].split(";", 1)[0].strip().lower() if len(media_types) == 1 else ""
+        if media != "application/json":
+            self._json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {
+                "error": "UNSUPPORTED_MEDIA_TYPE", "message": "Expected application/json"})
+            return
         path = urlsplit(self.path).path
         try:
             body = self._read_json()
@@ -420,6 +453,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "NOT_FOUND", "message": "No such endpoint"})
         except Exception as e:
             self._respond_error(e)
+
+    def do_OPTIONS(self) -> None:
+        # This local API deliberately offers no cross-origin CORS access.
+        self._json(HTTPStatus.FORBIDDEN, {
+            "error": "FORBIDDEN", "message": "CORS preflight is not allowed"})
 
     def log_message(self, format: str, *args: object) -> None:
         sys.stderr.write(config.APP_NAME + ": " + (format % args) + "\n")
