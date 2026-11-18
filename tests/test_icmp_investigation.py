@@ -88,6 +88,73 @@ class IcmpInvestigationTests(unittest.TestCase):
                 with self.assertRaisesRegex(ProjectValidationError, "already repaired"):
                     case.repair()
 
+    def test_report_requires_verified_recovery_for_all_seven_causes(self):
+        expected = {
+            "CABLE_DOWN": ("Kabel", "ARP"),
+            "PORT_SHUTDOWN": ("Switchport", "ARP"),
+            "VLAN_MISMATCH": ("Access-VLAN", "ARP"),
+            "STATIC_ROUTE_MISSING": ("Statisk route", "NO_ROUTE"),
+            "IPV4_PREFIX_MISMATCH": ("IPv4-prefix", "NO_ROUTE"),
+            "STATIC_NEXT_HOP_UNREACHABLE": ("Next-hop", "ARP"),
+            "IPV4_HOST_ADDRESS_MISMATCH": ("IPv4-adress", "ARP"),
+        }
+        self.assertEqual(set(expected), set(KINDS))
+        for kind, (cause, evidence) in expected.items():
+            with self.subTest(kind=kind):
+                project = routed_reply_lab()
+                original = json.dumps(project, sort_keys=True)
+                case = IcmpInvestigation(project, "a", "eth0", "203.0.113.20", 5,
+                                         _test_kind=kind)
+                self.assertNotIn("report", case.state())
+                case.probe("ping", {})
+                case.probe("route", {"nodeId": "a", "destinationIpv4": "203.0.113.20"})
+                case.probe("address", {})
+                self.assertFalse(case.diagnose(next(k for k in KINDS if k != kind))["correct"])
+                self.assertNotIn("report", case.state())
+                self.assertTrue(case.diagnose(kind)["correct"])
+                self.assertNotIn("report", case.state())
+                result = case.repair()
+                report = result["report"]
+                self.assertEqual(result["status"], "RECOVERED")
+                self.assertEqual(set(report), {"symptom", "rootCause", "evidence",
+                                               "action", "verification"})
+                self.assertIn(cause, report["rootCause"])
+                self.assertIn(evidence, report["evidence"])
+                self.assertIn("Echo", report["symptom"])
+                point = case._fault.get("linkId", case._fault.get("routeId",
+                        case._fault.get("portId")))
+                self.assertIn(point, report["rootCause"])
+                self.assertIn(point, report["action"])
+                self.assertIn("REPLIED", report["verification"])
+                self.assertIn("matchande Echo Reply", report["verification"])
+                self.assertEqual(result["repair"]["scope"], "PREVIEW_ONLY")
+                self.assertEqual(json.dumps(project, sort_keys=True), original)
+
+    def test_failed_recovery_has_no_report_or_positive_conclusion(self):
+        case = scenario("CABLE_DOWN")
+        case.probe("ping", {})
+        case.probe("route", {"nodeId": "a", "destinationIpv4": "203.0.113.20"})
+        case.probe("address", {})
+        case.diagnose("CABLE_DOWN")
+        real_ping = EchoExchange.ping
+        calls = 0
+
+        def fail_restoration(exchange, *args):
+            nonlocal calls
+            calls += 1
+            result = real_ping(exchange, *args)
+            if calls == 2:
+                return {**result, "status": "REQUEST_FAILED", "replyMatched": False}
+            return result
+
+        with patch.object(EchoExchange, "ping", fail_restoration):
+            result = case.repair()
+        self.assertEqual(result["status"], "NOT_VERIFIED")
+        self.assertIsNone(result["report"])
+        self.assertIsNone(result["faultCategory"])
+        self.assertIsNone(result["repair"])
+        self.assertFalse(case.state()["repaired"])
+
     def test_hidden_switch_port_shutdown_measured_and_recovered(self):
         case = scenario("PORT_SHUTDOWN")
         fault = case._fault

@@ -1288,8 +1288,12 @@ function renderIcmpInvestigation() {
       + '\nEfter återställning: ' + icmpInvestigationRecovery.restoredEchoStatus
       + '\nGiltigt ICMP Echo Reply: ' + (icmpInvestigationRecovery.replyMatched ? 'ja' : 'nej')
       + (icmpInvestigationRecovery.status === 'RECOVERED'
-        ? '\nVerifierad felkategori: ' + icmpInvestigationRecovery.faultCategory
-          + '\nSimulerad återställningspunkt: ' + JSON.stringify(icmpInvestigationRecovery.repair)
+        ? '\n\nFELSÖKNINGSRAPPORT'
+          + '\nSymptom: ' + icmpInvestigationRecovery.report.symptom
+          + '\nRotorsak: ' + icmpInvestigationRecovery.report.rootCause
+          + '\nTeknisk evidens: ' + icmpInvestigationRecovery.report.evidence
+          + '\nÅtgärd: ' + icmpInvestigationRecovery.report.action
+          + '\nVerifiering: ' + icmpInvestigationRecovery.report.verification
         : '\nReparationen är inte verifierad; inga positiva slutsatser får dras.');
   } else {
     recovery.textContent = 'Ingen reparation eller tvåvägskommunikation har verifierats.';
