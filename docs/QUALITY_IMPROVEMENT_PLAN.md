@@ -1,22 +1,53 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt: `main` vid `92f43c978e1f862f8a5ab196eeb426258c8838d4`.
+Utgångspunkt för etapp 3A: `main` vid `0ef9ec60b7b4ecdce9fee18315e1ae143c0250ea`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
 | Etapp | Område | Läge |
 |---|---|---|
-| 1 | Lokal HTTP-gräns | Integrerad i `main`; CI godkänd på start-HEAD |
-| 2 | Samtidighetssäker Save/Open | Implementerad och lokalt verifierad i denna PR; CI/merge återstår |
-| 3 | Frontendmoduler med tydliga ansvar | Planerad |
+| 1 | Lokal HTTP-gräns | Integrerad i `main` |
+| 2 | Samtidighetssäker Save/Open | Integrerad i `main` |
+| 3A | Fristående DOM- och API-moduler | Implementerad och lokalt verifierad; CI/merge återstår |
+| 3B–3E | Fortsatt frontendmodularisering | Planerad |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
 
-Nästa etapp är frontendmodularisering och påbörjas först när denna PR
-har granskats och landat i `main`.
+## Etapp 3A: modulgränser och fortsättning
+
+`web/app.js` är fortsatt enda ägare av projekttillstånd, sparad SHA,
+redigeringsrevisioner, diagnostikresultat och sessionsgenerationer. De
+nio generiska DOM-hjälpfunktionerna (`$`, `el`, `field`, `heading`,
+`small`, `button`, `input`, `dropdown`, `check`) ligger i `web/ui/dom.js`.
+`api()` ligger i `web/services/api.js` och behåller GET/POST, JSON och
+felmetadata. Båda modulerna är tillståndslösa och importerar inget från
+appen. `app.js` importerar dessutom den rena projektmodellen från
+`model.js` och `TopologyCanvas` från `canvas.js`; `canvas.js` importerar
+endast `truncate` från `model.js`. Därmed finns ingen cirkulär import.
+HTML startar fortfarande bara `app.js` som ES-modul. HTTP-servern
+tillåter exakt de två nya modulvägarna utöver sina tidigare statiska
+resurser.
+
+Fortsatt beroendekarta:
+
+| Steg | Möjlig gräns | Beroenden som måste lösas först |
+|---|---|---|
+| 3B | `saveProject`, `openProject`, import/export och projektlista | `project`, `filename`, `savedName`, `savedSha`, `savedSnapshot`, `editRevision`, `workspaceRevision`, `savePending`, `isDirty`, `changed`, `render`, `notify`, `api`; behåll ett enda tillstånd och skyddet mot sena Save-svar. |
+| 3C | Visning och mätanrop för ARP, IPv4, route lookup och ICMP | `project`, valda noder, `canvas`, markerade länkar, `render`, diagnostikresultat och `api`; skilj vyfunktioner från anrop utan att skapa en ny simuleringsmotor. |
+| 3D | DHCP-, DORA- och ICMP-övningarnas livscykler | Sessions-ID, generationer, busy-flaggor, loggar och ogiltigförklaring i `changed`; flytta varje livscykel som en enhet så att sena svar inte kan återuppliva gammalt tillstånd. |
+| 3E | Tunnare entrypoint och importgranskning | 3B–3D:s stabila gränser; koppla ihop rendering och händelser i `app.js`, kontrollera importgraf och regressioner. |
+
+Den kvarvarande `app.js` är fortfarande stor och dess delade tillstånd
+är en risk vid senare extraktioner. Etapp 3A flyttar inget sådant
+tillstånd. Slutlig CI- och mergeverifiering återstår. Rekommenderat
+nästa delsteg är 3B efter separat granskning av Save/Open-beroendena.
+Vid 3A minskade `app.js` från 3 323 till 3 267 rader. Lokalt passerade
+505 Python-tester, `npm run check` och Chromium-regressionen med direkt
+HTTP, inklusive modulladdning och MIME-kontroll. Radantalet är enbart
+en mätpunkt; de isolerade ansvaren är skälet till extraktionen.
 
 ## Etapp 2: samtidiga Save-anrop
 
@@ -43,7 +74,7 @@ och möjlig ny Save efter fel. Chromium verifierar Save, Open, ny Save
 med läst SHA och avvisad konflikt efter en separat diskändring. Den
 fulla Python-sviten passerade med **504 tester** (varav fem nya
 samtidighetstester), `npm run check` passerade och Chromium-regressionen
-passerade med **DIRECT_HTTP**. PR och CI-granskning återstår.
+passerade med **DIRECT_HTTP**. Etapp 2 har därefter integrerats i `main`.
 
 Lösningen är verifierad för YadiLabs lokala Linuxmiljö och samverkande
 skrivare som använder `ProjectStore`. Externa verktyg som ändrar

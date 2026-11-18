@@ -125,10 +125,14 @@ def browser_open(page, base):
     model = (ROOT / 'web/model.js').read_text(encoding='utf8').replace('export ', '')
     canvas = (ROOT / 'web/canvas.js').read_text(encoding='utf8')
     canvas = canvas.replace("import {truncate} from './model.js';", '').replace('export ', '')
+    dom = (ROOT / 'web/ui/dom.js').read_text(encoding='utf8').replace('export ', '')
+    api = (ROOT / 'web/services/api.js').read_text(encoding='utf8').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
     app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
     app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + app)
+    app = app.replace("import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';", '')
+    app = app.replace("import {api} from './services/api.js';", '')
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
 
 
@@ -144,10 +148,22 @@ def run():
         errors=[]
         page=context.new_page()
         page.on('pageerror',lambda error: errors.append(getattr(error, 'stack', str(error))))
+        module_responses = {}
+        def record_module(response):
+            for module in ('ui/dom.js', 'services/api.js'):
+                if response.url.endswith('/' + module):
+                    module_responses[module] = response
+        page.on('response', record_module)
         base=f'http://127.0.0.1:{server_port}/'
         try:
             network_mode = browser_open(page, base)
             expect(page.locator('#empty-state')).to_be_visible()
+            if network_mode == 'DIRECT_HTTP':
+                for module in ('ui/dom.js', 'services/api.js'):
+                    response = module_responses.get(module)
+                    assert response is not None and response.status == 200, f'{module} was not loaded'
+                    assert response.headers['content-type'].split(';')[0] in (
+                        'text/javascript', 'application/javascript'), f'{module} has wrong MIME type'
             assert page.title() == config.APP_NAME + ' · Nätverkslabb'
             assert page.locator('.brand').get_attribute('aria-label') == config.APP_NAME
             expect(page.locator('.brand strong')).to_have_text(config.APP_NAME)
