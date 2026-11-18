@@ -1,6 +1,7 @@
 """Explicit, durable project files (.yadilab) with optimistic concurrency."""
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -60,30 +61,40 @@ class ProjectStore:
         project = validate_project(document)
         if expected_sha256 is not None and (not isinstance(expected_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256)):
             raise ProjectValidationError("expectedSha256: must be a SHA-256 string or null")
-        existing = path.read_bytes() if path.exists() else None
-        actual = self._hash(existing) if existing is not None else ""
-        # No expected hash means create-only; an explicit matching hash means
-        # intentional overwrite of the last version that the user loaded.
-        if existing is not None and expected_sha256 != actual:
-            raise ProjectConflictError(actual)
-        if existing is None and expected_sha256 is not None:
-            raise ProjectConflictError("")
-        data = (json.dumps(project, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
-        fd, temp_name = tempfile.mkstemp(prefix=".pending-", suffix=".tmp", dir=self.root)
+        # The lock file is never replaced: its inode remains a stable lock
+        # target even while the project file is atomically renamed.
+        lock_fd = os.open(self.root / f".lock-{slug}",
+                          os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temp_name, path)
-            # Make the rename durable on Linux, where directory fsync is supported.
-            if hasattr(os, "O_DIRECTORY"):
-                dfd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            try:
+                existing = path.read_bytes() if path.exists() else None
+                actual = self._hash(existing) if existing is not None else ""
+                # No expected hash means create-only; an explicit matching
+                # hash means intentional overwrite of the loaded version.
+                if existing is not None and expected_sha256 != actual:
+                    raise ProjectConflictError(actual)
+                if existing is None and expected_sha256 is not None:
+                    raise ProjectConflictError("")
+                data = (json.dumps(project, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
+                fd, temp_name = tempfile.mkstemp(prefix=".pending-", suffix=".tmp", dir=self.root)
                 try:
-                    os.fsync(dfd)
+                    with os.fdopen(fd, "wb") as stream:
+                        stream.write(data)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    os.replace(temp_name, path)
+                    # The directory fsync makes the rename durable on Linux.
+                    dfd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        os.fsync(dfd)
+                    finally:
+                        os.close(dfd)
                 finally:
-                    os.close(dfd)
+                    if os.path.exists(temp_name):
+                        os.unlink(temp_name)
+                return {"filename": slug, "sha256": self._hash(data), "bytes": len(data), "project": project}
+            finally:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
         finally:
-            if os.path.exists(temp_name):
-                os.unlink(temp_name)
-        return {"filename": slug, "sha256": self._hash(data), "bytes": len(data), "project": project}
+            os.close(lock_fd)
