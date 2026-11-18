@@ -159,6 +159,7 @@ class Handler(BaseHTTPRequestHandler):
                           "/features/projects/transfer.js",
                           "/features/diagnostics/queries.js", "/features/diagnostics/presenters.js",
                           "/features/sessions/dhcp-investigation.js",
+                          "/features/sessions/icmp-investigation.js",
                           "/styles.css"):
                 filename = "index.html" if path == "/" else path[1:]
                 data = (WEB / filename).read_bytes()

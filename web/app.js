@@ -7,6 +7,7 @@ import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSp
 import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';
 import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';
 import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';
+import {createIcmpInvestigationController} from './features/sessions/icmp-investigation.js';
 
 let project = blank();
 let selection = null;
@@ -41,14 +42,6 @@ let routeLookup = null;
 let ipv4Diagnostic = null;
 let pingDiagnostic = null;
 let troubleDiagnostic = null;
-let icmpInvestigationId = null;
-let icmpInvestigationState = null;
-let icmpInvestigationGeneration = 0;
-let icmpInvestigationBusy = false;
-let icmpInvestigationLog = [];
-let icmpInvestigationVerdict = null;
-let icmpInvestigationRecovery = null;
-let icmpInvestigationError = null;
 let filename = 'lab';
 let savedName = null;
 let savedSha = null;
@@ -67,6 +60,10 @@ let toastTimer;
 const investigation = createDhcpInvestigationController({
   getContext: () => ({workspaceRevision, editRevision, projectSnapshot: JSON.stringify(project)}),
   onChange: renderInvestigation,
+});
+const icmpInvestigation = createIcmpInvestigationController({
+  getContext: () => ({workspaceRevision, editRevision, projectSnapshot: JSON.stringify(project)}),
+  onChange: renderIcmpInvestigation,
 });
 const canvas = new TopologyCanvas($('topology'), {
   onSelect: selected => { selection = selected; render(); },
@@ -125,20 +122,7 @@ function invalidateDoraDiagnostics() {
 }
 function invalidateInvestigation() { investigation.invalidate(); }
 
-function invalidateIcmpInvestigation() {
-  icmpInvestigationGeneration += 1;
-  const previous = icmpInvestigationId;
-  icmpInvestigationId = null;
-  icmpInvestigationState = null;
-  icmpInvestigationBusy = false;
-  icmpInvestigationLog = [];
-  icmpInvestigationVerdict = null;
-  icmpInvestigationRecovery = null;
-  icmpInvestigationError = null;
-  if (previous) {
-    void api('/api/icmp/investigation/stop', {sessionId: previous}).catch(() => {});
-  }
-}
+function invalidateIcmpInvestigation() { icmpInvestigation.invalidate(); }
 
 function invalidateDoraSession() {
   invalidateIcmpInvestigation();
@@ -1065,6 +1049,10 @@ function icmpInvestigationDescription(item) {
 }
 
 function renderIcmpInvestigation() {
+  const {id: icmpInvestigationId, state: icmpInvestigationState,
+    busy: icmpInvestigationBusy, log: icmpInvestigationLog,
+    verdict: icmpInvestigationVerdict, recovery: icmpInvestigationRecovery,
+    error: icmpInvestigationError} = icmpInvestigation.getState();
   const active = icmpInvestigationId !== null;
   const busy = icmpInvestigationBusy;
   const sourceSelector = $('icmp-investigation-source');
@@ -1118,7 +1106,7 @@ function renderIcmpInvestigation() {
   $('icmp-investigation-vlan').disabled = !active || busy || kind !== 'vlan';
   $('icmp-investigation-start').disabled = active || busy || !sourceSelector.value
     || !$('icmp-investigation-destination').value.trim();
-  $('icmp-investigation-stop').disabled = !active || busy;
+  $('icmp-investigation-stop').disabled = !active;
   $('icmp-investigation-measure').disabled = !active || busy || icmpInvestigationState?.repaired
     || (kind === 'link' && !linkSelector.value)
     || (kind === 'port' && !portSelector.value)
@@ -1131,7 +1119,8 @@ function renderIcmpInvestigation() {
     || Boolean(icmpInvestigationState?.repaired)
     || !icmpInvestigationState?.canDiagnose;
   $('icmp-investigation-repair').disabled = !active || busy
-    || !icmpInvestigationState?.diagnosed || Boolean(icmpInvestigationState?.repaired);
+    || !icmpInvestigationState?.diagnosed || Boolean(icmpInvestigationState?.repaired)
+    || !icmpInvestigationVerdict?.correct;
 
   $('icmp-investigation-status').textContent = busy
     ? 'ICMP-felsökning pågår…'
@@ -2455,192 +2444,62 @@ async function stopSimulationSession() {
   render();
 }
 
-async function startIcmpInvestigation() {
-  if (icmpInvestigationId || icmpInvestigationBusy) return;
+function icmpInvestigationStartInputs() {
+  return JSON.stringify([
+    $('icmp-investigation-source').value,
+    $('icmp-investigation-destination').value.trim(),
+    $('icmp-investigation-ttl').value.trim(),
+  ]);
+}
+function startIcmpInvestigation() {
   const selected = $('icmp-investigation-source').value;
   const destinationIpv4 = $('icmp-investigation-destination').value.trim();
   const ttl = sessionInteger($('icmp-investigation-ttl').value.trim(), 2, 255);
   if (!selected || !destinationIpv4 || ttl === null) {
-    icmpInvestigationError = 'Välj en dokumenterad IPv4-källa, destinations-IP och giltig TTL.';
-    renderIcmpInvestigation();
+    icmpInvestigation.setInputError('Välj en dokumenterad IPv4-källa, destinations-IP och giltig TTL.');
     return;
   }
   const [sourceNode, sourcePort] = JSON.parse(selected);
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++icmpInvestigationGeneration;
-  const input = [selected, destinationIpv4, ttl];
-  icmpInvestigationBusy = true;
-  icmpInvestigationError = null;
-  icmpInvestigationLog = [];
-  icmpInvestigationVerdict = null;
-  icmpInvestigationRecovery = null;
-  renderIcmpInvestigation();
-  const current = () => generation === icmpInvestigationGeneration
-    && edit === editRevision && workspace === workspaceRevision
-    && JSON.stringify(project) === snapshot
-    && $('icmp-investigation-source').value === input[0]
-    && $('icmp-investigation-destination').value.trim() === input[1]
-    && Number($('icmp-investigation-ttl').value) === input[2];
-  try {
-    const data = await api('/api/icmp/investigation/start', {
-      project: JSON.parse(snapshot), sourceNode, sourcePort, destinationIpv4, ttl,
-    });
-    if (current()) {
-      icmpInvestigationId = data.sessionId;
-      icmpInvestigationState = data;
-    } else {
-      void api('/api/icmp/investigation/stop', {sessionId:data.sessionId}).catch(() => {});
-    }
-  } catch (error) {
-    if (current()) icmpInvestigationError = error.message;
-  } finally {
-    if (generation === icmpInvestigationGeneration) {
-      icmpInvestigationBusy = false;
-      renderIcmpInvestigation();
-    }
-  }
+  void icmpInvestigation.start({sourceNode, sourcePort, destinationIpv4, ttl},
+    icmpInvestigationStartInputs);
 }
-
-async function measureIcmpInvestigation() {
-  if (!icmpInvestigationId || icmpInvestigationBusy || icmpInvestigationState?.repaired) return;
+function measureIcmpInvestigation() {
   const kind = $('icmp-investigation-probe').value;
+  const state = icmpInvestigation.getState().state;
+  if (!state) return;
   let target = {};
+  let readInputs = () => $('icmp-investigation-probe').value;
   if (kind === 'route') {
     const nodeId = $('icmp-investigation-route-node').value;
-    target = {nodeId, destinationIpv4:
-      $('icmp-investigation-route-destination').value === 'source'
-        ? icmpInvestigationState.sourceIpv4
-        : icmpInvestigationState.destinationIpv4};
     if (!nodeId) return;
+    const destinationChoice = $('icmp-investigation-route-destination').value;
+    target = {nodeId, destinationIpv4: destinationChoice === 'source'
+      ? state.sourceIpv4 : state.destinationIpv4};
+    readInputs = () => JSON.stringify([$('icmp-investigation-probe').value,
+      $('icmp-investigation-route-node').value,
+      $('icmp-investigation-route-destination').value]);
   } else if (kind === 'link') {
     target = {linkId: $('icmp-investigation-link').value};
     if (!target.linkId) return;
-  } else if (kind === 'port') {
-    const selected = $('icmp-investigation-port').value;
+    readInputs = () => JSON.stringify([$('icmp-investigation-probe').value,
+      $('icmp-investigation-link').value]);
+  } else if (kind === 'port' || kind === 'vlan') {
+    const selected = $(kind === 'port' ? 'icmp-investigation-port'
+      : 'icmp-investigation-vlan').value;
     if (!selected) return;
     const [nodeId, portId] = JSON.parse(selected);
     target = {nodeId, portId};
-  } else if (kind === 'vlan') {
-    const selected = $('icmp-investigation-vlan').value;
-    if (!selected) return;
-    const [nodeId, portId] = JSON.parse(selected);
-    target = {nodeId, portId};
+    readInputs = () => JSON.stringify([$('icmp-investigation-probe').value,
+      $(kind === 'port' ? 'icmp-investigation-port' : 'icmp-investigation-vlan').value]);
   }
-  const id = icmpInvestigationId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++icmpInvestigationGeneration;
-  icmpInvestigationBusy = true;
-  icmpInvestigationError = null;
-  renderIcmpInvestigation();
-  const current = () => generation === icmpInvestigationGeneration
-    && icmpInvestigationId === id && edit === editRevision
-    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
-  try {
-    const data = await api('/api/icmp/investigation/probe', {
-      sessionId:id, project:JSON.parse(snapshot), probe:kind, target,
-    });
-    if (current()) {
-      icmpInvestigationState = data;
-      icmpInvestigationLog.push({probe:kind, observation:data.observation});
-    }
-  } catch (error) {
-    if (current()) icmpInvestigationLog.push({error:error.message});
-  } finally {
-    if (generation === icmpInvestigationGeneration) {
-      icmpInvestigationBusy = false;
-      renderIcmpInvestigation();
-    }
-  }
+  void icmpInvestigation.probe(kind, target, readInputs);
 }
-
-async function diagnoseIcmpInvestigation() {
-  if (!icmpInvestigationId || icmpInvestigationBusy || !icmpInvestigationState?.canDiagnose
-      || icmpInvestigationState.diagnosed) return;
-  const id = icmpInvestigationId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
+function diagnoseIcmpInvestigation() {
   const diagnosis = $('icmp-investigation-diagnosis').value;
-  const generation = ++icmpInvestigationGeneration;
-  icmpInvestigationBusy = true;
-  renderIcmpInvestigation();
-  const current = () => generation === icmpInvestigationGeneration
-    && icmpInvestigationId === id && edit === editRevision
-    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
-  try {
-    const data = await api('/api/icmp/investigation/diagnose', {
-      sessionId:id, project:JSON.parse(snapshot), diagnosis,
-    });
-    if (current()) {
-      icmpInvestigationState = data;
-      icmpInvestigationVerdict = data;
-    }
-  } catch (error) {
-    if (current()) icmpInvestigationVerdict = {error:error.message};
-  } finally {
-    if (generation === icmpInvestigationGeneration) {
-      icmpInvestigationBusy = false;
-      renderIcmpInvestigation();
-    }
-  }
+  void icmpInvestigation.diagnose(diagnosis, () => $('icmp-investigation-diagnosis').value);
 }
-
-async function repairIcmpInvestigation() {
-  if (!icmpInvestigationId || icmpInvestigationBusy
-      || !icmpInvestigationState?.diagnosed || icmpInvestigationState.repaired) return;
-  const id = icmpInvestigationId;
-  const snapshot = JSON.stringify(project);
-  const edit = editRevision, workspace = workspaceRevision;
-  const generation = ++icmpInvestigationGeneration;
-  icmpInvestigationBusy = true;
-  renderIcmpInvestigation();
-  const current = () => generation === icmpInvestigationGeneration
-    && icmpInvestigationId === id && edit === editRevision
-    && workspace === workspaceRevision && JSON.stringify(project) === snapshot;
-  try {
-    const data = await api('/api/icmp/investigation/repair', {
-      sessionId:id, project:JSON.parse(snapshot),
-    });
-    if (current()) {
-      icmpInvestigationState = data;
-      icmpInvestigationRecovery = data;
-    }
-  } catch (error) {
-    if (current()) icmpInvestigationRecovery = {error:error.message};
-  } finally {
-    if (generation === icmpInvestigationGeneration) {
-      icmpInvestigationBusy = false;
-      renderIcmpInvestigation();
-    }
-  }
-}
-
-async function stopIcmpInvestigation() {
-  if (!icmpInvestigationId || icmpInvestigationBusy) return;
-  const id = icmpInvestigationId;
-  const generation = ++icmpInvestigationGeneration;
-  icmpInvestigationBusy = true;
-  renderIcmpInvestigation();
-  try {
-    await api('/api/icmp/investigation/stop', {sessionId:id});
-    if (generation === icmpInvestigationGeneration) {
-      icmpInvestigationId = null;
-      icmpInvestigationState = null;
-      icmpInvestigationLog = [];
-      icmpInvestigationVerdict = null;
-      icmpInvestigationRecovery = null;
-      icmpInvestigationError = null;
-    }
-  } catch (error) {
-    if (generation === icmpInvestigationGeneration) icmpInvestigationError = error.message;
-  } finally {
-    if (generation === icmpInvestigationGeneration) {
-      icmpInvestigationBusy = false;
-      renderIcmpInvestigation();
-    }
-  }
-}
+function repairIcmpInvestigation() { void icmpInvestigation.repair(); }
+function stopIcmpInvestigation() { void icmpInvestigation.stop(); }
 
 async function runTroubleshooting() {
   const selected = $('trouble-source').value;

@@ -1,6 +1,6 @@
 # Kvalitetslyft: etappordning och verifieringsläge
 
-Utgångspunkt för etapp 3D-SGC: `main` vid `9ebe4b5d9939f68a4764f96031c3487e925db967`.
+Utgångspunkt för etapp 3D2: `main` vid `9f913a889d1928359490fc7955ed8279c79da14b`.
 En etapp räknas som verifierad först när dess funktionella och negativa
 tester har körts. Detta dokument ger inte någon produktbetygsättning.
 
@@ -13,13 +13,57 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 3B2 | Säker import/export | Integrerad i `main`; CI godkänd |
 | 3C | ARP-, routing-, IPv4- och ICMP-vyer | Integrerad i `main`; CI godkänd |
 | 3D1 | DHCP Investigation-sessionens livscykel | Integrerad i `main`; CI godkänd |
-| 3D-SGC | Server Session Garbage Collection | Lokalt verifierad; ej mergad |
-| 3D2–3E | Fortsatt frontendmodularisering | Planerad |
+| 3D-SGC | Server Session Garbage Collection | Integrerad i `main`; CI godkänd |
+| 3D2 | ICMP Investigation-sessionens livscykel | LOCAL_PASS; CI_PENDING; NOT_MERGED |
+| 3D3–3E | Fortsatt frontendmodularisering | Planerad |
 | 4 | Källtrogen, användarstyrd dokumentationsimport | Planerad |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
+
+## Etapp 3D2: ICMP Investigation
+
+Tidigare låg ICMP-övningens ID, generation, busy-flagga, serverstatus,
+observationslogg, diagnos, återställning och fel i `app.js`. Start,
+Probe, Diagnose, Repair, Stop och projektinvalidation skrev dessa fält
+direkt. `invalidateDoraSession()` var kopplingen från projektändringar.
+
+`web/features/sessions/icmp-investigation.js` är nu ensam ägare för
+övningens tillstånd och importerar bara `services/api.js`. `app.js` äger
+fortsatt det kanoniska projektet, revisionerna, DOM, inmatningsval,
+Save/Open och övriga sessioner. Den ger controllern en fryst projektsnapshot
+per anrop och läser en kopierad tillståndsvy vid rendering.
+`invalidateDoraSession()` ogiltigförklarar fortfarande ICMP-övningen.
+
+Varje asynkront anrop fångar sessions-ID, generation, arbetsyte- och
+redigeringsrevision, projektsnapshot samt relevanta inmatningar.
+Sena svar och gamla `finally`-block får inte ändra en ny session.
+En mätning vars målval ändrades efter serverbehandlingen räknas i
+serverstatus men visas inte som aktuell observation. En äldre hypotes
+kan konsumera ett verkligt serverförsök utan att dess verdict visas som
+om den gällde det nya valet. Repair kräver verifierat korrekt verdict.
+
+Stop riktas mot fångat ID och verifierar serverns `STOPPED`-svar.
+Samtidiga Stop delar ett anrop. Nätverksfel behåller ID för ett begränsat
+nytt försök i den öppna sidan; ett sent Start-ID får riktad cleanup.
+Backendens exakta `INVALID_PROJECT`/`icmp investigation: unknown or expired
+session` efter en operation rensar lokalt tillstånd och erbjuder ny Start
+utan meningslöst Stop. Ett annat 422 förblir ett vanligt valideringsfel.
+Serverns 60-minuters idle-policy och dess skydd vid förlorat ID är
+oförändrade. En användare som läser längre utan anrop kan fortfarande
+behöva starta om.
+
+Chromium utökar det befintliga fulla routade och lokala ICMP-förloppet
+med riktiga, serverbehandlade svar som hålls före leverans: dubbel och
+sent Start, måländringar för alla sex Probe-typer, Probe/Diagnose/Repair
+över invalidation, ändrad hypotes, Stop/ny Start, gammalt 422, osäkert
+Stop och retry, serverexpiration och övergiven sida. Verklig projektfil
+kontrolleras med SHA-256. Statisk HTTP-allowlist omfattar endast den
+exakta nya modulsökvägen; katalog och andra filer förblir nekade.
+Lokalt passerade 514 Python-tester, `npm run check` och hela Chromium-smoke
+i `DIRECT_HTTP`, inklusive de riktade racetesterna. PR-CI är ännu inte
+verifierad.
 
 ## Etapp 3D-SGC: temporära serversessioner
 

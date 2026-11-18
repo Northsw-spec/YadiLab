@@ -137,6 +137,8 @@ def browser_open(page, base):
     presenters = (ROOT / 'web/features/diagnostics/presenters.js').read_text(encoding='utf8').replace('export ', '')
     investigation = (ROOT / 'web/features/sessions/dhcp-investigation.js').read_text(encoding='utf8')
     investigation = investigation.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
+    icmp_investigation = (ROOT / 'web/features/sessions/icmp-investigation.js').read_text(encoding='utf8')
+    icmp_investigation = icmp_investigation.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
     app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
     app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
@@ -147,7 +149,8 @@ def browser_open(page, base):
     app = app.replace("import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';", '')
     app = app.replace("import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';", '')
     app = app.replace("import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + investigation + '\n' + app)
+    app = app.replace("import {createIcmpInvestigationController} from './features/sessions/icmp-investigation.js';", '')
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + investigation + '\n' + icmp_investigation + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
 
 
@@ -553,6 +556,386 @@ def investigation_lifecycle_races(context, base, network_mode, errors):
     page.close()
 
 
+def icmp_investigation_races(context, network_mode, errors):
+    """Real ICMP server sessions with delivery held after HTTP processing."""
+    class Clock:
+        now = 100.0
+
+        def __call__(self):
+            return self.now
+
+    clock = Clock()
+    with tempfile.TemporaryDirectory() as directory:
+        store = ProjectStore(directory)
+        project = icmp_routed_lab()
+        store.save('icmp-race', project)
+        saved_file = Path(directory) / 'icmp-race.yadilab'
+        digest = hashlib.sha256(saved_file.read_bytes()).hexdigest()
+        server = LabHTTPServer(('127.0.0.1', 0), store,
+                               clock=clock, cleanup_interval=.01)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = f'http://127.0.0.1:{server.server_port}/'
+        try:
+            def load(page):
+                page.once('dialog', lambda dialog: dialog.accept())
+                with page.expect_response('**/api/validate') as imported:
+                    page.locator('#import-file').set_input_files({
+                        'name': 'icmp-race.json', 'mimeType': 'application/json',
+                        'buffer': json.dumps(project).encode('utf-8'),
+                    })
+                assert imported.value.status == 200
+                page.locator('#icmp-investigation-source').select_option('["a","eth0"]')
+                page.locator('#icmp-investigation-destination').fill('203.0.113.20')
+                page.locator('#icmp-investigation-ttl').fill('5')
+
+            def fresh():
+                page = context.new_page()
+                page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+                assert browser_open(page, base) == network_mode
+                load(page)
+                return page
+
+            def replace(page):
+                page.once('dialog', lambda dialog: dialog.accept())
+                page.locator('#new-project').click()
+                load(page)
+
+            def start(page):
+                # The first independently verified candidate is a real cable fault.
+                with patch('network_core.icmp_investigation.secrets.randbelow', return_value=0):
+                    with page.expect_response('**/api/icmp/investigation/start') as response:
+                        page.locator('#icmp-investigation-start').click()
+                assert response.value.status == 200
+                sid = response.value.json()['sessionId']
+                assert sid in server.icmp_investigations._sessions
+                return sid
+
+            def ready(page):
+                for kind in ('address', 'ping', 'route'):
+                    page.locator('#icmp-investigation-probe').select_option(kind)
+                    with page.expect_response('**/api/icmp/investigation/probe') as measured:
+                        page.locator('#icmp-investigation-measure').click()
+                    assert measured.value.status == 200
+                    if kind == 'ping':
+                        observation = measured.value.json()['observation']
+                        assert observation['status'] != 'REPLIED'
+                        assert observation['replyMatched'] is False
+                expect(page.locator('#icmp-investigation-diagnose')).to_be_enabled()
+
+            def invalid_link_once(page):
+                page.evaluate("""() => {
+                  const original = window.fetch;
+                  window.fetch = (url, init) => {
+                    if (url === '/api/icmp/investigation/probe') {
+                      const body = JSON.parse(init.body);
+                      body.target = {linkId: 'not-a-documented-link'};
+                      window.fetch = original;
+                      return original(url, {...init, body: JSON.stringify(body)});
+                    }
+                    return original(url, init);
+                  };
+                }""")
+
+            # C01–C03: one server allocation despite two Start events; a
+            # workspace replacement before delivery causes targeted cleanup.
+            page = fresh()
+            requests = []
+            page.on('request', lambda request: requests.append(request) if
+                    request.url.endswith('/api/icmp/investigation/start') else None)
+            hold_http_reply(page, '/api/icmp/investigation/start')
+            with patch('network_core.icmp_investigation.secrets.randbelow', return_value=0):
+                with page.expect_response('**/api/icmp/investigation/start') as allocated:
+                    page.locator('#icmp-investigation-start').click()
+            page.wait_for_function('window.__heldReply')
+            page.locator('#icmp-investigation-start').dispatch_event('click')
+            assert len(requests) == 1
+            page.once('dialog', lambda dialog: dialog.accept())
+            page.locator('#new-project').click()
+            with page.expect_response('**/api/icmp/investigation/stop') as cleanup:
+                release_http_reply(page)
+            old = allocated.value.json()['sessionId']
+            assert cleanup.value.status == 200
+            assert old not in server.icmp_investigations._sessions
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Ingen ICMP-övning')
+            page.close()
+
+            # C05/C14: old link target is not labelled as the new one; a
+            # second click while busy cannot mutate the server twice.
+            page = fresh()
+            sid = start(page)
+            page.locator('#icmp-investigation-probe').select_option('link')
+            page.locator('#icmp-investigation-link').select_option('la')
+            probe_requests = []
+            page.on('request', lambda request: probe_requests.append(request) if
+                    request.url.endswith('/api/icmp/investigation/probe') else None)
+            hold_http_reply(page, '/api/icmp/investigation/probe')
+            with page.expect_response('**/api/icmp/investigation/probe') as first_probe:
+                page.locator('#icmp-investigation-measure').click()
+            page.wait_for_function('window.__heldReply')
+            page.locator('#icmp-investigation-measure').dispatch_event('click')
+            assert len(probe_requests) == 1
+            page.evaluate("""() => {
+              const field = document.querySelector('#icmp-investigation-link');
+              field.value = 'lb'; field.dispatchEvent(new Event('change', {bubbles: true}));
+            }""")
+            release_http_reply(page)
+            assert first_probe.value.json()['observation']['linkId'] == 'la'
+            expect(page.locator('#icmp-investigation-observations')).not_to_contain_text('LÄNK la')
+            assert server.icmp_investigations._sessions[sid].state()['observations'] == 1
+            with page.expect_response('**/api/icmp/investigation/probe') as next_probe:
+                page.locator('#icmp-investigation-measure').click()
+            assert next_probe.value.json()['observation']['linkId'] == 'lb'
+            with page.expect_response('**/api/icmp/investigation/stop'):
+                page.locator('#icmp-investigation-stop').click()
+            page.close()
+
+            # All six probe kinds freeze their relevant UI choices. Address
+            # and ping become stale when kind changes; targeted probes become
+            # stale when their route/link/port/VLAN selector changes.
+            page = fresh()
+            sid = start(page)
+            for kind, selector, before, after in (
+                ('address', '#icmp-investigation-probe', 'address', 'ping'),
+                ('ping', '#icmp-investigation-probe', 'ping', 'address'),
+                ('route', '#icmp-investigation-route-node', 'a', 'b'),
+                ('link', '#icmp-investigation-link', 'la', 'lb'),
+                ('port', '#icmp-investigation-port', '["a","eth0"]', '["b","eth0"]'),
+                ('vlan', '#icmp-investigation-vlan', '["sw-left","a"]', '["sw-right","b"]'),
+            ):
+                page.locator('#icmp-investigation-probe').select_option(kind)
+                if selector != '#icmp-investigation-probe':
+                    page.locator(selector).select_option(before)
+                hold_http_reply(page, '/api/icmp/investigation/probe')
+                with page.expect_response('**/api/icmp/investigation/probe') as processed:
+                    page.locator('#icmp-investigation-measure').click()
+                assert processed.value.status == 200
+                page.wait_for_function('window.__heldReply')
+                page.evaluate("""({selector, value}) => {
+                  const field = document.querySelector(selector);
+                  field.value = value;
+                  field.dispatchEvent(new Event('change', {bubbles: true}));
+                }""", {'selector': selector, 'value': after})
+                release_http_reply(page)
+                expect(page.locator('#icmp-investigation-observations')).to_contain_text('Börja med IP-uppgifter')
+            assert server.icmp_investigations._sessions[sid].state()['observations'] == 6
+            with page.expect_response('**/api/icmp/investigation/stop'):
+                page.locator('#icmp-investigation-stop').click()
+            page.close()
+
+            # C06/C07: a processed old hypothesis updates server attempts but
+            # never becomes a verdict for the newly selected hypothesis.
+            page = fresh()
+            sid = start(page)
+            ready(page)
+            page.locator('#icmp-investigation-diagnosis').select_option('PORT_SHUTDOWN')
+            hold_http_reply(page, '/api/icmp/investigation/diagnose')
+            with page.expect_response('**/api/icmp/investigation/diagnose') as old_guess:
+                page.locator('#icmp-investigation-diagnose').click()
+            page.wait_for_function('window.__heldReply')
+            page.evaluate("""() => {
+              const field = document.querySelector('#icmp-investigation-diagnosis');
+              field.value = 'CABLE_DOWN'; field.dispatchEvent(new Event('change', {bubbles: true}));
+            }""")
+            release_http_reply(page)
+            assert old_guess.value.json()['correct'] is False
+            assert server.icmp_investigations._sessions[sid].state()['diagnosisAttempts'] == 1
+            expect(page.locator('#icmp-investigation-verdict')).not_to_contain_text('DIAGNOS BEKRÄFTAD')
+            with page.expect_response('**/api/icmp/investigation/diagnose') as right_guess:
+                page.locator('#icmp-investigation-diagnose').click()
+            assert right_guess.value.json()['correct'] is True
+            expect(page.locator('#icmp-investigation-repair')).to_be_enabled()
+            hold_http_reply(page, '/api/icmp/investigation/repair')
+            with page.expect_response('**/api/icmp/investigation/repair') as repaired:
+                page.locator('#icmp-investigation-repair').click()
+            page.wait_for_function('window.__heldReply')
+            with page.expect_response('**/api/icmp/investigation/stop'):
+                page.locator('#icmp-investigation-stop').click()
+            release_http_reply(page)
+            assert repaired.value.json()['status'] == 'RECOVERED'
+            expect(page.locator('#icmp-investigation-recovery')).not_to_contain_text('RESULTAT: RECOVERED')
+            assert sid not in server.icmp_investigations._sessions
+            page.close()
+
+            # C04: a real completed Probe cannot append to a replaced project.
+            page = fresh()
+            old = start(page)
+            hold_http_reply(page, '/api/icmp/investigation/probe')
+            with page.expect_response('**/api/icmp/investigation/probe') as measured:
+                page.locator('#icmp-investigation-measure').click()
+            assert measured.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            with page.expect_response('**/api/icmp/investigation/stop'):
+                page.once('dialog', lambda dialog: dialog.accept())
+                page.locator('#new-project').click()
+            release_http_reply(page)
+            expect(page.locator('#icmp-investigation-observations')).to_contain_text('Börja med IP-uppgifter')
+            assert old not in server.icmp_investigations._sessions
+            page.close()
+
+            # C08: Stop for A is processed, but its response cannot clear B.
+            page = fresh()
+            old = start(page)
+            hold_http_reply(page, '/api/icmp/investigation/stop', first_only=True)
+            with page.expect_response('**/api/icmp/investigation/stop') as stopped:
+                page.locator('#icmp-investigation-stop').click()
+            assert stopped.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            replace(page)
+            newer = start(page)
+            release_http_reply(page)
+            assert newer != old
+            assert newer in server.icmp_investigations._sessions
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Aktiv dold övning')
+            with page.expect_response('**/api/icmp/investigation/stop'):
+                page.locator('#icmp-investigation-stop').click()
+            page.close()
+
+            # C09/C11: a real 422 from an invalid link is not expiration, and
+            # a late 422 from A cannot invalidate a later session B.
+            page = fresh()
+            start(page)
+            page.locator('#icmp-investigation-probe').select_option('link')
+            page.locator('#icmp-investigation-link').select_option('la')
+            invalid_link_once(page)
+            with page.expect_response('**/api/icmp/investigation/probe') as rejected:
+                page.locator('#icmp-investigation-measure').click()
+            assert rejected.value.status == 422
+            expect(page.locator('#icmp-investigation-observations')).to_contain_text('MÄTNING AVVISAD')
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Aktiv dold övning')
+            invalid_link_once(page)
+            hold_http_reply(page, '/api/icmp/investigation/probe')
+            with page.expect_response('**/api/icmp/investigation/probe') as late_error:
+                page.locator('#icmp-investigation-measure').click()
+            assert late_error.value.status == 422
+            page.wait_for_function('window.__heldReply')
+            replace(page)
+            newer = start(page)
+            release_http_reply(page)
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Aktiv dold övning')
+            expect(page.locator('#icmp-investigation-observations')).to_contain_text('Börja med IP-uppgifter')
+            assert newer in server.icmp_investigations._sessions
+            with page.expect_response('**/api/icmp/investigation/stop'):
+                page.locator('#icmp-investigation-stop').click()
+            page.close()
+
+            # An exact expiration error for A delivered after B starts must
+            # not invalidate B or borrow its busy flag.
+            page = fresh()
+            old = start(page)
+            clock.now += IDLE_TIMEOUT_SECONDS
+            hold_http_reply(page, '/api/icmp/investigation/probe')
+            with page.expect_response('**/api/icmp/investigation/probe') as stale_expiry:
+                page.locator('#icmp-investigation-measure').click()
+            assert stale_expiry.value.status == 422
+            page.wait_for_function('window.__heldReply')
+            replace(page)
+            newer = start(page)
+            release_http_reply(page)
+            assert newer != old
+            assert newer in server.icmp_investigations._sessions
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Aktiv dold övning')
+            with page.expect_response('**/api/icmp/investigation/stop'):
+                page.locator('#icmp-investigation-stop').click()
+            page.close()
+
+            # C12/C13: an uncertain Stop keeps the exact ID available for a
+            # retry; neither a sent request nor a browser error proves removal.
+            page = fresh()
+            sid = start(page)
+            page.evaluate("""() => {
+              const original = window.fetch;
+              window.fetch = (url, init) => {
+                if (url === '/api/icmp/investigation/stop') {
+                  window.fetch = original;
+                  return Promise.reject(new TypeError('lost Stop request'));
+                }
+                return original(url, init);
+              };
+            }""")
+            page.locator('#icmp-investigation-stop').click()
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Kunde inte bekräfta Stop')
+            assert sid in server.icmp_investigations._sessions
+            with page.expect_response('**/api/icmp/investigation/stop') as retried:
+                page.locator('#icmp-investigation-stop').click()
+            assert retried.value.status == 200
+            assert sid not in server.icmp_investigations._sessions
+            page.close()
+
+            # C15/C16: project replacement during processed Diagnose or
+            # Repair prevents stale verdict and recovery in the new workspace.
+            for path in ('diagnose', 'repair'):
+                page = fresh()
+                old = start(page)
+                ready(page)
+                page.locator('#icmp-investigation-diagnosis').select_option('CABLE_DOWN')
+                if path == 'repair':
+                    with page.expect_response('**/api/icmp/investigation/diagnose') as accepted:
+                        page.locator('#icmp-investigation-diagnose').click()
+                    assert accepted.value.json()['correct'] is True
+                hold_http_reply(page, '/api/icmp/investigation/' + path)
+                with page.expect_response('**/api/icmp/investigation/' + path) as processed:
+                    page.locator('#icmp-investigation-' + path).click()
+                assert processed.value.status == 200
+                page.wait_for_function('window.__heldReply')
+                with page.expect_response('**/api/icmp/investigation/stop'):
+                    page.once('dialog', lambda dialog: dialog.accept())
+                    page.locator('#new-project').click()
+                release_http_reply(page)
+                expect(page.locator('#icmp-investigation-verdict')).not_to_contain_text('DIAGNOS BEKRÄFTAD')
+                expect(page.locator('#icmp-investigation-recovery')).not_to_contain_text('RESULTAT: RECOVERED')
+                assert old not in server.icmp_investigations._sessions
+                page.close()
+
+            # C17: invalid TTL is rejected before any server allocation.
+            page = fresh()
+            before = len(server.icmp_investigations._sessions)
+            page.locator('#icmp-investigation-ttl').fill('0')
+            page.locator('#icmp-investigation-start').dispatch_event('click')
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('giltig TTL')
+            assert len(server.icmp_investigations._sessions) == before
+            page.close()
+
+            # C10/C18: the server reaps an abandoned ID with no browser call;
+            # an expired ID is rejected and the UI offers a new Start.
+            page = fresh()
+            old = start(page)
+            page.close()
+            assert old in server.icmp_investigations._sessions
+            expired = threading.Event()
+            original_cleanup = server.icmp_investigations.cleanup_expired
+
+            def observed_cleanup():
+                count = original_cleanup()
+                if old not in server.icmp_investigations._sessions:
+                    expired.set()
+                return count
+
+            server.icmp_investigations.cleanup_expired = observed_cleanup
+            clock.now += IDLE_TIMEOUT_SECONDS
+            assert expired.wait(2), 'server worker did not reap abandoned ICMP session'
+            page = fresh()
+            current = start(page)
+            clock.now += IDLE_TIMEOUT_SECONDS
+            with page.expect_response('**/api/icmp/investigation/probe') as old_probe:
+                page.locator('#icmp-investigation-measure').click()
+            assert old_probe.value.status == 422
+            expect(page.locator('#icmp-investigation-status')).to_contain_text('Sessionen har upphört')
+            expect(page.locator('#icmp-investigation-start')).to_be_enabled()
+            assert current not in server.icmp_investigations._sessions
+            new = start(page)
+            assert new != current
+            page.close()
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert not errors, errors
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+            assert not worker.is_alive()
+            assert not server._cleanup_thread.is_alive()
+
+
 def persistence_races(context, base, network_mode, store, errors):
     """Exercise late Save/Open replies against actual server-backed files."""
     def fresh():
@@ -882,7 +1265,8 @@ def run():
             for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
                            'features/projects/transfer.js', 'features/diagnostics/queries.js',
                            'features/diagnostics/presenters.js',
-                           'features/sessions/dhcp-investigation.js'):
+                           'features/sessions/dhcp-investigation.js',
+                           'features/sessions/icmp-investigation.js'):
                 if response.url.endswith('/' + module):
                     module_responses[module] = response
         page.on('response', record_module)
@@ -894,7 +1278,8 @@ def run():
                 for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
                                'features/projects/transfer.js', 'features/diagnostics/queries.js',
                                'features/diagnostics/presenters.js',
-                               'features/sessions/dhcp-investigation.js'):
+                               'features/sessions/dhcp-investigation.js',
+                               'features/sessions/icmp-investigation.js'):
                     response = module_responses.get(module)
                     assert response is not None and response.status == 200, f'{module} was not loaded'
                     assert response.headers['content-type'].split(';')[0] in (
@@ -3380,6 +3765,7 @@ def run():
             diagnostic_races(context, base, network_mode, errors)
             investigation_lifecycle_races(context, base, network_mode, errors)
             abandoned_investigation_cleanup(context, network_mode, errors)
+            icmp_investigation_races(context, network_mode, errors)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
