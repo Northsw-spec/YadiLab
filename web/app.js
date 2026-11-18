@@ -9,6 +9,7 @@ import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics
 import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';
 import {createIcmpInvestigationController} from './features/sessions/icmp-investigation.js';
 import {createDoraSessionController} from './features/sessions/dora-session.js';
+import {createSimulationSessionController} from './features/sessions/simulation-session.js';
 
 let project = blank();
 let selection = null;
@@ -23,12 +24,6 @@ let dhcpBusy = false;
 let doraDiagnostic = null;
 let doraGeneration = 0;
 let doraBusy = false;
-let sessionId = null;
-let sessionGeneration = 0;
-let sessionBusy = false;
-let sessionOperationCount = 0;
-let sessionDiagnostic = null;
-let sessionHighlightedLinks = [];
 let routeLookup = null;
 let ipv4Diagnostic = null;
 let pingDiagnostic = null;
@@ -59,6 +54,10 @@ const icmpInvestigation = createIcmpInvestigationController({
 const doraSession = createDoraSessionController({
   getContext: () => ({workspaceRevision, editRevision, projectSnapshot: JSON.stringify(project)}),
   onChange: () => { renderDoraDiagnostics(); renderDoraSession(); },
+});
+const simulationSession = createSimulationSessionController({
+  getContext: () => ({workspaceRevision, editRevision, projectSnapshot: JSON.stringify(project)}),
+  onChange: render,
 });
 const canvas = new TopologyCanvas($('topology'), {
   onSelect: selected => { selection = selected; render(); },
@@ -140,19 +139,7 @@ function changed({keepTrace = false} = {}) {
   render();
 }
 
-function invalidateSimulationSession() {
-  sessionGeneration += 1;
-  const previous = sessionId;
-  sessionId = null;
-  sessionBusy = false;
-  sessionOperationCount = 0;
-  sessionDiagnostic = null;
-  sessionHighlightedLinks = [];
-  if (previous) {
-    // Best-effort release only; the server still rejects any stale project.
-    void api('/api/simulation/stop', {sessionId: previous}).catch(() => {});
-  }
-}
+function invalidateSimulationSession() { simulationSession.invalidate(); }
 function select(type, id) { selection = {type, id}; pendingPort = null; render(); }
 function getSelected() {
   if (!selection) return null;
@@ -889,6 +876,9 @@ function renderDoraSession() {
 }
 
 function renderSessionDiagnostics() {
+  const {id: sessionId, busy: sessionBusy, inFlight, state, diagnostic: sessionDiagnostic} =
+    simulationSession.getState();
+  const sessionOperationCount = state?.operationCount ?? 0;
   const field = $('session-source');
   const previous = field.value;
   const sources = project.nodes.filter(n => n.kind !== 'switch')
@@ -901,8 +891,8 @@ function renderSessionDiagnostics() {
 
   const active = sessionId !== null;
   $('session-start').disabled = active || sessionBusy || sources.length === 0;
-  $('session-reset').disabled = !active || sessionBusy;
-  $('session-stop').disabled = !active || sessionBusy;
+  $('session-reset').disabled = !active || (sessionBusy && inFlight !== 'run');
+  $('session-stop').disabled = !active;
   $('session-arp').disabled = !active || sessionBusy || sources.length === 0;
   $('session-ethernet').disabled = !active || sessionBusy || sources.length === 0;
   $('session-status').textContent = sessionBusy ? 'Kör sessionoperation…' :
@@ -1600,8 +1590,9 @@ function render() {
   $('empty-state').hidden = project.nodes.length > 0;
   $('canvas-hint').textContent = pendingPort ? `Vald port: ${pendingPort.node}/${pendingPort.port}. Klicka en andra ledig port eller samma port för att avbryta.`
     : 'Dra enheter för att placera dem. Klicka två lediga portcirklar för att skapa en länk.';
+  const sessionView = simulationSession.getState();
   canvas.setData(project, selection, pendingPort,
-    sessionDiagnostic?.data ? sessionHighlightedLinks :
+    sessionView.diagnostic?.data ? sessionView.highlightedLinks :
     arpDiagnostic ? arpHighlightedLinks : highlightedLinks);
   renderInspector();
   updateTraceSelectors();
@@ -2072,105 +2063,23 @@ async function runArp() {
   render();
 }
 
-async function startSimulationSession() {
-  if (sessionId || sessionBusy) return;
-  const generation = sessionGeneration;
-  const snapshot = JSON.stringify(project);
-  sessionBusy = true;
-  renderSessionDiagnostics();
-  try {
-    const response = await api('/api/simulation/start', {project});
-    if (generation !== sessionGeneration || snapshot !== JSON.stringify(project)) {
-      void api('/api/simulation/stop', {sessionId:response.sessionId}).catch(() => {});
-      return;
-    }
-    sessionId = response.sessionId;
-    sessionOperationCount = response.operationCount;
-    sessionDiagnostic = null;
-  } catch (error) {
-    if (generation !== sessionGeneration) return;
-    sessionDiagnostic = {error:error.message};
-  } finally {
-    if (generation === sessionGeneration) {
-      sessionBusy = false;
-      render();
-    }
-  }
-}
-
-async function runSimulationOperation(operation) {
-  if (!sessionId || sessionBusy) return;
+function startSimulationSession() { void simulationSession.start(); }
+function runSimulationOperation(operation) {
   const selected = $('session-source').value;
   if (!selected) return;
   const [sourceNode, sourcePort] = JSON.parse(selected);
-  const target = $(operation === 'arp' ? 'session-ip' : 'session-mac').value.trim();
+  const targetField = operation === 'arp' ? 'session-ip' : 'session-mac';
+  const target = $(targetField).value.trim();
   if (!target) {
-    sessionDiagnostic = {error:'Ange måladressen uttryckligen.'};
-    renderSessionDiagnostics();
+    simulationSession.setInputError('Ange måladressen uttryckligen.');
     return;
   }
-  const id = sessionId, generation = sessionGeneration;
-  const snapshot = JSON.stringify(project);
-  sessionBusy = true;
-  renderSessionDiagnostics();
-  try {
-    const data = await api('/api/simulation/run', {
-      sessionId:id, project, operation, sourceNode, sourcePort, target,
-    });
-    if (generation !== sessionGeneration || snapshot !== JSON.stringify(project) ||
-        id !== sessionId) return;
-    sessionOperationCount = data.operationCount;
-    sessionDiagnostic = {data, sourceNode, sourcePort, target};
-    const r = data.result;
-    const transmissions = operation === 'arp'
-      ? [...r.requestTransmissions, ...r.replyTransmissions]
-      : r.transmissions;
-    sessionHighlightedLinks = [...new Set(transmissions.map(t => t.linkId))];
-  } catch (error) {
-    if (generation !== sessionGeneration || id !== sessionId) return;
-    sessionDiagnostic = {error:error.message};
-    sessionHighlightedLinks = [];
-    if (/unknown or expired session|project changed since session/.test(error.message)) {
-      invalidateSimulationSession();
-      sessionDiagnostic = {error:error.message};
-    }
-  } finally {
-    if (generation === sessionGeneration) {
-      sessionBusy = false;
-      render();
-    } else if (sessionId === null) {
-      render();
-    }
-  }
+  const readInputs = () => JSON.stringify([operation, $('session-source').value,
+    $(targetField).value.trim()]);
+  void simulationSession.run(operation, sourceNode, sourcePort, target, readInputs);
 }
-
-async function resetSimulationSession() {
-  if (!sessionId || sessionBusy) return;
-  const id = sessionId, generation = sessionGeneration;
-  sessionBusy = true;
-  renderSessionDiagnostics();
-  try {
-    const result = await api('/api/simulation/reset', {sessionId:id, project});
-    if (generation !== sessionGeneration || id !== sessionId) return;
-    sessionOperationCount = result.operationCount;
-    sessionDiagnostic = null;
-    sessionHighlightedLinks = [];
-  } catch (error) {
-    if (generation !== sessionGeneration) return;
-    sessionDiagnostic = {error:error.message};
-  } finally {
-    if (generation === sessionGeneration) {
-      sessionBusy = false;
-      render();
-    }
-  }
-}
-
-async function stopSimulationSession() {
-  if (!sessionId || sessionBusy) return;
-  invalidateSimulationSession();
-  render();
-}
+function resetSimulationSession() { void simulationSession.reset(); }
+function stopSimulationSession() { void simulationSession.stop(); }
 
 function icmpInvestigationStartInputs() {
   return JSON.stringify([
@@ -2494,6 +2403,10 @@ $('session-arp').addEventListener('click', () => runSimulationOperation('arp'));
 $('session-ethernet').addEventListener('click', () => runSimulationOperation('ethernet'));
 $('session-reset').addEventListener('click', resetSimulationSession);
 $('session-stop').addEventListener('click', stopSimulationSession);
+for (const id of ['session-source', 'session-ip', 'session-mac']) {
+  $(id).addEventListener(id === 'session-source' ? 'change' : 'input',
+    () => simulationSession.clearInputResult());
+}
 $('trace-target').addEventListener('change', () => { $('trace-target').dataset.userSelected = 'true'; });
 $('zoom-in').addEventListener('click', () => canvas.zoom(1.2));
 $('zoom-out').addEventListener('click', () => canvas.zoom(1 / 1.2));

@@ -32,6 +32,7 @@ from network_core.icmp_ping import EchoExchange
 from network_core.server import LabHTTPServer
 from network_core.storage import ProjectStore
 from network_core.session_idle import IDLE_TIMEOUT_SECONDS
+from network_core.simulation import MAX_OPERATIONS
 from xlsx_fixture import make_workbook, workbook_parts, zip_parts
 from ods_fixture import make_ods, ods_parts, zip_parts as zip_ods_parts
 from spreadsheet_v13_fixture import TABLES_13, expected_v13, xlsx_v13, ods_v13
@@ -42,6 +43,7 @@ from test_dhcp_registry import clients as dhcp_multi_clients
 from test_dhcp_port_vlan_fault import vlan_clients as dhcp_vlan_clients
 from test_icmp_echo import routed_reply_lab as icmp_routed_lab
 from test_icmp_investigation_lan import lan_lab as icmp_lan_lab
+from test_vlan_persistence import persisted_topology
 
 
 def port():
@@ -141,6 +143,8 @@ def browser_open(page, base):
     icmp_investigation = icmp_investigation.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     dora_session = (ROOT / 'web/features/sessions/dora-session.js').read_text(encoding='utf8')
     dora_session = dora_session.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
+    simulation_session = (ROOT / 'web/features/sessions/simulation-session.js').read_text(encoding='utf8')
+    simulation_session = simulation_session.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
     app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
     app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
@@ -153,7 +157,8 @@ def browser_open(page, base):
     app = app.replace("import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';", '')
     app = app.replace("import {createIcmpInvestigationController} from './features/sessions/icmp-investigation.js';", '')
     app = app.replace("import {createDoraSessionController} from './features/sessions/dora-session.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + investigation + '\n' + icmp_investigation + '\n' + dora_session + '\n' + app)
+    app = app.replace("import {createSimulationSessionController} from './features/sessions/simulation-session.js';", '')
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + queries + '\n' + presenters + '\n' + investigation + '\n' + icmp_investigation + '\n' + dora_session + '\n' + simulation_session + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
 
 
@@ -953,6 +958,379 @@ def dora_session_races(context, network_mode, errors):
             assert not server._cleanup_thread.is_alive()
 
 
+def simulation_session_races(context, network_mode, errors):
+    """Real Layer 2 server state and held replies across UI session races."""
+    class Clock:
+        now = 100.0
+
+        def __call__(self):
+            return self.now
+
+    clock = Clock()
+    with tempfile.TemporaryDirectory() as directory:
+        store = ProjectStore(directory)
+        project = persisted_topology()
+        store.save('layer2-race', project)
+        saved_file = Path(directory) / 'layer2-race.yadilab'
+        digest = hashlib.sha256(saved_file.read_bytes()).hexdigest()
+        server = LabHTTPServer(('127.0.0.1', 0), store,
+                               clock=clock, cleanup_interval=.01)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = f'http://127.0.0.1:{server.server_port}/'
+        try:
+            def import_project(page):
+                page.on('dialog', lambda dialog: dialog.accept())
+                with page.expect_response('**/api/validate') as response:
+                    page.locator('#import-file').set_input_files({
+                        'name': 'layer2-race.json', 'mimeType': 'application/json',
+                        'buffer': json.dumps(project).encode('utf-8'),
+                    })
+                assert response.value.status == 200
+                expect(page.locator('#session-source')).to_be_enabled()
+                page.locator('#session-source').select_option('["a","eth0"]')
+                page.locator('#session-ip').fill('192.0.2.20')
+                page.locator('#session-mac').fill('02:00:00:00:00:0B')
+
+            def fresh():
+                page = context.new_page()
+                page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+                assert browser_open(page, base) == network_mode
+                import_project(page)
+                return page
+
+            def start(page):
+                with page.expect_response('**/api/simulation/start') as response:
+                    page.locator('#session-start').click()
+                assert response.value.status == 200
+                sid = response.value.json()['sessionId']
+                assert sid in server.simulations._sessions
+                return sid
+
+            def run(page, kind='arp'):
+                with page.expect_response('**/api/simulation/run') as response:
+                    page.locator('#session-' + kind).click()
+                assert response.value.status == 200
+                return response.value.json()
+
+            def stop(page, sid):
+                with page.expect_response('**/api/simulation/stop') as response:
+                    page.locator('#session-stop').click()
+                assert response.value.status == 200
+                assert response.value.json() == {'status': 'STOPPED'}
+                assert sid not in server.simulations._sessions
+
+            def change(page, selector, value):
+                page.evaluate("""({selector, value}) => {
+                  const field = document.querySelector(selector);
+                  field.value = value;
+                  field.dispatchEvent(new Event(field.tagName === 'SELECT' ? 'change' : 'input',
+                    {bubbles: true}));
+                }""", {'selector': selector, 'value': value})
+
+            def replace(page):
+                page.locator('#new-project').click()
+                import_project(page)
+
+            # L01/L02: one Start allocation; New invalidates its late ID and
+            # triggers a real, targeted server Stop.
+            page = fresh()
+            starts = []
+            page.on('request', lambda request: starts.append(request) if
+                    request.url.endswith('/api/simulation/start') else None)
+            hold_http_reply(page, '/api/simulation/start')
+            with page.expect_response('**/api/simulation/start') as allocated:
+                page.locator('#session-start').click()
+            page.wait_for_function('window.__heldReply')
+            page.locator('#session-start').dispatch_event('click')
+            assert len(starts) == 1
+            page.locator('#new-project').click()
+            with page.expect_response('**/api/simulation/stop') as cleanup:
+                release_http_reply(page)
+            old = allocated.value.json()['sessionId']
+            assert cleanup.value.status == 200 and old not in server.simulations._sessions
+            expect(page.locator('#session-status')).to_contain_text('Ingen aktiv session')
+            page.close()
+
+            # L03/L04: Open, Import, and an actual documented edit invalidate
+            # a server-allocated Start ID, including identical project JSON.
+            for replacement in ('open', 'import', 'edit'):
+                page = fresh()
+                hold_http_reply(page, '/api/simulation/start')
+                with page.expect_response('**/api/simulation/start') as allocated:
+                    page.locator('#session-start').click()
+                page.wait_for_function('window.__heldReply')
+                if replacement == 'open':
+                    page.locator('#saved-projects').select_option('layer2-race')
+                    with page.expect_response('**/api/projects/layer2-race') as opened:
+                        page.locator('#open-project').click()
+                    assert opened.value.status == 200
+                elif replacement == 'import':
+                    import_project(page)
+                else:
+                    page.locator('[data-item-type="node"][data-item-id="a"]').click()
+                    page.locator('#node-label').fill('Edited source')
+                    page.locator('#node-label').dispatch_event('change')
+                    expect(page.locator('#node-label')).to_have_value('Edited source')
+                with page.expect_response('**/api/simulation/stop') as cleanup:
+                    release_http_reply(page)
+                old = allocated.value.json()['sessionId']
+                assert cleanup.value.status == 200 and old not in server.simulations._sessions
+                expect(page.locator('#session-status')).to_contain_text('Ingen aktiv session')
+                page.close()
+
+            # L05-L07: server has really learned and counted the old Run;
+            # changed IP, MAC, or source choice cannot inherit its result.
+            for kind, selector, replacement in (
+                ('arp', '#session-ip', '192.0.2.99'),
+                ('ethernet', '#session-mac', 'FF:FF:FF:FF:FF:FF'),
+                ('arp', '#session-source', '["b","eth0"]'),
+            ):
+                page = fresh()
+                sid = start(page)
+                hold_http_reply(page, '/api/simulation/run')
+                with page.expect_response('**/api/simulation/run') as processed:
+                    page.locator('#session-' + kind).click()
+                assert processed.value.status == 200
+                page.wait_for_function('window.__heldReply')
+                change(page, selector, replacement)
+                release_http_reply(page)
+                assert processed.value.json()['operationCount'] == 1
+                assert server.simulations._sessions[sid].operation_count == 1
+                expect(page.locator('#session-status')).to_contain_text('1 operation')
+                expect(page.locator('#session-result')).not_to_contain_text('Operation 1:')
+                if kind == 'arp' and selector == '#session-ip':
+                    assert server.simulations._sessions[sid].arp.arp_table('a', 'eth0') == {
+                        '192.0.2.20': '02:00:00:00:00:0B'}
+                    change(page, '#session-ip', '192.0.2.20')
+                    assert run(page)['result']['status'] == 'CACHE_HIT'
+                stop(page, sid)
+                page.close()
+
+            # L08/L09: Reset clears actual learning; a late, already
+            # processed Run cannot restore its old count or highlighted wires.
+            page = fresh()
+            sid = start(page)
+            first = run(page)
+            assert first['result']['status'] == 'RESOLVED'
+            assert first['macTables'] and first['arpTable']
+            hold_http_reply(page, '/api/simulation/run')
+            with page.expect_response('**/api/simulation/run') as old_run:
+                page.locator('#session-arp').click()
+            assert old_run.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            with page.expect_response('**/api/simulation/reset') as reset:
+                page.locator('#session-reset').click()
+            assert reset.value.json() == {'sessionId': sid, 'operationCount': 0,
+                                           'macTables': [], 'ephemeral': True}
+            release_http_reply(page)
+            assert old_run.value.json()['operationCount'] == 2
+            assert server.simulations._sessions[sid].state()['macTables'] == []
+            expect(page.locator('#session-status')).to_contain_text('0 operation')
+            expect(page.locator('#session-result')).to_contain_text('Inga operationer utförda')
+            assert run(page)['result']['status'] == 'RESOLVED'
+            stop(page, sid)
+            page.close()
+
+            # L10-L12: Stop overtakes a real ARP, Ethernet, or Reset response.
+            for path, kind in (('run', 'arp'), ('run', 'ethernet'), ('reset', None)):
+                page = fresh()
+                sid = start(page)
+                if path == 'reset': run(page)
+                hold_http_reply(page, '/api/simulation/' + path)
+                with page.expect_response('**/api/simulation/' + path) as processed:
+                    page.locator('#session-' + (kind or 'reset')).click()
+                assert processed.value.status == 200
+                page.wait_for_function('window.__heldReply')
+                stop(page, sid)
+                release_http_reply(page)
+                expect(page.locator('#session-status')).to_contain_text('Ingen aktiv session')
+                expect(page.locator('#session-result')).not_to_contain_text('Operation')
+                page.close()
+
+            # L13: delayed Stop A cannot clear B or its busy state.
+            page = fresh()
+            old = start(page)
+            hold_http_reply(page, '/api/simulation/stop', first_only=True)
+            with page.expect_response('**/api/simulation/stop') as stopped:
+                page.locator('#session-stop').click()
+            assert stopped.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            replace(page)
+            newer = start(page)
+            page.evaluate('window.__releaseOldStop = window.__releaseReply')
+            hold_http_reply(page, '/api/simulation/run')
+            with page.expect_response('**/api/simulation/run') as b_run:
+                page.locator('#session-arp').click()
+            assert b_run.value.status == 200
+            page.wait_for_function('window.__heldReply')
+            page.evaluate('window.__releaseOldStop()')
+            expect(page.locator('#session-arp')).to_be_disabled()
+            release_http_reply(page)
+            assert newer != old and newer in server.simulations._sessions
+            expect(page.locator('#session-status')).to_contain_text('Aktiv session')
+            stop(page, newer)
+            page.close()
+
+            # L14/L22: a real validation 422 from old A is held through a
+            # project replacement; B and saved bytes remain unaffected.
+            page = fresh()
+            old = start(page)
+            page.evaluate("""() => {
+              const original = window.fetch;
+              window.fetch = (url, init) => {
+                if (url === '/api/simulation/run') {
+                  const body = JSON.parse(init.body);
+                  body.operation = 'invalid';
+                  window.fetch = original;
+                  return original(url, {...init, body: JSON.stringify(body)});
+                }
+                return original(url, init);
+              };
+            }""")
+            hold_http_reply(page, '/api/simulation/run')
+            with page.expect_response('**/api/simulation/run') as stale_error:
+                page.locator('#session-arp').click()
+            assert stale_error.value.status == 422
+            page.wait_for_function('window.__heldReply')
+            with page.expect_response('**/api/simulation/stop'):
+                replace(page)
+            newer = start(page)
+            release_http_reply(page)
+            assert stale_error.value.json()['error'] == 'INVALID_PROJECT'
+            assert newer in server.simulations._sessions
+            expect(page.locator('#session-status')).to_contain_text('Aktiv session')
+            stop(page, newer)
+            page.close()
+
+            # L15: Stop rejected before HTTP reaches server is uncertain.
+            page = fresh()
+            sid = start(page)
+            page.evaluate("""() => {
+              const original = window.fetch;
+              window.fetch = (url, init) => {
+                if (url === '/api/simulation/stop') {
+                  window.fetch = original;
+                  return Promise.reject(new TypeError('lost Stop request'));
+                }
+                return original(url, init);
+              };
+            }""")
+            page.locator('#session-stop').click()
+            expect(page.locator('#session-result')).to_contain_text('Kunde inte bekräfta Stop')
+            assert sid in server.simulations._sessions
+            stop(page, sid)
+            page.close()
+
+            # L16-L18: server removes A, then fetch loses its real 200 reply.
+            # Retry targets A, receives exact 422, and new B works normally.
+            page = fresh()
+            old = start(page)
+            requests = []
+            page.on('request', lambda request: requests.append(request.post_data_json) if
+                    request.url.endswith('/api/simulation/stop') else None)
+            page.evaluate("""() => {
+              const original = window.fetch;
+              window.__lostSimulationStop = null;
+              window.fetch = async (url, init) => {
+                if (url !== '/api/simulation/stop') return original(url, init);
+                window.fetch = original;
+                const response = await original(url, init);
+                window.__lostSimulationStop = {
+                  status: response.status, body: await response.clone().json(),
+                };
+                throw new TypeError('Stop reply lost after server processing');
+              };
+            }""")
+            with page.expect_response('**/api/simulation/stop') as processed_stop:
+                page.locator('#session-stop').click()
+            assert processed_stop.value.status == 200
+            page.wait_for_function('window.__lostSimulationStop !== null')
+            assert page.evaluate('window.__lostSimulationStop') == {
+                'status': 200, 'body': {'status': 'STOPPED'}}
+            assert old not in server.simulations._sessions
+            expect(page.locator('#session-result')).to_contain_text('Kunde inte bekräfta Stop')
+            with page.expect_response('**/api/simulation/stop') as absent:
+                page.locator('#session-stop').click()
+            assert absent.value.status == 422
+            assert absent.value.json() == {'error': 'INVALID_PROJECT',
+                'message': 'simulation: unknown or expired session; start a new session'}
+            assert requests == [{'sessionId': old}, {'sessionId': old}]
+            expect(page.locator('#session-start')).to_be_enabled()
+            newer = start(page)
+            assert newer != old and newer in server.simulations._sessions
+            assert requests == [{'sessionId': old}, {'sessionId': old}]
+            assert run(page)['result']['status'] == 'RESOLVED'
+            stop(page, newer)
+            assert requests[-1] == {'sessionId': newer}
+            page.close()
+
+            # L19/L20: the existing worker reaps an abandoned ID; an active
+            # expired ID gets exact 422 and permits a fresh Start.
+            page = fresh()
+            abandoned = start(page)
+            page.close()
+            assert abandoned in server.simulations._sessions
+            expired = threading.Event()
+            original_cleanup = server.simulations.cleanup_expired
+
+            def observed_cleanup():
+                count = original_cleanup()
+                if abandoned not in server.simulations._sessions:
+                    expired.set()
+                return count
+
+            server.simulations.cleanup_expired = observed_cleanup
+            clock.now += IDLE_TIMEOUT_SECONDS
+            assert expired.wait(2), 'server worker did not reap Layer 2 session'
+            page = fresh()
+            old = start(page)
+            clock.now += IDLE_TIMEOUT_SECONDS
+            with page.expect_response('**/api/simulation/run') as stale:
+                page.locator('#session-arp').click()
+            assert stale.value.status == 422
+            expect(page.locator('#session-start')).to_be_enabled()
+            assert old not in server.simulations._sessions
+            newer = start(page)
+            stop(page, newer)
+            page.close()
+
+            # L21: 256 real HTTP operations hit the documented limit; the
+            # next UI Run is rejected without a fabricated success.
+            page = fresh()
+            sid = start(page)
+            statuses = page.evaluate("""async ({project, sid, limit}) => {
+              const statuses = [];
+              for (let i = 0; i < limit; i++) {
+                const response = await fetch('/api/simulation/run', {
+                  method: 'POST', headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({sessionId: sid, project, operation: 'arp',
+                    sourceNode: 'a', sourcePort: 'eth0', target: '192.0.2.20'}),
+                });
+                statuses.push(response.status);
+              }
+              return statuses;
+            }""", {'project': project, 'sid': sid, 'limit': MAX_OPERATIONS})
+            assert len(statuses) == MAX_OPERATIONS and set(statuses) == {200}
+            assert server.simulations._sessions[sid].operation_count == MAX_OPERATIONS
+            with page.expect_response('**/api/simulation/run') as limited:
+                page.locator('#session-arp').click()
+            assert limited.value.status == 422
+            expect(page.locator('#session-result')).to_contain_text('operation limit reached')
+            expect(page.locator('#session-result')).not_to_contain_text('Status: RESOLVED')
+            stop(page, sid)
+            page.close()
+
+            assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+            assert not errors, errors
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+            assert not worker.is_alive()
+            assert not server._cleanup_thread.is_alive()
+
+
 def icmp_investigation_races(context, network_mode, errors):
     """Real ICMP server sessions with delivery held after HTTP processing."""
     class Clock:
@@ -1726,7 +2104,8 @@ def run():
                            'features/diagnostics/presenters.js',
                            'features/sessions/dhcp-investigation.js',
                            'features/sessions/icmp-investigation.js',
-                           'features/sessions/dora-session.js'):
+                           'features/sessions/dora-session.js',
+                           'features/sessions/simulation-session.js'):
                 if response.url.endswith('/' + module):
                     module_responses[module] = response
         page.on('response', record_module)
@@ -1740,7 +2119,8 @@ def run():
                                'features/diagnostics/presenters.js',
                                'features/sessions/dhcp-investigation.js',
                                'features/sessions/icmp-investigation.js',
-                               'features/sessions/dora-session.js'):
+                               'features/sessions/dora-session.js',
+                               'features/sessions/simulation-session.js'):
                     response = module_responses.get(module)
                     assert response is not None and response.status == 200, f'{module} was not loaded'
                     assert response.headers['content-type'].split(';')[0] in (
@@ -4228,6 +4608,7 @@ def run():
             abandoned_investigation_cleanup(context, network_mode, errors)
             icmp_investigation_races(context, network_mode, errors)
             dora_session_races(context, network_mode, errors)
+            simulation_session_races(context, network_mode, errors)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
