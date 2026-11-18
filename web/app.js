@@ -1155,7 +1155,7 @@ function icmpInvestigationDescription(item) {
         + ' · ARP ' + step.arpStatus
         + ' · nästa hopp ' + step.nextHopIpv4
         + ' · kablar ' + (step.transmissions.map(t => t.linkId).join(', ') || 'inga')
-        + ' · VLAN-drops ' + step.vlanDrops.length).join('\n') || 'Ingen routad hop nådd');
+        + ' · VLAN-drops ' + step.vlanDrops.length).join('\n') || 'Ingen paketväg nådd');
   }
   if (item.probe === 'link') {
     return 'KABEL ' + o.linkId + ': dokumenterat ' + (o.documentedEnabled ? 'UP' : 'DOWN')
@@ -1255,7 +1255,7 @@ function renderIcmpInvestigation() {
         + ' → ' + icmpInvestigationState.destinationIpv4
         + ' · ' + icmpInvestigationState.observations + ' mätningar'
         + ' · DHCP-ursprung: ' + icmpInvestigationState.dhcpCheck
-      : 'Ingen routing-/Layer 2-övning startad. En fungerande routad ICMP-baslinje krävs.';
+      : 'Ingen ICMP-övning startad. En fungerande ICMP-baslinje krävs.';
   const observations = $('icmp-investigation-observations');
   observations.textContent = icmpInvestigationLog.length
     ? icmpInvestigationLog.map((x, i) =>

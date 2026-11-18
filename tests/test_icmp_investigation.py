@@ -375,7 +375,7 @@ class IcmpInvestigationTests(unittest.TestCase):
     def test_failed_baseline_not_admitted_and_no_fake_connected_reachability(self):
         project = routed_reply_lab()
         next(n for n in project["nodes"] if n["id"] == "b")["staticRoutes"].clear()
-        with self.assertRaisesRegex(ProjectValidationError, "initial routed Echo"):
+        with self.assertRaisesRegex(ProjectValidationError, "initial Echo"):
             IcmpInvestigation(project, "a", "eth0", "203.0.113.20", 5)
         for ttl in (1, 0, 256, True, "5"):
             with self.subTest(ttl=ttl), self.assertRaises(ProjectValidationError):
