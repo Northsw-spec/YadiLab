@@ -10,8 +10,10 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
+from unittest.mock import patch
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError
 from playwright._impl._errors import Error as PlaywrightError
@@ -25,6 +27,10 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from network_core import config
+from network_core.icmp_investigation import _candidates
+from network_core.icmp_ping import EchoExchange
+from network_core.server import LabHTTPServer
+from network_core.storage import ProjectStore
 from xlsx_fixture import make_workbook, workbook_parts, zip_parts
 from ods_fixture import make_ods, ods_parts, zip_parts as zip_ods_parts
 from spreadsheet_v13_fixture import TABLES_13, expected_v13, xlsx_v13, ods_v13
@@ -1457,20 +1463,28 @@ def run():
             assert lan_start.value.status == 200
             assert not any(kind in json.dumps(lan_start.value.json()) for kind in
                            ('CABLE_DOWN', 'PORT_SHUTDOWN', 'VLAN_MISMATCH',
-                            'IPV4_HOST_ADDRESS_MISMATCH'))
+                            'IPV4_HOST_ADDRESS_MISMATCH', 'IPV4_PREFIX_MISMATCH'))
             lan_page.locator('#icmp-investigation-probe').select_option('ping')
             with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_ping:
                 lan_page.locator('#icmp-investigation-measure').click()
             ping_observation = lan_ping.value.json()['observation']
             assert ping_observation['status'] != 'REPLIED'
-            assert ping_observation['requestStatus'] == 'ARP_FAILED'
-            assert ping_observation['requestSteps'][0]['arpStatus'] in ('NO_REPLY', 'NO_ACTIVE_LINK')
+            assert ping_observation['replyMatched'] is False
             lan_page.locator('#icmp-investigation-probe').select_option('route')
             with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_route:
                 lan_page.locator('#icmp-investigation-measure').click()
             route_observation = lan_route.value.json()['observation']
-            assert route_observation['selectedRoute']['type'] == 'CONNECTED'
+            assert route_observation['status'] in ('MATCH', 'NO_ROUTE')
+            if route_observation['status'] == 'MATCH':
+                assert route_observation['selectedRoute']['type'] == 'CONNECTED'
             assert route_observation['documentedStaticRoutes'] == []
+            lan_page.locator('#icmp-investigation-route-node').select_option('b')
+            lan_page.locator('#icmp-investigation-route-destination').select_option('source')
+            with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_reverse:
+                lan_page.locator('#icmp-investigation-measure').click()
+            reverse_observation = lan_reverse.value.json()['observation']
+            assert reverse_observation['status'] in ('MATCH', 'NO_ROUTE')
+            assert reverse_observation['documentedStaticRoutes'] == []
             lan_page.locator('#icmp-investigation-probe').select_option('link')
             disconnected = []
             for link_id in ('la', 'lb'):
@@ -1483,8 +1497,8 @@ def run():
             # Infer the hidden cause from independent documented-versus-
             # simulated observations; the normal exercise chooses at random.
             lan_page.locator('#icmp-investigation-probe').select_option('port')
-            shut_ports, changed_addresses = [], []
-            for nid, pid in (('sw', 'a'), ('sw', 'b'), ('b', 'eth0')):
+            shut_ports, changed_addresses, changed_prefixes = [], [], []
+            for nid, pid in (('sw', 'a'), ('sw', 'b'), ('a', 'eth0'), ('b', 'eth0')):
                 lan_page.locator('#icmp-investigation-port').select_option(
                     json.dumps([nid, pid], separators=(',', ':')))
                 with lan_page.expect_response('**/api/icmp/investigation/probe') as lan_port:
@@ -1493,7 +1507,14 @@ def run():
                 if measured['documentedEnabled'] and not measured['observedEnabled']:
                     shut_ports.append((nid, pid))
                 if measured['documentedIpv4'] != measured['observedIpv4']:
-                    changed_addresses.append((nid, pid))
+                    documented_ip, documented_prefix = measured['documentedIpv4'].split('/')
+                    observed_ip, observed_prefix = measured['observedIpv4'].split('/')
+                    if documented_ip == observed_ip:
+                        assert documented_prefix != observed_prefix
+                        changed_prefixes.append((nid, pid))
+                    else:
+                        assert documented_prefix == observed_prefix
+                        changed_addresses.append((nid, pid))
             lan_page.locator('#icmp-investigation-probe').select_option('vlan')
             changed_vlans = []
             for nid, pid in (('sw', 'a'), ('sw', 'b')):
@@ -1505,7 +1526,8 @@ def run():
                 if measured['documentedVlan'] != measured['observedVlan']:
                     changed_vlans.append((nid, pid))
             assert sum(bool(x) for x in
-                       (disconnected, shut_ports, changed_vlans, changed_addresses)) == 1
+                       (disconnected, shut_ports, changed_vlans,
+                        changed_addresses, changed_prefixes)) == 1
             if disconnected:
                 assert len(disconnected) == 1
                 inferred, failure_point = 'CABLE_DOWN', disconnected[0]
@@ -1515,9 +1537,27 @@ def run():
             elif changed_vlans:
                 assert len(changed_vlans) == 1
                 inferred, failure_point = 'VLAN_MISMATCH', changed_vlans[0][1]
+            elif changed_prefixes:
+                assert len(changed_prefixes) == 1
+                changed_node, failure_point = changed_prefixes[0]
+                assert failure_point == 'eth0'
+                assert ping_observation['requestStatus' if changed_node == 'a'
+                                        else 'replyStatus'] == 'NO_ROUTE'
+                assert route_observation['status'] == ('NO_ROUTE' if changed_node == 'a'
+                                                       else 'MATCH')
+                assert reverse_observation['status'] == ('NO_ROUTE' if changed_node == 'b'
+                                                         else 'MATCH')
+                inferred = 'IPV4_PREFIX_MISMATCH'
             else:
                 assert changed_addresses == [('b', 'eth0')]
                 inferred, failure_point = 'IPV4_HOST_ADDRESS_MISMATCH', 'eth0'
+            if inferred == 'IPV4_PREFIX_MISMATCH':
+                assert 'ARP_FAILED' not in (ping_observation['requestStatus'],
+                                            ping_observation['replyStatus'])
+            else:
+                assert ping_observation['requestStatus'] == 'ARP_FAILED'
+                assert ping_observation['requestSteps'][0]['arpStatus'] in (
+                    'NO_REPLY', 'NO_ACTIVE_LINK')
             lan_page.locator('#icmp-investigation-diagnosis').select_option(inferred)
             with lan_page.expect_response('**/api/icmp/investigation/diagnose') as lan_diagnose:
                 lan_page.locator('#icmp-investigation-diagnose').click()
@@ -1530,10 +1570,91 @@ def run():
             assert repaired_lan['replyMatched'] is True
             assert repaired_lan['faultCategory'] == inferred
             assert failure_point in repaired_lan['report']['rootCause']
+            if inferred == 'IPV4_PREFIX_MISMATCH':
+                assert 'NO_ROUTE' in repaired_lan['report']['evidence']
+                assert 'ARP för' not in repaired_lan['report']['evidence']
+                assert 'Värdadressen var oförändrad' in repaired_lan['report']['rootCause']
             expect(lan_page.locator('#icmp-investigation-recovery')).to_contain_text(
                 'matchande Echo Reply')
             assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
             lan_page.close()
+
+            # Select the existing prefix candidate on a local test server.
+            # Only the random choice is controlled; Chromium still measures
+            # real API results from EchoExchange and the canonical model.
+            prefix_project = icmp_lan_lab()
+            prefix_baseline = EchoExchange(prefix_project).ping(
+                'a', 'eth0', '192.168.10.20', 5, 101, 1)
+            prefix_choice = next(i for i, (kind, _) in enumerate(
+                _candidates(prefix_project, prefix_baseline))
+                if kind == 'IPV4_PREFIX_MISMATCH')
+            prefix_server = LabHTTPServer(('127.0.0.1', 0),
+                                          ProjectStore(store / 'prefix-browser'))
+            prefix_thread = threading.Thread(target=prefix_server.serve_forever, daemon=True)
+            prefix_thread.start()
+            try:
+                with patch('network_core.icmp_investigation.secrets.randbelow',
+                           return_value=prefix_choice):
+                    prefix_page = context.new_page()
+                    prefix_page.on('pageerror', lambda error: errors.append(
+                        getattr(error, 'stack', str(error))))
+                    prefix_base = f'http://127.0.0.1:{prefix_server.server_port}/'
+                    assert browser_open(prefix_page, prefix_base) == network_mode
+                    prefix_page.once('dialog', lambda dialog: dialog.accept())
+                    with prefix_page.expect_response('**/api/validate') as prefix_import:
+                        prefix_page.locator('#import-file').set_input_files({
+                            'name': 'lan-prefix-investigation.json',
+                            'mimeType': 'application/json',
+                            'buffer': json.dumps(prefix_project).encode('utf-8'),
+                        })
+                    assert prefix_import.value.status == 200
+                    prefix_page.locator('#icmp-investigation-source').select_option(
+                        json.dumps(['a', 'eth0'], separators=(',', ':')))
+                    prefix_page.locator('#icmp-investigation-destination').fill('192.168.10.20')
+                    with prefix_page.expect_response('**/api/icmp/investigation/start') as prefix_start:
+                        prefix_page.locator('#icmp-investigation-start').click()
+                    assert prefix_start.value.status == 200
+                    assert 'IPV4_PREFIX_MISMATCH' not in json.dumps(prefix_start.value.json())
+                    prefix_page.locator('#icmp-investigation-probe').select_option('ping')
+                    with prefix_page.expect_response('**/api/icmp/investigation/probe') as prefix_ping:
+                        prefix_page.locator('#icmp-investigation-measure').click()
+                    measured_ping = prefix_ping.value.json()['observation']
+                    assert measured_ping['requestStatus'] == 'NO_ROUTE'
+                    assert measured_ping['requestSteps'] == []
+                    assert measured_ping['replyMatched'] is False
+                    prefix_page.locator('#icmp-investigation-probe').select_option('route')
+                    with prefix_page.expect_response('**/api/icmp/investigation/probe') as prefix_route:
+                        prefix_page.locator('#icmp-investigation-measure').click()
+                    assert prefix_route.value.json()['observation']['status'] == 'NO_ROUTE'
+                    prefix_page.locator('#icmp-investigation-probe').select_option('port')
+                    prefix_page.locator('#icmp-investigation-port').select_option(
+                        json.dumps(['a', 'eth0'], separators=(',', ':')))
+                    with prefix_page.expect_response('**/api/icmp/investigation/probe') as prefix_port:
+                        prefix_page.locator('#icmp-investigation-measure').click()
+                    measured_port = prefix_port.value.json()['observation']
+                    assert measured_port['documentedIpv4'] == '192.168.10.10/24'
+                    assert measured_port['observedIpv4'] == '192.168.10.10/28'
+                    prefix_page.locator('#icmp-investigation-diagnosis').select_option(
+                        'IPV4_PREFIX_MISMATCH')
+                    with prefix_page.expect_response('**/api/icmp/investigation/diagnose') as prefix_diagnose:
+                        prefix_page.locator('#icmp-investigation-diagnose').click()
+                    assert prefix_diagnose.value.json()['correct'] is True
+                    with prefix_page.expect_response('**/api/icmp/investigation/repair') as prefix_repair:
+                        prefix_page.locator('#icmp-investigation-repair').click()
+                    prefix_fixed = prefix_repair.value.json()
+                    assert prefix_fixed['status'] == 'RECOVERED'
+                    assert prefix_fixed['restoredEchoStatus'] == 'REPLIED'
+                    assert prefix_fixed['replyMatched'] is True
+                    assert 'NO_ROUTE' in prefix_fixed['report']['evidence']
+                    assert 'ARP för' not in prefix_fixed['report']['evidence']
+                    expect(prefix_page.locator('#icmp-investigation-recovery')).to_contain_text(
+                        'Värdadressen var oförändrad')
+                    assert hashlib.sha256(saved_file.read_bytes()).hexdigest() == digest
+                    prefix_page.close()
+            finally:
+                prefix_server.shutdown()
+                prefix_server.server_close()
+                prefix_thread.join(timeout=5)
 
             # Delayed measurement after project edit must not resurrect the
             # old hidden session, replace the graph or modify saved bytes.
