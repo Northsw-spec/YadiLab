@@ -1,6 +1,6 @@
 # Kontrakt för källtrogen dokumentationsläsning och import
 
-**Dokumentversion:** 3.2 – reviderat datakontrakt 4A–4D  
+**Dokumentversion:** 3.3 – exakt boolesk mappning och koordinatsäker deterministisk layout 4A–4D  
 **Beslutat läge:** Ett enda normerande målkontrakt för 4A–4D, reviderat efter direkt granskning av öppna importimplementationer. 4A byggs först, och därefter genomförs 4B–4D stegvis med en aktiv PR åt gången och verifierade del-PR:er inom varje etapp. Dokumentet anger krav, inte redan uppfyllda funktioner.  
 **Kodbas:** `detta repository`, referens-`main` `17acb51c8c64c3b4b7a1026514cb8b0a2177a127`.  
 **Omfattning:** Hela den beslutade funktionen för tabellinspektion, explicit fältmappning, ofullständig nätverksdokumentation, proveniens, import, profilåteranvändning och slutacceptans. Funktionerna är målkrav, inte statuspåståenden.
@@ -182,7 +182,7 @@ I etapp 4B–4D har varje källa en stabil referens, t.ex. sourceId=src-1. Varje
 - headerRow – faktiskt radnummer eller null för tabell utan rubrik.
 - selectedRows – sorterad, unik array av faktiska, befolkade källradindex. Varje rad måste finnas, får inte vara headerRow och måste uppfylla rad-/resursgränser.
 - columns – objekt där varje **tillåtet målfält** är en nyckel och värdet en eller flera explicita källkolumnbokstäver, t.ex. ["A"] eller ["B","F"]; ingen implicit igenkänning av rubriktext.
-- valueMaps – objekt med exakt källtext→kanonisk värdetext för valt målfält; bara användarbekräftade, exakta, skiftlägeskänsliga översättningar. Olistat värde är olöst, inte automatisk trim/översättning.
+- valueMaps – objekt med exakt källtext→kanonisk värdetext för valt målfält; bara användarbekräftade, exakta, skiftlägeskänsliga översättningar. För booleska målfält är resultattexten en mellanrepresentation: den ska bli en verklig JSON-boolean enligt §6.2.1, innan kanonisk SourceClaim, ImportPlan och validate_project(). Olistat värde är olöst, aldrig automatiskt trimmat eller översatt.
 - constants – objekt med typad explicit användarkonstant för ett målfält. Fältet får inte samtidigt ges värde via columns. Identitets- och relationsfält får inte vara tabellkonstanter.
 - expectedHeaders – array av ursprungliga, exakt avkodade rubrikvärden för valt headerRow, eller [] när headerRow=null. Används för jämförelse, inte för gissning.
 - label – en användarvald, ofarlig beskrivning av vyn; aldrig bevis för källsemantik.
@@ -200,11 +200,27 @@ CSV-cell är text; native Excel/ODS-cell är explicit text/number/boolean enligt
 - node.kind måste bli exakt host|switch|router|firewall. Okända objekttyper får inte antas vara host.
 - Ett numeriskt Excel-ID får inte omvandlas till en uppfunnen identifierare med antagna ledande nollor. Kräv textbaserad källidentitet eller en separat explicit radunik användardeklaration; en sådan deklaration är *inte* källfakta.
 - IPv4/CIDR, MAC, VLAN och statiska routes måste uppfylla aktuell validate_project(); ingen dold gissad netmask, gateway eller portbindning.
-- Boolska fält tar native boolean eller exakt true/false. Text som yes/up/1 blir booleans endast via explicit värdemappning. Tom cell är aldrig false eller enabled.
+- Booleska målfält `port.enabled` och `link.enabled` kräver alltid **riktig JSON-boolean** i SourceClaim, ImportPlan, kandidatprojekt och efter Save/Open. Endast de deterministiska reglerna i `6.2.1 får avkoda text, formatmärkt native boolean eller uttryckligt användarbeslut till boolean. `yes`, `up` och text-`1` får aldrig tolkas implicit. Tom cell betyder okänt, inte false eller enabled.
 - För ett målfält med flera källkolumner accepteras exakt lika kanoniska värden; konflikter gör påståendet BLOCKED med alla motstridiga celler i rapporten, aldrig first/last-wins.
 - Användarkonstanter innehåller exakt {type:"text"|"boolean"|"null",value:...}; gäller bara vald vy och alla dess valda rader. Radunik komplettering uttrycks enbart genom `rowValues[]` i kandidat-API:t (§9.1), nycklad av (viewId,row,targetField). Den ska komma från ett separat användarval, bevaras i SourceClaim och importEvidence som `user_decision`, och får aldrig ändra källcellen. Om samma fält har en befolkad källcell med ett annat värde blir enheten BLOCKED med både källvärdet och beslutet redovisade; `rowValues` får inte tyst skriva över källfakta.
 
 Alla deklarationer ska strikt typkontrolleras; okända målnamn och extra request-nycklar avvisas. En rubrik som "IP Address" eller "Connected To" betyder inget utan bekräftad roll och fälttolkning.
+
+### 6.2.1 Exakt boolesk semantik för mappade nätverksfält
+
+Reglerna gäller **endast** `port.enabled` och `link.enabled`. Läsaren i 4A ska fortfarande behålla `cell.value` oförändrat som lexikal sträng, med originalets `cell.type` och celladress. Ingen konvertering i denna sektion får ändra källarkivet.
+
+Konverteringen utförs på servern **efter** uttrycklig mappning men **före** en kanonisk SourceClaim, change.fieldValues, validate_project() eller Save:
+
+1. Formatmärkt XLSX/ODS-boolean: källcellen måste faktiskt ha `type:"boolean"` verifierad av formatparsern. OOXML råvärde är exakt `"0"` eller `"1"` i en typad boolean-cell, som blir JSON `false`/`true`. ODF råvärde är exakt `"false"` eller `"true"` i en typad boolean-cell, som blir JSON `false`/`true`. Råtexten bevaras i källans data; andra lexikala värden för formatmärkt boolean avvisas som ogiltig filsemantik. `valueMaps` får inte användas för en native boolean-cell: om mappningen för samma målfält har `valueMaps` och den valda källcellen är typad boolean blir just den radens claim `BLOCKED` med `BOOLEAN_MAPPING_TYPE_MISMATCH`, inte tyst fallback.
+2. Textcell utan `valueMaps` för målfältet: exakt sträng `"true"` blir JSON `true` och exakt `"false"` blir JSON `false`. Skiftläget är viktigt. `"TRUE"`, `" true"`, `"yes"`, `"up"`, `"1"` och alla andra textsträngar blir `BLOCKED` med `UNMAPPED_BOOLEAN`. Ingen trim, normalisering eller heuristik tillåts.
+3. Textcell med uttrycklig `valueMaps` för målfältet: råtexten måste matcha en exakt, skiftlägeskänslig uppslagsnyckel. Alla målvärden i denna map måste vara exakt strängen `"true"` eller `"false"`. Andra resultatsträngar gör **hela requesten** ogiltig med HTTP 422. Ett olistat källvärde blir `BLOCKED` med `UNMAPPED_BOOLEAN`, även om det råkar heta `"true"`. Ett hittat mappat resultat konverteras från den **exakta resultatsträngen** till verkligt JSON `true`/`false`, aldrig strängen `"true"`/`"false"` i det slutliga projektet. Exempel: `{"port.enabled":{"yes":"true","no":"false"}}` får ge äkta booleans.
+4. En källcell av `type:"number"` är aldrig boolean, även om råtexten är `"0"` eller `"1"`. Den blir `BLOCKED` med `BOOLEAN_SOURCE_TYPE` utan implicit parsing. En tom/utelämnad cell är inte false. För den aktuella raden får användaren i stället tillhandahålla ett separat, typat `rowValues`-beslut eller rätta källdokumentet.
+5. `constants` med `{"type":"boolean","value":true|false}` och `rowValues` med `{"valueType":"boolean","value":true|false}` har redan en faktisk JSON-boolean; de får inte serialiseras om till sträng. Om värdet motsäger en befolkad, uttryckligen mappad källuppgift ska enheten markeras `BLOCKED` med både källcellens och användarbeslutets ursprung, aldrig last-write-wins.
+
+**Proveniens:** `valueMaps` är redan ett användargodkänt mappningsbeslut som bevaras i historisk `mappingViews` och ingår i `plan.fingerprint`. Varje booleanfält som uppkommit genom `valueMaps` måste ha både verklig `source_cell`-referens och `user_decision` med serverberäknat `decisionId = "d-" + sha256(canonicalJson([viewId,"valueMap",targetField,sourceText,mappedText]))[:32]`. Ren källtext `true`/`false` och formatmärkt native boolean får endast `source_cell`-ursprung. Typade constants/rowValues använder sina befintligt definierade beslut-ID:n från `7.2. Vid historisk källåterspelning måste samma typade booleska fältvärden och fieldOrigins rekonstrueras, även efter Save/Open. Ett användarbeslut är aldrig ett påstående om att den omvandlade booleanen förekom bokstavligen i originalet.
+
+**Negativa och positiva acceptansfall:** OOXML booleskt `t="b"` med `0`/`1`, ODF true/false med boolesk celltyp, CSV-text `"true"` och `"false"`, CSV-text `"yes"` och `"no"` med explicit map; text `"yes"` utan map, `"TRUE"`, `" true"`, text `"1"`, numerisk cell `1`, tom cell, olistad mapnyckel, ogiltigt målvärde `"on"` i map, native boolean med aktiv textmap och konflikter med constants/rowValues. För varje accepterat fall måste den kanoniska modellen uppfylla Python `type(value) is bool` i faktisk Save/Open, och replay måste återskapa identisk proveniens och fingerprint.
 
 ### 6.3 Typade källpåståenden
 
