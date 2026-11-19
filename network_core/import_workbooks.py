@@ -138,7 +138,7 @@ def xlsx_cell(cell, shared, where):
     fail(where, f'unsupported cell type {kind!r}')
 
 
-def xlsx_sheet(z, part, name, serial, shared, budget, from_row=1):
+def xlsx_sheet(z, part, name, serial, shared, budget, from_row=1, row_limit=PREVIEW_ROWS):
     root = xml(z, part)
     if root.tag != q(X, 'worksheet'):
         fail(name, 'invalid worksheet root')
@@ -186,12 +186,12 @@ def xlsx_sheet(z, part, name, serial, shared, budget, from_row=1):
             if budget[0] > MAX_CELLS:
                 fail(name, 'more than 100000 stored cells')
             high_col = max(high_col, col)
-            if number >= from_row and len(preview) < PREVIEW_ROWS:
+            if number >= from_row and (row_limit is None or len(preview) < row_limit):
                 cells.append({'address': ref, 'type': value[0], 'value': value[1]})
         if cells or any(xlsx_cell(c, shared, f'{name}!{c.get("r")}') not in (None, ('text', '')) for c in row):
             high_row = number
             populated += 1
-            if number >= from_row and len(preview) < PREVIEW_ROWS:
+            if number >= from_row and (row_limit is None or len(preview) < row_limit):
                 preview.append({'row': number, 'cells': cells})
             elif number >= from_row and next_row is None:
                 next_row = number
@@ -200,7 +200,7 @@ def xlsx_sheet(z, part, name, serial, shared, budget, from_row=1):
             'previewRows': preview, 'nextRow': next_row}
 
 
-def xlsx(data, from_row=1):
+def xlsx(data, from_row=1, row_limit=PREVIEW_ROWS):
     with archive(data, 'XLSX') as z:
         names = set(z.namelist())
         required = {'[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels'}
@@ -261,7 +261,7 @@ def xlsx(data, from_row=1):
             if overrides.get('/' + part) != 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml':
                 fail(name, 'worksheet content type missing')
             permitted.add(part)
-            result.append(xlsx_sheet(z, part, name, serial, shared, budget, from_row))
+            result.append(xlsx_sheet(z, part, name, serial, shared, budget, from_row, row_limit))
         if names - permitted:
             fail('XLSX', f'unsupported package parts: {sorted(names - permitted)[:3]}')
         return result
@@ -332,7 +332,7 @@ def odf_cell(cell, where):
     fail(where, f'unsupported value-type {kind!r}')
 
 
-def ods_sheet(table, serial, budget, from_row=1):
+def ods_sheet(table, serial, budget, from_row=1, row_limit=PREVIEW_ROWS):
     name = table.get(q(T, 'name'))
     if not name or table.get(q(T, 'visibility'), 'visible') != 'visible':
         fail('ODS', 'unnamed or hidden sheet')
@@ -375,7 +375,7 @@ def ods_sheet(table, serial, budget, from_row=1):
                     fail(name, 'more than 100000 stored cells')
                 highest = max(highest, col_number + col_repeat)
                 for offset in range(col_repeat):
-                    if row_number + repeat >= from_row and len(preview) < PREVIEW_ROWS:
+                    if row_number + repeat >= from_row and (row_limit is None or len(preview) < row_limit):
                         cells.append({'address': f'{_column_name(col_number + offset + 1)}{row_number + 1}', 'type': value[0], 'value': value[1]})
             col_number += col_repeat
         if cells or budget[0] and any(odf_cell(c, name) not in (None, ('text', '')) for c in row):
@@ -383,7 +383,8 @@ def ods_sheet(table, serial, budget, from_row=1):
             high_row = row_number + repeat
             first = max(row_number + 1, from_row)
             if first <= row_number + repeat:
-                available = PREVIEW_ROWS - len(preview)
+                available = (row_number + repeat - first + 1 if row_limit is None
+                             else row_limit - len(preview))
                 for number in range(first, min(row_number + repeat + 1, first + available)):
                     preview.append({'row': number, 'cells': [
                         {**c, 'address': re.sub(r'\d+$', str(number), c['address'])}
@@ -398,7 +399,7 @@ def ods_sheet(table, serial, budget, from_row=1):
             'previewRows': preview, 'nextRow': next_row}
 
 
-def ods(data, from_row=1):
+def ods(data, from_row=1, row_limit=PREVIEW_ROWS):
     with archive(data, 'ODS') as z:
         names = set(z.namelist())
         required = {'mimetype', 'content.xml', 'META-INF/manifest.xml'}
@@ -438,5 +439,5 @@ def ods(data, from_row=1):
             if name in seen:
                 fail('ODS', 'duplicate sheet name')
             seen.add(name)
-            result.append(ods_sheet(table, serial, budget, from_row))
+            result.append(ods_sheet(table, serial, budget, from_row, row_limit))
         return result
