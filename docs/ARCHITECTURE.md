@@ -1,5 +1,7 @@
 # Applikationsarkitektur 0.1 — medvetet liten
 
+> **Historisk arkitekturöversikt:** Beskrivningar av ”nästa steg”, ”inte implementerat” eller tidigare funktionsbegränsningar i denna fil är historiska. Verifiera faktisk kod och CI innan utvecklingsbeslut. Dokumentationsimport ska följa [det aktuella bindande importkontraktet](IMPORT_SOURCE_CONTRACT.md); ingen ny importfunktion är färdig genom att den har dokumenterats.
+
 ## Varför en ny implementation?
 
 Applikationen är ett nytt kodträd med en tydlig, begränsad kedja:

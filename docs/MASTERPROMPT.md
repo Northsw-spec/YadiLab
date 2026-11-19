@@ -130,17 +130,11 @@ Skapa inte presentationsgrupper eller syntetiska länkar som misstas för verkli
 
 ## 9. Dokumentationsimport
 
-Vidareutveckla den befintliga explicita CSV-importören. Stöd därefter, efter separata kontrakt och tester, XLSX, ODS, JSON och det egna projektformatet.
+**Bindande kontrakt för nästa etapp:** [docs/IMPORT_SOURCE_CONTRACT.md](IMPORT_SOURCE_CONTRACT.md). Läs det före all ändring av dokumentationsimport. Det ersätter vaga äldre förslag om att automatiskt tolka ”godtyckliga” eller namnlösa konsultstandarder; det ersätter **inte** redan implementerade och testade import- eller lagringskontrakt.
 
-Importörer ska:
-- Ha dokumenterade kolumner, formatversioner och referensregler.
-- Inte gissa länkar, gränssnitt eller topologi.
-- Avvisa okända, inkonsekventa eller förlustbringande indata om inte säker, uttryckligen godkänd hantering definierats.
-- Bevara käll-ID:n, ändpunkter och betydelsen av värden.
-- Validera hela importen innan arbetsytan ersätts.
-- Kräva uttryckligt godkännande vid ersättning av osparat arbete.
-- Aldrig autospara en importerad modell.
-- Klara verkliga olika dokument, inte enbart en särskild testarbetsbok.
+Nu finns verifierade strikta CSV-, XLSX-, ODS-, JSON- och projektvägar med explicit schema och gemensam validering. Nästa utvecklingsleverans är **4A: skrivskyddad, källtrogen förhandsvisning** av tabeller. 4A får inte bygga en kandidatmodell, okontrollerad semantisk mappning eller ett nytt Save-flöde. Fortsatt mappning (4B–4D) kräver de separata verifieringsgrindarna i importspecificeringen.
+
+Alla importer och framtida adaptrar ska använda samma kanoniska projektvalidering och bevara referensidentiteter. Inga antaganden om fysiska länkar, enheter, portbindningar, topologi eller nätverksreachability tillåts. Okänd, tvetydig eller icke representerbar källdata får inte tyst kastas bort. Fullständig validering och uttryckligt arbetsytegodkännande föregår ändring; Save är separat.
 
 ## 10. Beständig Save/Open och formatmigration
 
@@ -212,7 +206,7 @@ Rapportera oavsiktligt upptäckta allvarliga problem utan att automatiskt lämna
 
 **FAS 4 — Felsökningsmotor:** definierad felinjicering, diagnostiska tabeller, observationsspår, felsökningsövningar, återställning.
 
-**FAS 5 — Dokumentationsimport:** verifierbara XLSX-/ODS-importörer, andra explicita format, exakta identitets- och avvisningskontroller.
+**FAS 5 — Dokumentationsimport:** de strikta CSV/XLSX/ODS-importörerna är redan implementerade. Nästa leverans är en separat, skrivskyddad källförhandsvisning (4A) enligt `docs/IMPORT_SOURCE_CONTRACT.md`. Därefter endast godkända, evidensbundna mappningsetapper 4B–4D.
 
 **FAS 6 — Avancerade protokoll:** DHCP, DNS, NAT, ACL, brandväggsregler, IPv6 och avancerad routing endast efter behov och korrekt verifiering.
 

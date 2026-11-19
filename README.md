@@ -4,6 +4,8 @@
 
 Version 0.1 är en körbar lokal desktop/webb-hybrid för att dokumentera enheter, portar, zoner och **uttryckligen deklarerade** fysiska länkar. Grafspårningen är avsiktligt begränsad. Projekt lagras på riktigt i `.yadilab`-filer. Programmet fungerar helt lokalt utan npm-installation, moln eller tredjepartsbibliotek i runtime.
 
+> **Dokumentstatus 2026-11-19:** README innehåller historiska beskrivningar från flera utvecklingsetapper; formuleringar som ”stöds ännu inte” är inte en tillförlitlig aktuell funktionsinventering. Läs faktisk källkod, testsviter och CI för nuläge. För all vidareutveckling av dokumentationsimport gäller [det bindande importkontraktet](docs/IMPORT_SOURCE_CONTRACT.md) och [utvecklingsdirektivet](docs/MASTERPROMPT.md). Det planerade förhandsvisningsflödet i etapp 4A är **inte implementerat** bara för att kontraktet finns.
+
 ## Permanent utvecklingsdirektiv
 
 Utvecklingen styrs av [Masterprompten](docs/MASTERPROMPT.md) och den korta operativa instruktionen i [AGENTS.md](AGENTS.md). Läs båda före varje utvecklingsetapp. Dokumentet beskriver slutmål och kvalitetskrav; alla planerade funktioner är **inte** redan implementerade.

@@ -31,6 +31,10 @@
 - Om webbläsaren blockerar lokal HTTP kan browser_smoke använda sin uttryckligt märkta bro, men det är **inte** bevis för normal direkt HTTP i den miljön.
 - **Stående användargodkännande för automatisk merge:** Merga varje färdig och avgränsad PR automatiskt via GitHubs normala mergeflöde när den exakta PR-HEAD har PASS på alla obligatoriska CI-kontroller, negativa/funktionella tester är verifierade, PR är konfliktfri och mergebar, inga blockerande reviews finns och `main` fortfarande är förväntad bas. Använd squash när lämpligt. Begär inte nytt mergegodkännande per PR. **Merga aldrig** vid FAIL/PENDING/okänd CI-status, konflikter, oklara ändringar, obehörighet eller när branchskydd skulle behöva kringgås. Rapportera hindret i stället. Automatiken innebär ett beslut vid varje körning, inte ett påstående om obevakad bakgrundskörning.
 
+## Styrd importspecificering för etapp 4
+
+Vid arbete med dokumentationsläsning eller import måste `docs/IMPORT_SOURCE_CONTRACT.md` läsas före design, kodning, PR och slutsatser. Etapp 4A är nästa godkända byggsteg; senare steg har uttryckliga startgrindar. Dokumentet reglerar **hur** okända externa tabeller ska inspekteras och när någon nätverksmappning får byggas. Chatthypoteser och forskningsuppsatser är inte importkontrakt. Nuvarande stödda CSV/XLSX/ODS-format förblir oförändrade under 4A.
+
 ## Explicit CSV-import
 
 - Använd endast `network_core/csv_import.py` för de namngivna tabellerna Devices/Interfaces/Links/Zones. Ingen heuristisk import och ingen implicit kabelskapning.
