@@ -14,13 +14,23 @@
       <div class="header-actions">
         <button id="new-project" class="btn btn-ghost" type="button">Nytt</button>
         <button id="import-project" class="btn btn-ghost" type="button" title="Projekt-JSON, explicita CSV-tabeller eller XLSX/ODS med namngivna blad Devices/Interfaces/Links/Zones">Importera</button>
+        <button id="preview-tables" class="btn btn-ghost" type="button">Förhandsgranska tabeller</button>
         <button id="export-project" class="btn btn-ghost" type="button" title="Kanonisk projekt-JSON">Exportera JSON</button>
         <button id="export-xlsx" class="btn btn-outline" type="button" title="Exportera aktuella dokumenterade fakta som XLSX, utan att spara projektet">Exportera XLSX</button>
         <button id="export-ods" class="btn btn-outline" type="button" title="Exportera aktuella dokumenterade fakta som ODS, utan att spara projektet">Exportera ODS</button>
         <button id="save-project" class="btn btn-primary" type="button">Spara projekt</button>
+        <input id="preview-file" type="file" accept=".csv,.xlsx,.ods" hidden>
         <input id="import-file" type="file" accept=".yadilab,application/json,.json,.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.ods,application/vnd.oasis.opendocument.spreadsheet" multiple hidden>
       </div>
     </header>
+    <dialog id="preview-dialog" aria-label="Förhandsgranska tabeller" style="max-width:min(900px,95vw);max-height:85vh;overflow:auto">
+      <h2>Förhandsgranska tabeller</h2>
+      <p>Endast förhandsvisning – inga nätverksobjekt importerade</p>
+      <label>CSV-avskiljare <select id="preview-delimiter"><option value="" selected disabled>Välj avskiljare</option><option value=",">Komma</option><option value=";">Semikolon</option></select></label>
+      <button id="preview-choose" type="button">Välj fil</button>
+      <button id="preview-close" type="button">Stäng</button>
+      <div id="preview-result" aria-live="polite"></div>
+    </dialog>
     <div class="subbar"><span class="system-tag"><i class="status-dot"></i> LOKALT LABB</span><span class="separator">/</span><span id="breadcrumb">Nytt nätverkslabb</span><span class="subbar-spacer"></span><span id="save-indicator" class="save-state">Ej sparat</span></div>
     <div class="workspace">
       <aside class="panel left-panel" aria-label="Inventering">

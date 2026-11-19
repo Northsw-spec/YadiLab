@@ -3,7 +3,7 @@ import {TopologyCanvas} from './canvas.js';
 import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';
 import {api} from './services/api.js';
 import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';
-import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport} from './features/projects/transfer.js';
+import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport, prepareInspection, submitInspection} from './features/projects/transfer.js';
 import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';
 import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';
 import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';
@@ -69,6 +69,9 @@ const canvas = new TopologyCanvas($('topology'), {
       node.x = Math.max(-100000, Math.min(100000, x));
       node.y = Math.max(-100000, Math.min(100000, y));
       editRevision += 1;
+      previewGeneration += 1;
+      previewFile = null;
+      $('preview-result').replaceChildren();
       traceResult = null; highlightedLinks = [];
       routeLookup = null;
       ipv4Diagnostic = null;
@@ -126,6 +129,9 @@ function invalidateDoraSession() {
 }
 function changed({keepTrace = false} = {}) {
   editRevision += 1;
+  previewGeneration += 1;
+  previewFile = null;
+  $('preview-result').replaceChildren();
   invalidateDhcpDiagnostics();
   invalidateDoraDiagnostics();
   invalidateDoraSession();
@@ -2111,6 +2117,52 @@ $('load-example').addEventListener('click', () => {
   if (!confirmDiscard()) return;
   resetProject(exampleProject());
   notify('Märkt demoexempel inläst. Detta är inte importerad dokumentation.');
+});
+let previewGeneration = 0;
+let previewFile = null;
+function previewCurrent(generation, file, context) {
+  return previewGeneration === generation && previewFile === file && transferCurrent(context);
+}
+$('preview-tables').addEventListener('click', () => $('preview-dialog').showModal());
+$('preview-close').addEventListener('click', () => $('preview-dialog').close());
+$('preview-choose').addEventListener('click', () => $('preview-file').click());
+$('preview-file').addEventListener('change', async event => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  previewFile = file;
+  const generation = ++previewGeneration;
+  const context = transferContext();
+  const result = $('preview-result');
+  result.replaceChildren(el('p', {}, 'Läser källfil…'));
+  try {
+    const {payload, sha256} = await prepareInspection(file, $('preview-delimiter').value);
+    if (!previewCurrent(generation, file, context)) return;
+    const inspection = await submitInspection(payload);
+    if (!previewCurrent(generation, file, context)) return;
+    if (inspection.source.sha256 !== sha256 || inspection.source.filename !== file.name) {
+      throw new Error('Källfilens identitet stämmer inte med svaret.');
+    }
+    const summary = el('div');
+    summary.append(el('p', {}, `${inspection.source.filename} · SHA-256 ${inspection.source.sha256}`));
+    for (const table of inspection.tables) {
+      summary.append(el('h3', {}, `${table.name} (${table.tableId})`));
+      summary.append(el('p', {}, `${table.rowCount} rader · ${table.columnCount} kolumner · Förhandsvisade ${table.previewRows.length} av ${table.populatedRowCount} källrader`));
+      if (inspection.source.kind === 'csv' && table.columnCount === 1) {
+        summary.append(el('p', {}, 'En kolumn identifierad – kontrollera avskiljaren'));
+      }
+      for (const row of table.previewRows) {
+        const line = el('p');
+        line.append(el('strong', {}, `Rad ${row.row}: `));
+        for (const cell of row.cells) line.append(el('span', {}, `${cell.address} [${cell.type}] ${cell.value}  `));
+        summary.append(line);
+      }
+    }
+    summary.append(el('p', {}, 'Endast förhandsvisning – inga nätverksobjekt importerade'));
+    result.replaceChildren(summary);
+  } catch (error) {
+    if (previewCurrent(generation, file, context)) result.replaceChildren(el('p', {}, `Förhandsvisning avvisad: ${error.message}`));
+  }
 });
 $('import-project').addEventListener('click', () => $('import-file').click());
 $('import-file').addEventListener('change', async event => {

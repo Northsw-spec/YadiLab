@@ -1,7 +1,6 @@
 """Read-only, source-faithful inspection of external tabular documentation.
 
-Incremental 4A backend: CSV is implemented and tested first. XLSX/ODS must
-remain explicitly rejected until the bounded workbook readers are delivered.
+CSV and bounded workbook readers share one literal, non-semantic result.
 No source cell is converted into a network object or written to disk.
 """
 from __future__ import annotations
@@ -85,9 +84,9 @@ def _csv_table(filename: str, data: bytes, delimiter: str) -> dict:
                 _invalid(filename, f"more than {MAX_ROWS} logical CSV records")
             if len(record) > MAX_COLUMNS:
                 _invalid(f"{filename} row {row_count}", "more than 256 columns")
-            if first_width is None:
+            if record and first_width is None:
                 first_width = len(record)
-            elif len(record) != first_width:
+            elif record and len(record) != first_width:
                 _invalid(f"{filename} row {row_count}",
                          f"inconsistent column count: expected {first_width}, got {len(record)}")
             cells = []
@@ -114,10 +113,13 @@ def _csv_table(filename: str, data: bytes, delimiter: str) -> dict:
 def inspect_source(value: object) -> dict:
     """Inspect only; never change the current project or saved files."""
     filename, kind, data, delimiter = _decode_source(value)
-    if kind != "csv":
-        _invalid(filename, f"generic {kind.upper()} inspection is not yet implemented in 4A")
+    if kind == "csv":
+        tables = [_csv_table(filename, data, delimiter)]
+    else:
+        from .import_workbooks import xlsx, ods
+        tables = (xlsx if kind == "xlsx" else ods)(data)
     return {"inspectionVersion": "1",
             "source": {"filename": filename, "kind": kind,
                        "sha256": hashlib.sha256(data).hexdigest()},
-            "tables": [_csv_table(filename, data, delimiter)],
+            "tables": tables,
             "previewRowLimit": PREVIEW_ROWS}
