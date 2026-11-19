@@ -1,6 +1,6 @@
 # Kontrakt för källtrogen dokumentationsläsning och import
 
-**Dokumentversion:** 3.0 – empiriskt reviderat slutkontrakt 4A–4D  
+**Dokumentversion:** 3.1 – korrigerat integrations- och API-kontrakt 4A–4D  
 **Beslutat läge:** Ett enda normerande målkontrakt för 4A–4D, reviderat efter direkt granskning av öppna importimplementationer. 4A byggs först och 4B–4D därefter i separata PR:er. Dokumentet anger krav, inte redan uppfyllda funktioner.  
 **Kodbas:** `detta repository`, referens-`main` `17acb51c8c64c3b4b7a1026514cb8b0a2177a127`.  
 **Omfattning:** Hela den beslutade funktionen för tabellinspektion, explicit fältmappning, ofullständig nätverksdokumentation, proveniens, import, profilåteranvändning och slutacceptans. Funktionerna är målkrav, inte statuspåståenden.
@@ -9,7 +9,7 @@
 
 1. `AGENTS.md` och `docs/MASTERPROMPT.md` gäller övergripande. För **etapp 4** anger detta dokument det detaljerade, versionshanterade funktionskontraktet.
 2. Verifierad källkod och senaste uttryckliga användarinstruktion har företräde framför gammal statusinformation i dokumentation och chattar.
-3. Varje PR omfattar exakt en etapp. Genomför 4A → 4B → 4C → 4D efter godkänd main-CI för föregående etapp. Detta enda kontrakt styr samtliga steg; en framtida implementerare får inte kräva eller skapa ett nytt planeringsdokument för att fylla i uteblivna funktionskrav. Om den faktiska källan saknar avgörande fakta, redovisa blockerande indata i stället för att gissa.
+3. En etapp får bestå av flera små, sammanhängande PR:er. Genomför 4A → 4B → 4C → 4D i ordning; avsluta och verifiera varje del-PR på main före nästa. En etapp räknas färdig först när dess samlade DoD passerat på main. Endast en aktiv PR åt gången. Detta enda kontrakt styr samtliga steg; en framtida implementerare får inte kräva eller skapa ett nytt planeringsdokument för att fylla i uteblivna funktionskrav. Om den faktiska källan saknar avgörande fakta, redovisa blockerande indata i stället för att gissa.
 4. En egenskap som inte finns i kod, test eller kontrakt får inte påstås vara implementerad eller verifierad. Okänd semantik ska ge en explicit olöst uppgift eller avvisning – aldrig nätverksobjekt.
 5. Forskningsessäer, procentbedömningar, exempel på företagsmallar och föreslagna profilnamn är **inte** maskinläsbara scheman, produktstöd eller implementationsinstruktioner.
 
@@ -18,7 +18,7 @@
 - `network_core/model.py` och `validate_project()` är enda slutliga projektvalidator. Nätverkets kanoniska ID:n och explicita länkändpunkter bevaras.
 - `network_core/csv_import.py` importerar det exakta befintliga CSV-kontraktet `Devices.csv`, `Interfaces.csv`, `Links.csv`, `Zones.csv`.
 - `network_core/xlsx_import.py`, `ods_import.py` och `spreadsheet_schema.py` äger de **redan stödda** namngivna kalkylbladen, schema 1.0 och explicit schema 1.3.
-- `network_core/storage.py` äger beständighet, SHA-256 och konfliktkontroll. `web/app.js` äger det enda aktuella arbetsprojektet, revisioner, arbetsytebyte och uttrycklig Save.
+- `network_core/storage.py` äger beständighet, SHA-256 och konfliktkontroll. `web/app.js` äger det enda aktuella arbetsprojektet, revisioner, arbetsytebyte och uttrycklig Save. Befintliga redigeringsvägar skriver i flera fall `attempt.schemaVersion = '1.3'`; de måste ändras innan schema 1.4 kan aktiveras, annars riskeras avvisad Save eller osynlig nedgradering.
 - Nuvarande modell har nodtyperna `host`, `switch`, `router`, `firewall`. Ett annat källvärde får inte mappas till någon av dessa genom namnmönster eller gissning.
 - Nodposition `x/y` är **presentationsdata**, aldrig källa till fysisk topologi. IP, gateway, zon, management-IP, hostname, portbeskrivning, LLDP-granne eller skärmläge är inte tillräckliga fakta för att skapa en fysisk kabel.
 - Befintliga endpoint-kontrakt för CSV/XLSX/ODS och direkt `.json/.yadilab` bevaras oförändrade tills ett separat migreringskontrakt uttryckligen godkänts.
@@ -49,7 +49,7 @@ Inför exakt en ny endpoint: `POST /api/import/inspect`.
 Request är ett JSON-objekt med exakt dessa fält:
 - `filename`: ett enda källfilnamn, utan sökväg, med filändelsen `.csv`, `.xlsx` eller `.ods` (skiftlägesokänslig ändelse).
 - `contentBase64`: standard-base64 för filens **oförändrade bytes**, strikt avkodad.
-- `csvDelimiter`: endast för CSV, exakt `,` eller `;`. Fältet är obligatoriskt för CSV och förbjudet för XLSX/ODS; inget automatiskt avskiljarval.
+- `csvDelimiter`: endast för CSV, exakt `,` eller `;`. Fältet är obligatoriskt för CSV och förbjudet för XLSX/ODS; inget automatiskt avskiljarval. Ett syntaktiskt giltigt enkolumnsresultat kan bero på fel val men går inte generellt att särskilja från en avsiktlig enkolumnstabell utan ett kolumnschema.
 
 Requesten innehåller inga projektdata, ingen destinationsfil och inget Save-kommando. Endpointen är statslös och skriver varken projekt, originalfil eller temporära användarfiler till beständig lagring.
 
@@ -98,11 +98,11 @@ Vid fel returneras den befintliga feltypen `ProjectValidationError` / HTTP 422 m
 
 ### 4A.2 Stödda lässemantiker och gränser
 
-- CSV: strikt UTF-8 med valfri BOM; `csv.reader` med uttryckligen vald avskiljare och korrekt quoting. Felaktiga byte-sekvenser, NUL, brutna citat och inkonsekvent radstruktur avvisas. Bevara ledande nollor som text; varje CSV-cell får typen `text`.
+- CSV: strikt UTF-8 med valfri BOM; `csv.reader` med uttryckligen vald avskiljare, `strict=True`, korrekt quoting och stabilt logiskt record-index. Felaktig UTF-8, NUL, obalanserade citat och inkonsekvent antal CSV-fält per icke-tomt record avvisas. En fil med konsekvent en enda kolumn är **giltig** även om användaren valt en annan avskiljare än upphovspersonen; visa då `En kolumn identifierad – kontrollera avskiljaren` utan påstående om upptäckt fel. Den senare explicit valda dokumentrollen får avvisa otillräcklig kolumnstruktur. Bevara ledande nollor som text; varje CSV-cell får typen `text`.
 - XLSX: verifiera riktig OOXML-ZIP med lokala relationer. Läs endast synliga blad med vanliga literala text-, nummer- eller booleska celler. Bevara rå numerisk sträng, särskilj celltyp, och använd faktisk OOXML-koordinat. XLSX-serialiseringens numeriska ID är **inte** bevis för ursprunglig ledande nolla.
 - ODS: verifiera riktig ODF-paketering och manifest; läs endast synliga tabeller med vanliga literala text-, nummer- och booleska celler. Bevara faktisk position inklusive korrekt uttryckta tomma upprepningar.
 - Alla format: avvisa formler och cached formula results, makron, externa referenser, dolda rader/kolumner/blad, sammanslagna celler, kryptering, otolkade objekt med potentiellt relevant innehåll, icke-stödda celltyper, ogiltig struktur och ZIP/XML-problem. Visa ett specifikt `unsupported`-fel hellre än förvanska innehåll.
-- Gränser per request: högst 5 MiB CSV; högst 5 MiB komprimerad XLSX/ODS; högst 12 MiB totalt expanderat arkiv, högst 5 MiB per XML-del; högst 24 ZIP-poster för XLSX och 10 för ODS. Högst 8 kalkylblad, 5001 fysiska rader per blad och 64 fysiska kolumner. Ovanför gränserna: deterministisk HTTP 422 utan partiellt resultat.
+- Resursgränser för **nya 4A-läsaren**, inte en ändring av äldre strikta importer: högst 5 MiB CSV; högst 5 MiB komprimerad XLSX/ODS; högst 12 MiB totalt expanderade ZIP-poster; högst 5 MiB per XML-del, högst **256 ZIP-poster**, **32 blad**, **5001 fysiska rader per blad**, **256 fysiska kolumner**, **100 000 lagrade celler per fil**. Samma gräns gäller efter expandering av ODS-upprepade rader/kolumner; kontrollera antalet *före* materialisering för att motverka resursförbrukning. Överskridande ger deterministisk HTTP 422 utan partiellt resultat. Bevara befintliga parsergränser oförändrade för gamla strikta importvägen. Gränserna är fastställda implementerings- och säkerhetstak, **inte belägg för bred verklig kompatibilitet**; verifiera med vanliga genererade och, när de faktiskt finns, anonymiserade riktiga arbetsböcker, inklusive fall med >24 ZIP-poster och >64 kolumner. Justering av dessa tak kräver kontrollerad revision av denna fil, inte Codex-gissning.
 - Ingen extern process, Excel/LibreOffice-automatisering, nätverkskontakt, makroexekvering eller LLM-tolkning.
 - Samma källfil och avskiljarval ska ge exakt samma JSON-semantik oavsett OS och radordning i ZIP-manifestet.
 
@@ -123,7 +123,7 @@ UI skapar ingen ny session, ingen dokumentprofil och ingen kandidatmodell. Ingen
 
 1. En verklig CSV med komma, en verklig CSV med semikolon, en faktisk OOXML-XLSX och en faktisk ODF-ODS ger rätt bokstavliga värden, celltyper, koordinater, rader, kolumner, bladordning och korrekt SHA-256.
 2. Förhindrad semantikförlust: ledande nollor i text, Unicode, citerade celler, radbrytningar, rad-/kolumngap, blandad text/nummer/bool och en rubrik på annan rad än 1 förblir oklassificerade källfakta.
-3. Negativa fall: fel avskiljare, trasig UTF-8, korrupt ZIP/XML, ogiltig ODF-mimetype, dubbla ZIP-delar, dolda celler/blad, formler, merged cells, externe länkar, makron, storleksgränser och felaktiga cellkoordinater. Ett osäkert innehåll får aldrig ge partiell HTTP 200.
+3. Negativa fall: felaktig CSV-struktur, trasig UTF-8, korrupt ZIP/XML, ogiltig ODF-mimetype, dubbla ZIP-delar, dolda celler/blad, formler, merged cells, externa länkar, makron, storleksgränser och felaktiga cellkoordinater. Separat **positivt** test: en syntaktiskt giltig enkolumns-CSV med användarvalt (möjligen fel) avskiljartecken ger 200, enkolumnsvisning och neutral kontrolluppmaning; parsern får inte fabricera ett säkert fel. Ett osäkert innehåll får aldrig ge partiell HTTP 200.
 4. Real-HTTP med riktiga binära testfiler och `DIRECT_HTTP` Chromium; verifiera minst två fördröjda svar (gammal fil kontra ny fil, och projektbyte) samt att ingen projektimport eller Save sker.
 5. Verklig sparad `.yadilab` förblir byte-identisk och SHA-identisk före/efter alla förhandsvisningar. Befintliga CSV/XLSX/ODS-importer, schema 1.0/1.3 och Save/Open passerar oförändrat.
 6. Ny frontend-JS-modul (om skapad) måste inkluderas i `npm run check`, tillåtas endast på exakt statisk HTTP-väg, nekas på okänd/katalog/extra-segment-sökväg och passera `test_web_import_graph.py`.
@@ -202,7 +202,7 @@ CSV-cell är text; native Excel/ODS-cell är explicit text/number/boolean enligt
 - IPv4/CIDR, MAC, VLAN och statiska routes måste uppfylla aktuell validate_project(); ingen dold gissad netmask, gateway eller portbindning.
 - Boolska fält tar native boolean eller exakt true/false. Text som yes/up/1 blir booleans endast via explicit värdemappning. Tom cell är aldrig false eller enabled.
 - För ett målfält med flera källkolumner accepteras exakt lika kanoniska värden; konflikter gör påståendet BLOCKED med alla motstridiga celler i rapporten, aldrig first/last-wins.
-- Användarkonstanter innehåller exakt {type:"text"|"boolean"|"null",value:...}; gäller bara vald vy och alla dess valda rader. Radunik komplettering måste vara separat explicit användardeklaration knuten till (viewId,row,targetField). Den sparas som user_decision och får inte ändra originalcellen.
+- Användarkonstanter innehåller exakt {type:"text"|"boolean"|"null",value:...}; gäller bara vald vy och alla dess valda rader. Radunik komplettering uttrycks enbart genom `rowValues[]` i kandidat-API:t (§9.1), nycklad av (viewId,row,targetField). Den ska komma från ett separat användarval, bevaras i SourceClaim och importEvidence som `user_decision`, och får aldrig ändra källcellen. Om samma fält har en befolkad källcell med ett annat värde blir enheten BLOCKED med både källvärdet och beslutet redovisade; `rowValues` får inte tyst skriva över källfakta.
 
 Alla deklarationer ska strikt typkontrolleras; okända målnamn och extra request-nycklar avvisas. En rubrik som "IP Address" eller "Connected To" betyder inget utan bekräftad roll och fälttolkning.
 
