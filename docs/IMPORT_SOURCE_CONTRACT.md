@@ -260,7 +260,7 @@ Planering är ren, skrivskyddad och deterministisk. **Ett enda** svar, utan dubb
 }
 ```
 
-Detta JSON-exempel anger **exakta nycklar och datatyper**. Den verkliga responsen ersätter tomma arrayer och nollor med kontrollerade värden. `proposedProject` är antingen null eller det enda giltiga, kanoniska schema-1.4-projektet; det finns inget andra `project` utanför `plan`. `plan.fingerprint` är det enda fingeravtrycket i svaret. `canApply` är sant om och endast om `proposedProject` är icke-null och alla valda enheter, explicita beroenden och slutvalidering är godkända. Ett sant `canApply` utför aldrig själv en import eller Save. `sourceManifest` innehåller endast fakta verifierade från originalbytes och de format-/bladmetadata som definieras i §7.3, inte fullständiga källbytes.
+Detta JSON-exempel anger **exakta nycklar och datatyper**. Den verkliga responsen ersätter tomma arrayer och nollor med kontrollerade värden. `proposedProject` är antingen null eller det enda giltiga, kanoniska schema-1.4-projektet; det finns inget andra `project` utanför `plan`. `plan.fingerprint` är det enda fingeravtrycket i svaret. `canApply` är sant om och endast om `proposedProject` är icke-null och alla valda enheter, explicita beroenden och slutvalidering är godkända. Ett sant `canApply` utför aldrig själv en import eller Save. `sourceManifest` är en array av exakt `sources[]`-objektformen från §7.3 (`sourceId,filename,kind,sha256,byteLength,tables`) i samma deterministiska fil- och bladordning. Originalbytes och cellmatriser ingår inte. Alla sourceId/tableId-referenser i planen måste peka på denna array.
 
 **claim** har exakt `{claimId,viewId,sourceRef,role,targetKind,targetKey,fields,origins}`, där `sourceRef` är `{sourceId,tableId,row}`. `fields` är ett JSON-objekt med endast uttryckligen valda målfält och typade, ännu inte sammanfogade kanoniska värden. `origins` är ett objekt `{ "<targetField>": [Origin, ...] }`; Origin är exakt `{kind,sourceId,tableId,row,address,decisionId}`. kind är `source_cell|user_constant|user_decision|derived_layout`; källcell kräver källa, blad, rad och originalcelladress och `decisionId:null`. För användarbeslut krävs ett verifierat `decisionId`, medan irrelevanta källkoordinater är null. Alla icke-null referenser måste existera i samma inspektion eller deklarationsmängd. En SourceClaim får vara ofullständig; dess roll och targetKind ska vara förenliga med §8.
 
@@ -302,7 +302,13 @@ Urval av en unit utökar inte automatiskt andra enheter. UI får erbjuda "Välj 
 ```json
 {
   "evidenceVersion": "1",
+  "contractVersion": "1",
+  "projectNameAtImport": "Dokumenterat nät",
+  "planFingerprint": "<64 lowercase hex>",
   "baselineNetworkSha256": "<64 lowercase hex>",
+  "selectedUnitIds": [],
+  "excludedUses": [],
+  "transformations": [],
   "sources": [],
   "mappingViews": [],
   "rowValues": [],
@@ -312,9 +318,10 @@ Urval av en unit utökar inte automatiskt andra enheter. UI får erbjuda "Välj 
 }
 ```
 
+- `contractVersion`, `projectNameAtImport`, `planFingerprint`, `selectedUnitIds`, `excludedUses` och `transformations` bevaras exakt från den godkända ImportPlan och utgör **oföränderlig historisk återspelningsindata**. `projectNameAtImport` bevarar ursprungligt projektnamn även om användaren sedan byter namn. `planFingerprint` ska kontrolleras mot aktuell plan före godkännande; valda unit-ID:n och explicita exkluderingar sparas utan rekonstruktion genom antaganden. Samtliga dessa fält typ-/gränsvalideras.
 - `baselineNetworkSha256` beräknas **en gång vid konstruktion av en redan vald och fullständigt validerad kandidat** från det validate_project-normaliserade nätverksinnehållet, utan proveniens, via canonicalNetworkView och canonicalJson enligt §7.5 och §7.4. Manifestet är därefter **oföränderlig historik**, inte en självläkande förteckning över arbetsytans aktuella värden. Vanlig redigering ändrar aldrig detta hash, originalreferenser eller accepterade importbeslut.
 - `sources[]`: `{sourceId,filename,kind,sha256,byteLength,tables}`, där tables innehåller `{tableId,name,rowCount,populatedRowCount,columnCount}`. Alla källhashar kommer från originalbytes. Inga fullständiga `cells` i projektet.
-- `mappingViews[]`: verifierade snapshots enligt §6.1 vid importerad tidpunkt; innehåller källroll, vald kolumnmappning, header och row selections, även när senare användarredigering ändrar nätverket.
+- `mappingViews[]`: verifierade snapshots enligt §6.1 vid importerad tidpunkt; innehåller källroll, vald kolumnmappning, header och row selections, även när senare användarredigering ändrar nätverket. `transformations[]` finns separat i manifestet och motsvarar exakt den godkända planens transformationer.
 - `rowValues[]`: explicit radunika beslut enligt §9.1 med typer och identiteter; även dessa bevaras oförändrade.
 - `decisions[]`: `{sourceId,tableId,row,viewId,status,reason,unitIds}`; status är en av §7.1:s dispositioner inklusive `DOCUMENTATION_ONLY`, reason är null om ingen användarexkludering finns. Den historiska dispositionen får inte felaktigt visas som aktuell resursstatus.
 - `acceptedChanges[]`: exakt `{unitId,changeIds,targetKind,targetKey,fieldValues,fieldOrigins}`. `fieldValues` är **de accepterade kanoniskt typade historiska målfältsvärdena vid importen**, inte innehållet i originalfilen. `fieldOrigins` följer §7.1. Detta gör det möjligt att senare jämföra verifierat käll-replay med historisk import oberoende av nuvarande redigerad arbetsyta. Inga uppdiktade originalvärden.
