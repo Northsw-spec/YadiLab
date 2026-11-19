@@ -37,8 +37,9 @@
       <p>Granska originalceller och välj själv vilka noduppgifter som får bli projektdata. Inga portar, kablar eller IP-adresser skapas automatiskt.</p>
       <button id="external-close" type="button">Stäng</button>
       <h3>1 · Originalfiler</h3>
-      <label>CSV-avskiljare <select id="external-delimiter"><option value="" selected>Välj för CSV</option><option value=",">Komma</option><option value=";">Semikolon</option></select></label>
       <input id="external-files" type="file" accept=".csv,.xlsx,.ods" multiple>
+      <div id="external-file-choices" aria-live="polite"></div>
+      <button id="external-inspect-files" type="button" disabled>Inspektera valda filer</button>
       <label for="external-project-name">Projektnamn</label><input id="external-project-name" class="control" value="Dokumenterat nät" maxlength="120">
       <div id="external-sources" aria-live="polite"></div>
       <h3>2 · Explicita mappningsvyer</h3>

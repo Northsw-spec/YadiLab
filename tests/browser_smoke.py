@@ -2407,13 +2407,16 @@ def import_review_regression(context, base, network_mode, store, errors, restart
     raw = b'ID,Label,Kind,Comment\nA,Alpha,host,first\nB,Beta,switch,second\n'
     source_hash = hashlib.sha256(raw).hexdigest()
     page.locator('#external-import').click()
-    page.locator('#external-delimiter').select_option(',')
     hold_http_reply(page, '/api/import/inspect', first_only=True)
     page.locator('#external-files').set_input_files({'name':'stale.csv','mimeType':'text/csv',
         'buffer':b'ID,Label,Kind\nX,Stale,host\n'})
+    page.locator('#external-file-choices select').select_option(',')
+    page.locator('#external-inspect-files').click()
     page.wait_for_function('window.__heldReply === true')
+    page.locator('#external-files').set_input_files({'name':'inventory.csv','mimeType':'text/csv','buffer':raw})
+    page.locator('#external-file-choices select').select_option(',')
     with page.expect_response('**/api/import/inspect') as inspection:
-        page.locator('#external-files').set_input_files({'name':'inventory.csv','mimeType':'text/csv','buffer':raw})
+        page.locator('#external-inspect-files').click()
     release_http_reply(page)
     assert inspection.value.status == 200
     expect(page.locator('#external-sources')).to_contain_text(source_hash)
@@ -2535,6 +2538,186 @@ def import_review_regression(context, base, network_mode, store, errors, restart
     release_http_reply(page)
     expect(page.locator('#import-evidence-status')).to_have_text('Inget historiskt importkvitto.')
     expect(page.locator('#count-nodes')).to_have_text('0')
+    page.close()
+
+
+def import_review_delimiters_regression(context, base, network_mode, store, errors):
+    """Per-source CSV decisions reach planning, bundle export and replay unchanged."""
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page, base) == network_mode
+    comma = b'ID,Label,Kind\nSW-01,Core Switch,switch\n'
+    semicolon = b'ID;Label;Kind\nH-01;Workstation;host\n'
+    page.locator('#external-import').click()
+    files = [{'name':'devices.csv','mimeType':'text/csv','buffer':comma},
+             {'name':'inventory.csv','mimeType':'text/csv','buffer':semicolon}]
+    page.locator('#external-files').set_input_files(files)
+    choices = page.locator('#external-file-choices select')
+    choices.nth(0).select_option(',')
+    choices.nth(1).select_option(';')
+    with page.expect_response('**/api/import/inspect'):
+        page.locator('#external-inspect-files').click()
+    expect(page.locator('#external-sources')).to_contain_text('SW-01')
+    expect(page.locator('#external-sources')).to_contain_text('H-01')
+    assert 'CSV-avskiljare ,' in page.locator('#external-sources').inner_text()
+    assert 'CSV-avskiljare ;' in page.locator('#external-sources').inner_text()
+    # Changing one decision removes all dependent inspections and views.
+    choices.nth(1).select_option(',')
+    expect(page.locator('#external-sources')).not_to_contain_text('H-01')
+    expect(page.locator('#external-plan-button')).to_be_disabled()
+    choices.nth(1).select_option(';')
+    hold_http_reply(page, '/api/import/inspect', first_only=True)
+    page.locator('#external-inspect-files').click()
+    page.wait_for_function('window.__heldReply === true')
+    choices.nth(1).select_option(',')
+    release_http_reply(page)
+    expect(page.locator('#external-sources')).not_to_contain_text('SW-01')
+    choices.nth(1).select_option(';')
+    page.locator('#external-inspect-files').click()
+    expect(page.locator('#external-sources')).to_contain_text('H-01')
+    for index, identifier in ((0,'SW-01'),(1,'H-01')):
+        page.locator('#external-add-view').click()
+        view = page.locator('#external-views fieldset').nth(index)
+        view.locator('select').first.select_option(f'{index}:sheet-1')
+        view.locator('input[placeholder^="Rubrikrad"]').fill('1')
+        view.locator('input[placeholder^="Valda originalrader"]').fill('2')
+        for field,column in (('node.id','A'),('node.label','B'),('node.kind','C')):
+            view.locator('label').filter(has_text=field).locator('input').fill(column)
+        view.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+    with page.expect_response('**/api/import/build-candidate') as preview:
+        page.locator('#external-plan-button').click()
+    payload = json.loads(preview.value.request.post_data)
+    assert [item['csvDelimiter'] for item in payload['sources']] == [',',';']
+    plan = preview.value.json()['plan']
+    assert {unit['targetKey'] for unit in plan['units']} == {'SW-01','H-01'}
+    assert all(unit['status']=='ACTIONABLE' for unit in plan['units'])
+    page.locator('#external-plan-result input[type="checkbox"]').first.check()
+    page.locator('#external-plan-result input[type="checkbox"]').last.check()
+    page.locator('#external-candidate-button').click()
+    expect(page.locator('#external-candidate-result')).to_contain_text('Tillämpbar: true')
+    page.locator('#external-warning').check()
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#external-apply').click()
+    expect(page.locator('#count-nodes')).to_have_text('2')
+    expect(page.locator('#count-links')).to_have_text('0')
+    with page.expect_download() as downloaded:
+        page.locator('#external-bundle-export').click()
+    bundle = json.loads(Path(downloaded.value.path()).read_text())
+    assert [item['csvDelimiter'] for item in bundle['sources']] == [',',';']
+    assert [base64.b64decode(item['contentBase64']) for item in bundle['sources']] == [comma,semicolon]
+    with page.expect_response('**/api/import/verify-sources') as verified:
+        page.locator('#external-bundle-file').set_input_files({'name':'two-sources.json',
+            'mimeType':'application/json','buffer':json.dumps(bundle).encode()})
+    assert verified.value.json()['verifiedSourceIds'] == ['src-1','src-2']
+    assert verified.value.json()['sourceStatus'] == 'SOURCE_VERIFIED'
+    altered = json.loads(json.dumps(bundle)); altered['sources'][1]['csvDelimiter'] = ','
+    with page.expect_response('**/api/import/verify-sources') as rejected:
+        page.locator('#external-bundle-file').set_input_files({'name':'wrong-delimiter.json',
+            'mimeType':'application/json','buffer':json.dumps(altered).encode()})
+    assert rejected.value.status == 422
+    expect(page.locator('#external-status')).to_contain_text('Källfil ej ansluten')
+    page.close()
+    # Same-delimiter CSV and mixed workbook selections keep their distinct API shapes.
+    ods = ods_parts({'Inventory':'ID,Label,Kind\nX,Extra,host\n'})
+    ods['content.xml'] = ods['content.xml'].replace(b'1024', b'3')
+    for other, filename in ((comma,'second.csv'),
+                            (make_workbook({'Inventory':'ID,Label,Kind\nX,Extra,host\n'}),'second.xlsx'),
+                            (zip_ods_parts(ods),'second.ods')):
+        probe = context.new_page()
+        probe.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+        assert browser_open(probe, base) == network_mode
+        probe.locator('#external-import').click()
+        probe.locator('#external-files').set_input_files([{'name':'devices.csv','mimeType':'text/csv','buffer':comma},
+            {'name':filename,'mimeType':'application/octet-stream','buffer':other}])
+        probe.locator('#external-file-choices select').first.select_option(',')
+        if filename.endswith('.csv'): probe.locator('#external-file-choices select').last.select_option(',')
+        probe.locator('#external-inspect-files').click()
+        expect(probe.locator('#external-sources')).to_contain_text(filename)
+        probe.locator('#external-plan-button').click()
+        expect(probe.locator('#external-plan-result')).to_contain_text('Fingerprint:')
+        probe.close()
+
+
+def import_review_page_regression(context, base, network_mode, store, errors):
+    """Reject mutated page replies before any row becomes visible or selectable."""
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page, base) == network_mode
+    disk_before = {file.name:file.read_bytes() for file in store.glob('*.yadilab')}
+    raw = ('ID\n' + ''.join(f'{number:03d}\n' for number in range(2, 28))).encode()
+    page.locator('#external-import').click()
+    page.locator('#external-files').set_input_files({'name':'pages.csv','mimeType':'text/csv','buffer':raw})
+    page.locator('#external-file-choices select').select_option(',')
+    with page.expect_response('**/api/import/inspect'):
+        page.locator('#external-inspect-files').click()
+    expect(page.locator('#external-sources')).not_to_contain_text('Rad 26:')
+    button = page.get_by_role('button', name='Visa fler originalrader')
+    def wrong_sha(reply): reply['source']['sha256'] = '0'*64
+    def wrong_name(reply): reply['source']['filename'] = 'wrong.csv'
+    def wrong_kind(reply): reply['source']['kind'] = 'xlsx'
+    def wrong_table(reply): reply['tableId'] = 'sheet-2'
+    def wrong_version(reply): reply['inspectionVersion'] = '2'
+    def no_version(reply): del reply['inspectionVersion']
+    def repeated_row(reply): reply['rows'].append(reply['rows'][0].copy())
+    def overlapping_row(reply): reply['rows'][0]['row'] = 25
+    def wrong_next(reply): reply['nextRow'] = 26
+    def too_many(reply): reply['rows'] *= 13
+    def wrong_cell(reply): reply['rows'][0]['cells'][0]['address'] = 'A27'
+    for mutate in (wrong_sha, wrong_name, wrong_kind, wrong_table, wrong_version,
+                   no_version, repeated_row, overlapping_row, wrong_next, too_many, wrong_cell):
+        def intercept(route):
+            response = route.fetch()
+            payload = response.json()
+            mutate(payload)
+            route.fulfill(response=response, body=json.dumps(payload))
+        page.route('**/api/import/inspect-page', intercept)
+        with page.expect_response('**/api/import/inspect-page'):
+            button.click()
+        expect(button).to_be_enabled()
+        expect(page.locator('#external-sources')).not_to_contain_text('Rad 26:')
+        page.unroute('**/api/import/inspect-page', intercept)
+    page.locator('#external-add-view').click()
+    view = page.locator('#external-views fieldset').first
+    view.locator('input[placeholder^="Valda originalrader"]').fill('26')
+    view.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+    page.locator('#external-plan-button').click()
+    expect(page.locator('#toast')).to_contain_text('Visa varje vald originalrad')
+    with page.expect_response('**/api/import/inspect-page') as good:
+        button.click()
+    assert [item['row'] for item in good.value.json()['rows']] == [26,27]
+    expect(page.locator('#external-sources')).to_contain_text('Rad 26:')
+    expect(button).to_be_disabled()
+    assert {file.name:file.read_bytes() for file in store.glob('*.yadilab')} == disk_before
+    # Exactly 25 populated records yield a valid empty terminal page.
+    raw25 = ('ID\n' + ''.join(f'{number:03d}\n' for number in range(2, 26))).encode()
+    page.locator('#external-files').set_input_files({'name':'terminal.csv','mimeType':'text/csv','buffer':raw25})
+    page.locator('#external-file-choices select').select_option(',')
+    page.locator('#external-inspect-files').click()
+    button = page.get_by_role('button', name='Visa fler originalrader')
+    with page.expect_response('**/api/import/inspect-page') as terminal:
+        button.click()
+    assert terminal.value.json()['rows'] == [] and terminal.value.json()['nextRow'] is None
+    expect(button).to_be_disabled()
+    # A pending page cannot survive MappingView, file or workspace changes.
+    for change in ('mapping','file','project'):
+        page.locator('#external-files').set_input_files({'name':'pages.csv','mimeType':'text/csv','buffer':raw})
+        page.locator('#external-file-choices select').select_option(',')
+        page.locator('#external-inspect-files').click()
+        hold_http_reply(page, '/api/import/inspect-page', first_only=True)
+        page.get_by_role('button', name='Visa fler originalrader').click()
+        page.wait_for_function('window.__heldReply === true')
+        if change == 'mapping':
+            page.locator('#external-add-view').click()
+        elif change == 'file':
+            page.locator('#external-files').set_input_files({'name':'replacement.csv','mimeType':'text/csv',
+                'buffer':b'ID\nnew\n'})
+        else:
+            page.locator('#external-close').click()
+            page.locator('#new-project').click()
+        release_http_reply(page)
+        expect(page.locator('#external-sources')).not_to_contain_text('Rad 26:')
+        if change == 'project': page.locator('#external-import').click()
+    assert {file.name:file.read_bytes() for file in store.glob('*.yadilab')} == disk_before
     page.close()
 
 
@@ -5065,6 +5248,8 @@ def run():
             source_preview_regression(context, base, network_mode, store, errors)
             import_candidate_regression(context, base, network_mode, store, errors)
             import_review_regression(context, base, network_mode, store, errors, restart_for_import_review)
+            import_review_page_regression(context, base, network_mode, store, errors)
+            import_review_delimiters_regression(context, base, network_mode, store, errors)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)

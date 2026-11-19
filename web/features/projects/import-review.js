@@ -2,10 +2,49 @@ import {$, el} from '../../ui/dom.js';
 import {api} from '../../services/api.js';
 import {prepareInspection, submitInspection, submitInspectionPage, prepareSourceBundle, readSourceBundle} from './transfer.js';
 
+// Validate a whole page before either the displayed rows or selectable source rows change.
+export function validateReviewPage(page, source, table, fromRow) {
+  const bad = () => { throw new Error('Källsidans identitet, celler eller radnummer stämmer inte.'); };
+  if (!page || Object.keys(page).sort().join(',') !== 'inspectionVersion,nextRow,rows,source,tableId' ||
+      !page.source || Object.keys(page.source).sort().join(',') !== 'filename,kind,sha256' ||
+      page.inspectionVersion !== '1' ||
+      page.source?.sha256 !== source.sha256 ||
+      page.source?.filename !== source.payload.filename ||
+      page.source?.kind !== source.inspection.source.kind ||
+      page.tableId !== table.tableId || !Array.isArray(page.rows) ||
+      page.rows.length > 25 || !Number.isInteger(fromRow) || fromRow < 1 || fromRow > 5001 ||
+      !Array.isArray(table.previewRows)) bad();
+  const seen = new Set(table.previewRows.map(item => item.row));
+  let previous = fromRow - 1;
+  for (const record of page.rows) {
+    if (!record || Object.keys(record).sort().join(',') !== 'cells,row' ||
+        !Number.isInteger(record.row) || record.row <= previous || record.row > 5001 ||
+        seen.has(record.row) || !Array.isArray(record.cells) ||
+        !record.cells.length || record.cells.length > table.columnCount) bad();
+    previous = record.row;
+    const addresses = new Set();
+    let lastColumn = 0;
+    for (const cell of record.cells) {
+      const match = /^([A-Z]{1,2})([1-9][0-9]*)$/.exec(cell?.address);
+      let column = 0;
+      if (match) for (const letter of match[1]) column = column * 26 + letter.charCodeAt(0) - 64;
+      if (!cell || Object.keys(cell).sort().join(',') !== 'address,type,value' ||
+          !match || Number(match[2]) !== record.row || column <= lastColumn ||
+          column > table.columnCount || !['text','number','boolean'].includes(cell.type) ||
+          typeof cell.value !== 'string' || addresses.has(cell.address)) bad();
+      addresses.add(cell.address); lastColumn = column;
+    }
+  }
+  if (page.nextRow !== null && (!Number.isInteger(page.nextRow) ||
+      page.nextRow <= previous || page.nextRow > 5001 || !page.rows.length)) bad();
+  if (!page.rows.length && page.nextRow !== null) bad();
+  return page;
+}
+
 // Review state is transient. The workspace controller in app.js alone owns the project.
 export function createImportReview({context, current, getProject, replaceProject, confirmDiscard, download, notify, getPreviewGeneration}) {
   const dialog = $('external-dialog');
-  let sources = [], views = [], plan = null, candidate = null, planToken = null, candidateToken = null, attached = false;
+  let sources = [], fileChoices = [], views = [], plan = null, candidate = null, planToken = null, candidateToken = null, attached = false;
   let revision = 0, statusGeneration = 0, sourceGeneration = 0;
   const note = message => { $('external-plan-result').textContent = message; };
   const stale = () => notify('Granskningen ändrades under anropet. Upprepa granskningen.', true);
@@ -45,8 +84,9 @@ export function createImportReview({context, current, getProject, replaceProject
     }
   }
   function onWorkspace() {
-    invalidate(); sources = []; views = []; attached = false; ++sourceGeneration;
+    invalidate(); sources = []; fileChoices = []; views = []; attached = false; ++sourceGeneration;
     $('external-views').replaceChildren(); $('external-sources').replaceChildren();
+    $('external-file-choices').replaceChildren(); $('external-inspect-files').disabled = true;
     $('external-verification').replaceChildren();
     $('external-add-view').disabled = true; $('external-plan-button').disabled = true;
     $('external-bundle-export').disabled = true;
@@ -57,7 +97,7 @@ export function createImportReview({context, current, getProject, replaceProject
   const showError = error => notify(error.message || String(error), true);
   function renderSources() {
     $('external-sources').replaceChildren(...sources.map((source,index) => {
-      const section = el('section', {}, el('h4', {}, `${index+1}. ${source.payload.filename} · ${source.inspection.source.kind} · SHA-256 ${source.sha256}`));
+      const section = el('section', {}, el('h4', {}, `${index+1}. ${source.payload.filename} · ${source.inspection.source.kind} · ${source.payload.csvDelimiter ? `CSV-avskiljare ${source.payload.csvDelimiter} · ` : ''}SHA-256 ${source.sha256}`));
       for (const table of source.inspection.tables) {
         const rows = el('div', {});
         const draw = items => rows.append(...items.map(row => el('p', {},
@@ -67,14 +107,18 @@ export function createImportReview({context, current, getProject, replaceProject
         let from = table.previewRows.at(-1)?.row + 1 || 1;
         next.disabled = table.previewRows.length < 25;
         next.addEventListener('click', async () => {
+          if (next.disabled) return;
           const token = guard();
+          next.disabled = true;
           try {
             const page = await submitInspectionPage(source.payload, table.tableId, from);
             if (!valid(token)) return stale();
+            validateReviewPage(page, source, table, from);
             table.previewRows.push(...page.rows);
             draw(page.rows); from = page.nextRow;
             next.disabled = !from;
           } catch (error) { if (valid(token)) showError(error); }
+          finally { if (next.isConnected && from !== null) next.disabled = false; }
         });
         section.append(el('h5', {}, `${table.name} · ${table.populatedRowCount} poster · ${table.columnCount} kolumner`), rows, next);
       }
@@ -84,20 +128,51 @@ export function createImportReview({context, current, getProject, replaceProject
     $('external-plan-button').disabled = !sources.length;
     $('external-bundle-export').disabled = !sources.length;
   }
-  async function loadFiles(files) {
-    if (!files.length || files.length > 8) throw new Error('Välj 1–8 originalfiler.');
+  function discardInspections() {
+    ++sourceGeneration; sources = []; views = []; attached = false;
+    refreshStatus(); invalidate(); renderViews(); renderSources();
+  }
+  function renderFileChoices() {
+    const target = $('external-file-choices'); target.replaceChildren();
+    fileChoices.forEach((choice, index) => {
+      if (!/\.csv$/i.test(choice.file.name)) {
+        target.append(el('p', {}, `${index+1}. ${choice.file.name} · arbetsbok, ingen CSV-avskiljare`));
+        return;
+      }
+      const select = el('select', {}, el('option', {value:''}, 'Välj avskiljare'),
+        el('option', {value:','}, 'Komma (,)'), el('option', {value:';'}, 'Semikolon (;)'));
+      select.value = choice.delimiter;
+      select.addEventListener('change', () => {
+        choice.delimiter = select.value;
+        discardInspections();
+        $('external-inspect-files').disabled = fileChoices.some(item =>
+          /\.csv$/i.test(item.file.name) && ![',',';'].includes(item.delimiter));
+      });
+      target.append(el('label', {}, `${index+1}. ${choice.file.name} · CSV-avskiljare `, select));
+    });
+    $('external-inspect-files').disabled = !fileChoices.length || fileChoices.some(item =>
+      /\.csv$/i.test(item.file.name) && ![',',';'].includes(item.delimiter));
+  }
+  async function loadFiles(choices) {
+    if (!choices.length || choices.length > 8 || choices.some(item =>
+        /\.csv$/i.test(item.file.name) && ![',',';'].includes(item.delimiter)))
+      throw new Error('Välj 1–8 originalfiler och avskiljare för varje CSV-fil.');
     const generation = ++sourceGeneration, token = guard();
     sources = []; views = []; attached = false; refreshStatus(); invalidate(); $('external-views').replaceChildren();
     $('external-sources').textContent = 'Läser originalbytes och inspekterar tabeller…';
     let total = 0, loaded = [];
-    for (const file of files) {
+    for (const {file, delimiter} of choices) {
       total += file.size;
       if (total > 4 * 1024 * 1024) throw new Error('Högst 4 MiB sammanlagda originalbytes.');
-      const prepared = await prepareInspection(file, $('external-delimiter').value);
+      const prepared = await prepareInspection(file, delimiter);
       if (generation !== sourceGeneration || !current(token.context)) return stale();
       const inspection = await submitInspection(prepared.payload);
       if (generation !== sourceGeneration || !current(token.context)) return stale();
-      if (inspection.source.sha256 !== prepared.sha256) throw new Error('Inspektionens SHA-256 matchar inte filen.');
+      if (inspection.inspectionVersion !== '1' ||
+          inspection.source?.sha256 !== prepared.sha256 ||
+          inspection.source?.filename !== file.name ||
+          inspection.source?.kind !== file.name.toLowerCase().split('.').at(-1))
+        throw new Error('Inspektionens filidentitet stämmer inte med originalfilen.');
       loaded.push({...prepared, inspection});
     }
     if (generation !== sourceGeneration || !current(token.context)) return stale();
@@ -251,15 +326,18 @@ export function createImportReview({context, current, getProject, replaceProject
   }
   $('external-import').addEventListener('click',()=>dialog.showModal());
   $('external-close').addEventListener('click',()=>dialog.close());
-  $('external-files').addEventListener('change',async event=>{
+  $('external-files').addEventListener('change',event=>{
+    fileChoices = [...event.target.files].map(file => ({file, delimiter:null}));
+    discardInspections(); renderFileChoices();
+  });
+  $('external-inspect-files').addEventListener('click',async ()=>{
     const nextGeneration=sourceGeneration+1, ctx=context();
-    try { await loadFiles([...event.target.files]); }
+    try { await loadFiles(fileChoices.map(item => ({...item}))); }
     catch(error) {
       if (sourceGeneration!==nextGeneration || !current(ctx)) return stale();
       sources=[]; invalidate(); renderSources(); showError(error);
     }
   });
-  $('external-delimiter').addEventListener('change',()=>{++sourceGeneration; sources=[]; views=[]; attached=false; refreshStatus(); invalidate(); renderViews(); renderSources();});
   $('external-add-view').addEventListener('click',()=>{ if(views.length>=64)return showError(new Error('Högst 64 MappingViews.')); views.push({}); renderViews(); invalidate(); });
   for(const id of ['external-project-name','external-row-values','external-exclusions']) $(''+id).addEventListener('input',invalidate);
   $('external-plan-button').addEventListener('click',buildPreview);

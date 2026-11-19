@@ -25,6 +25,42 @@ def candidate():
 
 
 class ImportVerificationTests(unittest.TestCase):
+    def test_mixed_delimiters_fingerprint_and_complete_replay(self):
+        comma = b'ID,Label,Kind\nSW-01,Core,switch\n'
+        semicolon = b'ID;Label;Kind\nH-01;Workstation;host\n'
+        req = request(comma)
+        second = source(semicolon, 'inventory.csv', 'src-2')
+        second['csvDelimiter'] = ';'
+        req['sources'].append(second)
+        second_view = view({'node.id':['A'],'node.label':['B'],'node.kind':['C']}, view_id='view-2')
+        second_view['sourceId'] = 'src-2'
+        req['mappingViews'].append(second_view)
+        discovery = build_plan(req)['plan']
+        self.assertEqual({unit['targetKey'] for unit in discovery['units']}, {'SW-01','H-01'})
+        req['selectedUnitIds'] = sorted(unit['unitId'] for unit in discovery['units'])
+        project = build_plan(req)['plan']['proposedProject']
+        self.assertEqual([item['csvDelimiter'] for item in project['importEvidence']['sources']], [',',';'])
+        self.assertEqual(verify_sources({'project':project,'sources':req['sources']})['verifiedSourceIds'],
+                         ['src-1','src-2'])
+        wrong = copy.deepcopy(req['sources'])
+        wrong[1]['csvDelimiter'] = ','
+        with self.assertRaises(ProjectValidationError):
+            verify_sources({'project':project,'sources':wrong})
+        fingerprint_request = copy.deepcopy(req)
+        fingerprint_request['mappingViews'] = []
+        fingerprint_request['selectedUnitIds'] = []
+        correct_hash = build_plan(fingerprint_request)['plan']['fingerprint']
+        fingerprint_request['sources'][1]['csvDelimiter'] = ','
+        self.assertNotEqual(build_plan(fingerprint_request)['plan']['fingerprint'], correct_hash)
+        ods = ods_parts({'Inventory':'ID,Label,Kind\nX,Extra,host\n'})
+        ods['content.xml'] = ods['content.xml'].replace(b'1024', b'3')
+        for raw, filename in ((zip_parts(workbook_parts({'Inventory':'ID,Label,Kind\nX,Extra,host\n'})), 'extra.xlsx'),
+                              (ods_zip(ods), 'extra.ods')):
+            mixed = copy.deepcopy(fingerprint_request)
+            mixed['sources'][1] = source(raw, filename, 'src-2')
+            plan = build_plan(mixed)['plan']
+            self.assertEqual([item['csvDelimiter'] for item in plan['sourceManifest']], [',',None])
+
     def test_independent_workbook_bytes_replay(self):
         raw_rows = 'ID,Label,Kind\nH-01,Host,host\n'
         workbook = zip_parts(workbook_parts({'Inventory':raw_rows}))
