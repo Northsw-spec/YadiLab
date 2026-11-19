@@ -63,7 +63,8 @@ def _decode_source(value: object) -> tuple[str, str, bytes, str | None]:
     return filename, extension, data, delimiter
 
 
-def _csv_table(filename: str, data: bytes, delimiter: str, from_row: int = 1) -> dict:
+def _csv_table(filename: str, data: bytes, delimiter: str, from_row: int = 1,
+               row_limit: int | None = PREVIEW_ROWS) -> dict:
     try:
         content = data.decode("utf-8-sig", errors="strict")
     except UnicodeDecodeError:
@@ -97,12 +98,12 @@ def _csv_table(filename: str, data: bytes, delimiter: str, from_row: int = 1) ->
                 cell_count += 1
                 if cell_count > MAX_CELLS:
                     _invalid(filename, f"more than {MAX_CELLS} populated cells")
-                if row_count >= from_row and len(preview) < PREVIEW_ROWS:
+                if row_count >= from_row and (row_limit is None or len(preview) < row_limit):
                     cells.append({"address": f"{_column_name(column)}{row_count}",
                                   "type": "text", "value": raw})
             if cells or any(record):
                 populated += 1
-                if row_count >= from_row and len(preview) < PREVIEW_ROWS:
+                if row_count >= from_row and (row_limit is None or len(preview) < row_limit):
                     preview.append({"row": row_count, "cells": cells})
                 elif row_count >= from_row and next_row is None:
                     next_row = row_count
@@ -113,13 +114,13 @@ def _csv_table(filename: str, data: bytes, delimiter: str, from_row: int = 1) ->
             "previewRows": preview, "nextRow": next_row}
 
 
-def _inspect(value: object, from_row: int) -> dict:
+def _inspect(value: object, from_row: int, row_limit: int | None = PREVIEW_ROWS) -> dict:
     filename, kind, data, delimiter = _decode_source(value)
     if kind == "csv":
-        tables = [_csv_table(filename, data, delimiter, from_row)]
+        tables = [_csv_table(filename, data, delimiter, from_row, row_limit)]
     else:
         from .import_workbooks import xlsx, ods
-        tables = (xlsx if kind == "xlsx" else ods)(data, from_row)
+        tables = (xlsx if kind == "xlsx" else ods)(data, from_row, row_limit)
     return {"inspectionVersion": "1",
             "source": {"filename": filename, "kind": kind,
                        "sha256": hashlib.sha256(data).hexdigest()},
@@ -133,6 +134,11 @@ def inspect_source(value: object) -> dict:
     for table in result["tables"]:
         del table["nextRow"]
     return result
+
+
+def inspect_all_rows(value: object) -> dict:
+    """Internal 4B reading of all bounded, validated source rows; never an HTTP response."""
+    return _inspect(value, 1, None)
 
 
 def inspect_page(value: object) -> dict:
