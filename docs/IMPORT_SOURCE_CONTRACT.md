@@ -273,7 +273,7 @@ Planen är en riktad acyklisk graf. Normativ konstruktionsordning är `zone → 
 
 **Målidentitet**: `targetKey` är för node, zone eller link exakt dess validerade kanoniska `id`. För port och ipBinding är det en JSON-sträng med exakt två element `[nodeId,portId]` serialiserad utan whitespace. För staticRoute är det `[nodeId,routeId]` på samma sätt. Därmed finns ingen tvetydig slash-join när ID:n innehåller tecknet `/` eller andra skiljetecken.
 
-**Internt, deterministiskt id**: `claimId = "cl-" + sha256(utf8(canonicalJson([viewId,sourceId,tableId,row,targetKind,targetKey])))[0:32]`; `unitId = "u-" + sha256(utf8(canonicalJson([kind,targetKey])))[0:32]`; `changeId = "c-" + sha256(utf8(canonicalJson([unitId,operation,fieldPath])))[0:32]`. CanonicalJson för dessa identifierare följer exakt §7.4. En intern ID-kollision mellan olika identiteter ska ge HTTP 422; välj inte en ny slumpmässig ID. Dessa är **kontrollidentiteter**, aldrig nätverks- eller kabel-ID. En enhet med samma kind+targetKey förekommer högst en gång i en ImportPlan. Vid lika fakta samlas samtliga ursprung på denna unit; dubblett-claims får NO_OP-status på användningsnivån.
+**Internt, deterministiskt id**: `claimId = "cl-" + sha256(utf8(canonicalJson([viewId,sourceId,tableId,row,targetKind,targetKey])))[0:32]`; `unitId = "u-" + sha256(utf8(canonicalJson([kind,targetKey])))[0:32]`; `changeId = "c-" + sha256(utf8(canonicalJson([unitId,operation,fieldPath])))[0:32]`. CanonicalJson för dessa identifierare följer exakt §7.4. `decisionId` för en radunik användardeklaration är `d-` följt av de första 32 hextecknen i SHA-256(canonicalJson([viewId,row,targetField,valueType,value])). För en vy-konstant är beslutets ID `d-` följt av SHA-256(canonicalJson([viewId,"constant",targetField,type,value]))[0:32]. Dessa `decisionId` skapas **endast av servern**, ingår i SourceClaim-origins och kan härledas ur exakt den historiska `mappingViews/rowValues`-representationen. För source_cell och derived_layout är `decisionId:null`; för user_constant och user_decision krävs giltigt beräknat decisionId. Dubbletter med olika payload eller återanvändning av ID på olika beslut avvisas deterministiskt. En intern ID-kollision mellan olika identiteter ska ge HTTP 422; välj inte en ny slumpmässig ID. Dessa är **kontrollidentiteter**, aldrig nätverks- eller kabel-ID. En enhet med samma kind+targetKey förekommer högst en gång i en ImportPlan. Vid lika fakta samlas samtliga ursprung på denna unit; dubblett-claims får NO_OP-status på användningsnivån.
 
 Varje dependency måste peka på en existerande planunit med tillräckligt godkänt resultat eller på uttryckligen redan definierade fakta i samma, validerade kandidatprojekt. Inga beroenden på den arbetsyta som ska ersättas får implicit antas. Saknade beroenden, cykler och beroenden till BLOCKED/INVALID/EXCLUDED-enheter ger ett icke-tillämpbart urval. En port kräver en nod; en kabel kräver två redan deklarerade portar; en route kräver definierad nod och port. Ett ipBinding kräver redan uttryckligt deklarerad port.
 
@@ -298,7 +298,7 @@ Urval av en unit utökar inte automatiskt andra enheter. UI får erbjuda "Välj 
 }
 ```
 
-- `baselineNetworkSha256` beräknas **en gång** vid importgodkännandet av det validate_project-normaliserade nätverksinnehållet, utan proveniens, via canonicalNetworkView och canonicalJson enligt §7.5 och §7.4. Manifestet är därefter **oföränderlig historik**, inte en självläkande förteckning över arbetsytans aktuella värden. Vanlig redigering ändrar aldrig detta hash, originalreferenser eller accepterade importbeslut.
+- `baselineNetworkSha256` beräknas **en gång vid konstruktion av en redan vald och fullständigt validerad kandidat** från det validate_project-normaliserade nätverksinnehållet, utan proveniens, via canonicalNetworkView och canonicalJson enligt §7.5 och §7.4. Manifestet är därefter **oföränderlig historik**, inte en självläkande förteckning över arbetsytans aktuella värden. Vanlig redigering ändrar aldrig detta hash, originalreferenser eller accepterade importbeslut.
 - `sources[]`: `{sourceId,filename,kind,sha256,byteLength,tables}`, där tables innehåller `{tableId,name,rowCount,populatedRowCount,columnCount}`. Alla källhashar kommer från originalbytes. Inga fullständiga `cells` i projektet.
 - `mappingViews[]`: verifierade snapshots enligt §6.1 vid importerad tidpunkt; innehåller källroll, vald kolumnmappning, header och row selections, även när senare användarredigering ändrar nätverket.
 - `rowValues[]`: explicit radunika beslut enligt §9.1 med typer och identiteter; även dessa bevaras oförändrade.
@@ -444,6 +444,16 @@ UI måste jämföra `source.sha256` med den fortfarande valda originalfilen och 
 
 **Acceptanstester**: 26:e, 100:e och sista tillåtna rad i CSV/XLSX/ODS; gles XLSX/ODS med gap mellan fysiska radnummer; CSV med citerad radbrytning; bläddring till slutet; felaktigt tableId; fel sha jämfört med ny fil; fördröjt svar efter blad-/projektbyte. Verifiera att rad 26 aldrig importeras utan explicit vald vy och radbeslut.
 
+### 9.1.2 Läsbar integritetskontroll efter Save/Open (från 4B)
+
+För att visa historisk baseline-status **utan att låta klienten gissa Python-JSON/SHA-256-serialisering** inför 4B exakt en ytterligare, skrivskyddad endpoint `POST /api/import/evidence-status`.
+
+Request har exakt `{"project":<full current project object>}`, där projektet är schema 1.4 och valideras med befintlig `validate_project()`. Ett projekt med saknat/felaktigt importEvidence ger samma HTTP 422 `INVALID_PROJECT` som övriga invalid-projekt. Ingen skrivning, import eller sessionstart görs.
+
+Response 200 har exakt `{"manifestStatus":"MANIFEST_VALIDATED","baselineStatus":"BASELINE_MATCH"|"CHANGED_SINCE_IMPORT"}`. Servern beräknar faktisk hash från `canonicalJson(canonicalNetworkView(project))` och jämför med det historiska `baselineNetworkSha256`. Svaret innehåller aldrig `SOURCE_VERIFIED`, eftersom originalfilen inte följde med. SOURCE_VERIFIED får uppstå endast i källåteranslutningsflödet efter faktisk source-byte-SHA och cellreferenskontroll enligt §7.3. UI ska aldrig förväxla en lyckad baseline-match med källverifiering.
+
+Anropa denna endpoint när ett schema-1.4-projekt öppnas och efter ändringar i projektets nätverksfält som berör detta statusvärde, med samma revisions-/stale-guard som övriga läsanrop. Skicka **inte** importEvidence med vanliga simulerings-/sessionsanrop; denna endpoint är avsiktligt en dokumentationsintegritetskontroll och får användas endast när status ska räknas om. Verifiera 200/422, förändrad baseline efter edit, identisk baseline efter undo, och inget ändrat project/SHA/Save från själva kontrollen.
+
 ### 9.2 Integration av schema 1.4 och sanningsstatus
 
 Implementera §7.3:s **historiska** `importEvidence`; inga källceller eller originalbytes inbäddas i .yadilab. Alla id- och formatlänkar i manifestet ska kontrolleras, men efter vanliga manuella redigeringar får inte historiska unitIds/targetKeys krävas finnas i nuvarande nätverk. V1.4:s baseline-hash beräknas vid första import från kanonisk projektion; den uppdateras aldrig vid vanlig projektredigering. UI redovisar två oberoende fakta: `MANIFEST_VALIDATED / SOURCE_VERIFIED` och `BASELINE_MATCH / CHANGED_SINCE_IMPORT`.
@@ -514,6 +524,7 @@ Slutgränssnittet ska visa:
 - **C07 – Transportstorlek:** ett v1.4-projekt med importEvidence nära 2 MiB får inte skicka manifestet med DHCP/ARP/ICMP/IPv4/routing/sessions-HTTP-body; bekräfta med riktiga request-bytes och identiska nätresultat som v1.3-projektion.
 - **C08 – SHA/ID:** verifiera canonicalJson och SHA-256 mot de kända vektorerna i §7.4 samt Unicode, ändrad mapping/selectedUnitIds och annan JSON-nyckelordning.
 - **C09 – Originalarkiv:** varning om att original inte inbäddas, ingen påstått diskverifierad webbläsarnedladdning, SHA-match vid återanslutning och avslag vid mismatch eller överskriden källpaketsstorlek.
+- **C11 – Integritetsstatus-API:** `/api/import/evidence-status` jämför projektets historiska baselinesnapshot med en aktuell validerad kanonisk nätverksprojektion. Det får aldrig rapportera SOURCE_VERIFIED utan källbytes; ett gammalt HTTP-svar får inte skriva över nyare edit-status.
 - **C10 – Save/Open:** full diskbaserad Save/Open och omstart efter import följt av edit; korrekt importEvidence och ingen mutation från read-only sessioner.
 
 
