@@ -331,7 +331,7 @@ Request är ett JSON-objekt med exakt {contractVersion,projectName,sources,mappi
 - sources är 1–8 objekt med exakt {sourceId,filename,contentBase64,csvDelimiter?}; sourceId är src-1, src-2 etc. csvDelimiter obligatoriskt enbart för CSV och alltid komma eller semikolon. Aggregat av ursprungliga filer högst 4 MiB (base64 + JSON måste även uppfylla befintlig MAX_BODY); varje källfil ska dessutom klara 4A:s egna läsgränser.
 - mappingViews är alla aktiva vyer i §6.1. En källa utan vy förblir helt omappad och måste redovisas i planen; en vy utan källstöd ger HTTP 422.
 - excludedUses har exakt {viewId,row,reason}; reason 1–240 tecken och måste vara ett aktivt användarbeslut för just den användningen.
-- selectedUnitIds är den explicita listan med planunits som användaren vill använda. Om listan är tom returneras en ren granskningsplan med proposedProject=null. Första vyn byggs alltid utan selectedUnitIds, därefter får användaren välja units och omplanera inför bekräftelse.
+- selectedUnitIds är den explicita listan med planunits som användaren vill använda. Om listan är tom returneras en ren granskningsplan med proposedProject=null. Första planförhandsvisningen byggs med selectedUnitIds=[], därefter får användaren uttryckligen välja units och omplanera inför bekräftelse.
 
 Response 200 har exakt {planVersion:"1",fingerprint,plan,project,report}, där plan följer §7 och project är null eller ett fullständigt validate_project()-godkänt projekt i schema 1.4. report har objekt med antal källrecords, användningar, ACTIONABLE/NO_OP/BLOCKED/INVALID/EXCLUDED, unmappedCells, selectedUnits, nodes,ports,links,zones,routes och warnings (strukturerade diagnostikvärden, inklusive exakta källreferenser). Inga okända fält, otydliga statussträngar eller stiliserade "success"-påståenden.
 
@@ -346,7 +346,7 @@ Faktiskt projekttillstånd, filename, savedSha, revision och Save/Open förblir 
 ### 9.3 Specifika 4B-tester
 
 - Två oberoende syntetiska inventeringar med olika rubriker och column order ger samma kanoniska expected device efter explicit mapping; ingen rubrikheuristik.
-- **En rad, två vyer** från samma blad ger två claims. **Två rader, ett targetKey** ger ett enda nätverksobjekt och två field origins vid lika fakta.
+- **En rad, två device_inventory-vyer** från samma blad, med var sin uttryckligt angiven text-ID-kolumn, ger två separata nodclaims utan att källraden dupliceras. **Två rader, ett targetKey** ger ett enda nätverksobjekt och två field origins vid lika fakta.
 - Två motstridiga celler på samma target field ger BLOCKED och ingen skapad enhet.
 - En nod utan ports/links är giltigt **partiellt** projekt, inte ett fullständigt observerat nät.
 - Felaktigt typed ID, okänd node.kind, saknad användardeklaration, plan-ID-kollision, obefintlig källcell, EXCLUDED som beroende, ändrad source hash och stale UI-respons hindrar projektbyte.
@@ -412,4 +412,4 @@ Utanför scope: PDF, DOCX, Visio, bilder/OCR, makro-/formelutvärdering, extern 
 
 Om en faktisk oförenlighet med äldre kod eller ett nytt motexempel upptäcks: stoppa berörd implementation, skriv reproducerbart negativt test, och ändra vid behov **denna enda kontraktsfil** under review i samma repository. Skapa inte ett nytt konkurrerande planeringsdokument. Forskning och externa källor är underlag, inte bevis om otestad framtida kod.
 
-**Detta är hela beslutade målarkitekturen, inklusive källretention, flera roller och flera objekt per källrad. Etapp 4A är fortfarande nästa kodleverans.**
+**Detta är hela den beslutade målarkitekturen, inklusive källretention, flera roller och flera objekt per källrad. Etapp 4A är fortfarande nästa kodleverans.**
