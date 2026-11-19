@@ -3,7 +3,7 @@ import {TopologyCanvas} from './canvas.js';
 import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';
 import {api} from './services/api.js';
 import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';
-import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport, prepareInspection, submitInspection} from './features/projects/transfer.js';
+import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport, prepareInspection, submitInspection, submitInspectionPage} from './features/projects/transfer.js';
 import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';
 import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';
 import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';
@@ -2151,11 +2151,47 @@ $('preview-file').addEventListener('change', async event => {
       if (inspection.source.kind === 'csv' && table.columnCount === 1) {
         summary.append(el('p', {}, 'En kolumn identifierad – kontrollera avskiljaren'));
       }
-      for (const row of table.previewRows) {
+      const rows = el('div', {dataset: {previewTable: table.tableId}});
+      const appendRows = pageRows => { for (const row of pageRows) {
         const line = el('p');
         line.append(el('strong', {}, `Rad ${row.row}: `));
         for (const cell of row.cells) line.append(el('span', {}, `${cell.address} [${cell.type}] ${cell.value}  `));
-        summary.append(line);
+        rows.append(line);
+      }};
+      appendRows(table.previewRows);
+      summary.append(rows);
+      if (table.previewRows.length < table.populatedRowCount) {
+        let fromRow = table.previewRows.at(-1).row + 1;
+        let shown = table.previewRows.length;
+        let pageRun = 0;
+        const pageButton = el('button', {type: 'button'}, 'Visa nästa källrader');
+        const pageStatus = el('span', {}, ` Visade ${shown} av ${table.populatedRowCount}`);
+        pageButton.addEventListener('click', async () => {
+          if (!previewCurrent(generation, file, context) || pageButton.disabled) return;
+          const run = ++pageRun;
+          pageButton.disabled = true;
+          try {
+            const page = await submitInspectionPage(payload, table.tableId, fromRow);
+            if (!previewCurrent(generation, file, context) || run !== pageRun) return;
+            if (page.source.sha256 !== sha256 || page.source.filename !== file.name ||
+                page.tableId !== table.tableId || page.rows.length > 25 ||
+                !page.rows.length || page.rows[0].row < fromRow) {
+              throw new Error('Källsidans identitet eller radnummer stämmer inte.');
+            }
+            appendRows(page.rows);
+            shown += page.rows.length;
+            fromRow = page.nextRow;
+            pageStatus.textContent = ` Visade ${shown} av ${table.populatedRowCount}`;
+            if (fromRow === null) pageButton.remove();
+          } catch (error) {
+            if (previewCurrent(generation, file, context)) {
+              pageStatus.textContent = ` Källsidan avvisad: ${error.message}`;
+            }
+          } finally {
+            if (previewCurrent(generation, file, context) && fromRow !== null) pageButton.disabled = false;
+          }
+        });
+        summary.append(pageButton, pageStatus);
       }
     }
     summary.append(el('p', {}, 'Endast förhandsvisning – inga nätverksobjekt importerade'));
