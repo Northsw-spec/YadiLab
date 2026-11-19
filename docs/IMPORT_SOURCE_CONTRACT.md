@@ -367,6 +367,20 @@ Alla simulerings-/diagnostik-/sessionsanrop som annars skickar `JSON.stringify(p
 
 Existerande strikta kalkylbladsexport ska fortsatt acceptera endast de gamla uttryckligen stödda schemana. För 1.4 måste den förklara att export skulle förlora manifest/proveniens och avvisa exporten, inte konvertera tyst till 1.3. Befintliga .json/.yadilab-, Save/Open- och optimistiska SHA-konfliktkontrakt gäller oförändrat. Äldre filer ska vara byte-identiska utan Save och får inte uppgraderas genom enbart Open.
 
+### 7.6 Explicita resursgränser för nya plan- och proveniensarrayer
+
+Den nuvarande kodbasens `network_core/model.py::_array()` använder standardgränsen **2 000**. Samtliga nya arrayer för importplan/proveniens ska använda explicit angiven `max_items` och nedanstående begränsningar, inte en godtycklig implicit default.
+
+**Gemensamma requestgränser (4B–4D):** högst 8 originalfiler och 32 blad per fil; högst 10 000 befolkade källrecords och 100 000 lagrade celler **sammanlagt** för alla filer i en kandidat, även om varje enskild fil följer 4A:s max 5 001 rader och 100 000 celler. Högst 64 `mappingViews`, 64 `transformations`, 10 000 `rowValues`, 10 000 `excludedUses` och 10 000 `selectedUnitIds`. Summan av valda radanvändningar (`selectedRows` över alla vyer) får vara högst 20 000; varje viewId unik och inom 1–64.
+
+**Planens arrayer:** högst 20 000 `claims`, 10 000 `units`, 10 000 `recordReviews` och 20 000 `diagnostics`. Högst en `change` per unit, 128 `sourceUses` och 256 `dependencies` per unit; maximalt 128 `Origin` per fält. Planens `sourceManifest` innehåller högst 8 källor och 32 tabeller per källa. Den fullständiga server-serialiserade `{"plan":...}`-responsen får vara högst 8 MiB UTF-8; om den blir för stor returneras ett **strukturerat HTTP 422 `PLAN_TOO_LARGE`** enligt serverns befintliga felform med code i `message`, aldrig trunkerad/partiell HTTP 200.
+
+**V1.4-importEvidence:** högst 8 `sources`, 256 tabeller totalt, 64 `mappingViews`, 64 `transformations`, 10 000 `rowValues`, 10 000 `excludedUses`, 10 000 `selectedUnitIds`, 20 000 `decisions`, 10 000 `acceptedChanges`, 128 origins per historiskt fält och **2 MiB fullständigt serialiserad UTF-8**. Överskriden proveniensgräns ger fail-closed före arbetsytebyte, utan att kapa källreferenser eller accepterade fakta. Validatorn måste kontrollera både arraylängder och intern referenskonsistens.
+
+**Bytegränser:** hela inkommande kandidat-requesten måste rymmas i faktiska `network_core/server.py:MAX_BODY = 8 MiB`, inklusive base64 och JSON-overhead. Högst 4 MiB **sammanlagda** originalkällbytes för `build-candidate`; varje fil följer även 4A:s egna format-/komprimerings-/XML-tak. Den fullständiga framtida `.yadilab`-Save-requesten måste också rymmas i MAX_BODY. Källverifieringens egna sammansatta request har samma MAX_BODY (se §9.1.3). Om originalbytes + sparat projekt inte ryms får den källverifieringen ett explicit avslag utan falskt SOURCE_VERIFIED; användaren får minska den granskade källmängden eller återgå till hash-match, aldrig tyst nedskalning.
+
+**Gränstestning:** Testa 2 000 och 2 001 objekt (för att avslöja felaktigt ärvd standardgräns), varje deklarerad gräns precis under/på/över, 4A:s 256-poster-ZIP och 32-bladstak, ODS repetitionsattribut före expansion, HTTP-body-gränsen med faktisk base64-overhead och 2 MiB-proveniens utan att någon simulator-HTTP-body tar med importEvidence. Ett fel ska avvisa hela berörda requesten, inte tyst beskäras eller presenteras som nätverkssuccess. Dessa gränser är produktbeslut, inte statistiska påståenden om verklig filkompatibilitet.
+
 ## 8. Fast måltypskatalog för källpåståenden
 
 Dessa **sju generiska roller** är produktens egna semantiska kategorier, inte påstådda industristandarder. Ett blad får innehålla flera roller genom flera views. En vy har exakt en roll.
