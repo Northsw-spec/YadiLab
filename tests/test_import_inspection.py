@@ -127,6 +127,27 @@ class WorkbookInspectionTests(unittest.TestCase):
             {'address': 'D4', 'type': 'number', 'value': '12.50'},
             {'address': 'E4', 'type': 'boolean', 'value': '1'}])
 
+    def test_workbooks_keep_column_65_and_odf_row_gap(self):
+        xparts = workbook_parts({'Data': 'ID\n001\n'})
+        xparts['xl/worksheets/sheet1.xml'] = xparts['xl/worksheets/sheet1.xml'].replace(b'r="A2"', b'r="BM2"')
+        xtable = inspect_source(workbook_request('wide.xlsx', xlsx_zip(xparts)))['tables'][0]
+        self.assertEqual((xtable['rowCount'], xtable['columnCount']), (2, 65))
+        self.assertEqual(xtable['previewRows'][1]['cells'][0]['address'], 'BM2')
+
+        oparts = ods_parts({'Data': 'ID\n001\n'})
+        content = oparts['content.xml'].replace(b'1024', b'65')
+        self.assertIn(b'<table:table-row><table:table-cell office:value-type="string"><text:p>001', content)
+        content = content.replace(
+            b'<table:table-row><table:table-cell office:value-type="string"><text:p>001',
+            b'<table:table-row><table:table-cell table:number-columns-repeated="64"/><table:table-cell office:value-type="string"><text:p>001')
+        content = content.replace(
+            b'</table:table-row><table:table-row>',
+            b'</table:table-row><table:table-row table:number-rows-repeated="3"><table:table-cell table:number-columns-repeated="65"/></table:table-row><table:table-row>', 1)
+        oparts['content.xml'] = content
+        otable = inspect_source(workbook_request('wide.ods', ods_zip(oparts)))['tables'][0]
+        self.assertEqual((otable['rowCount'], otable['populatedRowCount'], otable['columnCount']), (5, 2, 65))
+        self.assertEqual(otable['previewRows'][1]['cells'][0]['address'], 'BM5')
+
     def test_xlsx_more_than_24_parts_within_new_cap(self):
         raw = xlsx_zip(workbook_parts({f'Sheet {n}': 'ID\n001\n' for n in range(22)}))
         with zipfile.ZipFile(io.BytesIO(raw)) as z:
@@ -137,6 +158,9 @@ class WorkbookInspectionTests(unittest.TestCase):
         base = workbook_parts({'Data': 'ID\n001\n'})
         for label, path, old, new in [
             ('hidden', 'xl/workbook.xml', 'sheetId="1"', 'sheetId="1" state="hidden"'),
+            ('hidden row', 'xl/worksheets/sheet1.xml', '<row r="2">', '<row r="2" hidden="1">'),
+            ('hidden column', 'xl/worksheets/sheet1.xml', '<sheetData>', '<cols><col min="1" max="1" hidden="1"/></cols><sheetData>'),
+            ('cached formula', 'xl/worksheets/sheet1.xml', '<is><t>001</t></is>', '<f>1+1</f><v>001</v>'),
             ('formula', 'xl/worksheets/sheet1.xml', '<is><t>001</t></is>', '<f>1+1</f><is><t>001</t></is>'),
             ('merge', 'xl/worksheets/sheet1.xml', '</worksheet>', '<mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells></worksheet>'),
             ('coordinate', 'xl/worksheets/sheet1.xml', 'A2', 'A0'),
@@ -146,6 +170,7 @@ class WorkbookInspectionTests(unittest.TestCase):
         ]:
             with self.subTest(label=label):
                 parts = base.copy()
+                self.assertIn(old.encode(), parts[path])
                 parts[path] = parts[path].replace(old.encode(), new.encode())
                 with self.assertRaises(ProjectValidationError):
                     inspect_source(workbook_request('bad.xlsx', xlsx_zip(parts)))
@@ -164,16 +189,21 @@ class WorkbookInspectionTests(unittest.TestCase):
 
     def test_ods_rejects_mime_hidden_formula_merge_and_huge_repeat(self):
         base = ods_parts({'Data': 'ID\n001\n'})
+        base['content.xml'] = base['content.xml'].replace(b'1024', b'1')
+        self.assertEqual(inspect_source(workbook_request('valid.ods', ods_zip(base)))['tables'][0]['rowCount'], 2)
         for label, path, old, new in [
             ('mime', 'mimetype', 'application/vnd.oasis.opendocument.spreadsheet', 'application/vnd.oasis.opendocument.text'),
             ('hidden', 'content.xml', 'table:name="Data"', 'table:name="Data" table:visibility="collapse"'),
+            ('hidden row', 'content.xml', '<table:table-row>', '<table:table-row table:visibility="collapse">'),
+            ('hidden column', 'content.xml', '<table:table-column table:number-columns-repeated="1"/>', '<table:table-column table:number-columns-repeated="1" table:visibility="collapse"/>'),
             ('formula', 'content.xml', 'office:value-type="string"', 'table:formula="of:=1+1" office:value-type="string"'),
-            ('merge', 'content.xml', '<table:table-cell/>', '<table:covered-table-cell/>'),
-            ('repeat', 'content.xml', 'number-columns-repeated="1024"', 'number-columns-repeated="1000000"'),
+            ('merge', 'content.xml', '</table:table-row>', '<table:covered-table-cell/></table:table-row>'),
+            ('repeat', 'content.xml', 'number-columns-repeated="1"', 'number-columns-repeated="1000000"'),
             ('manifest', 'META-INF/manifest.xml', 'media-type="text/xml"', 'media-type="text/plain"'),
         ]:
             with self.subTest(label=label):
                 parts = base.copy()
+                self.assertIn(old.encode(), parts[path])
                 parts[path] = parts[path].replace(old.encode(), new.encode())
                 with self.assertRaises(ProjectValidationError):
                     inspect_source(workbook_request('bad.ods', ods_zip(parts)))
