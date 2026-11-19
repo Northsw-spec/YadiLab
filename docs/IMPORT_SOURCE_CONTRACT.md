@@ -412,7 +412,7 @@ Dessa **sju generiska roller** är produktens egna semantiska kategorier, inte p
 | ip_plan | ip.nodeId, ip.portId, ip.ipv4 | Endast explicit portbunden IP/CIDR |
 | documentation_only | inga | Ingen nätverksändring, endast käll-/granskningsstatus |
 
-**Identitetskrav:** Kanonisk ID för varje node/port/link/zone/route måste vara uttryckligt angivet i en textcell eller ett separat uttryckligt användarbeslut per rad. Inga slug-/förkortnings-/namnmatchningar eller indexbaserade påhittade ID:n. En säker systemgenererad viewId/unitId är kontrollidentitet, **inte** ett nätverks-ID. Syntetiska UI-koordinater får skapas enligt en enda deklarerad regel: sortera nod-ID:n lexikografiskt; index i från 0, x=110+260*(i mod 4), y=110+220*floor(i/4). De markeras derived_layout och har aldrig fysisk betydelse.
+**Identitetskrav:** Kanonisk ID för varje node/port/link/zone/route måste vara uttryckligt angivet i en textcell eller ett separat uttryckligt användarbeslut per rad. Inga slug-/förkortnings-/namnmatchningar eller indexbaserade påhittade ID:n. En säker systemgenererad viewId/unitId är kontrollidentitet, **inte** ett nätverks-ID. Syntetiska UI-koordinater får skapas **enbart** genom den fastställda algoritmen i `8.2, som beräknar en begränsad presentation från **den uttryckligt valda, validerade kandidatuppsättningens nod-ID:n**. Koordinaterna ska märkas `derived_layout` och är aldrig källfakta eller bevis för fysisk topologi.
 
 **Port-/IP-krav:** nodeId/portId måste finnas och matcha explicit deklarerad källa; management-IP utan port är en dokumenterad cell men ingen port-IP. enabled kräver bekräftad boolean; användaren får ange en tydlig generell konstant för en vy, aldrig dold true-default. MAC/VLAN/IPv4/route använder exakt validate_project()-reglerna. IP-plan får inte skapa port, kabel, route eller adresspool.
 
@@ -433,6 +433,17 @@ Dessa **sju generiska roller** är produktens egna semantiska kategorier, inte p
 - `port.mac` får bara bindas enligt nuvarande validator; switchportens MAC får inte antas vara endpoint-MAC.
 
 Negativa 4C-fixturer måste omfatta access/trunk med förväxlade fält, tom allowedVlans, otillåten VLAN och fel nodtyp. Positiva fixturer ska jämföra den kompletta genererade `port.vlan`-JSON med oberoende handskrivet förväntat resultat.
+
+### 8.2 Deterministisk nodlayout inom faktiska modellgränser
+
+Källkoden i `network_core/model.py` validerar ändliga `x/y` inom intervallet `[-100000,100000]` via `_number()` och har en hård gräns på **2 000 noder** via `validate_project()`. Tidigare fast fyra kolumner skulle ge `y=100210` för nodindex 1 820 och är därför **inte tillåten**. Följande är den enda normativa presentationslayouten för externa importer:
+
+1. Ta mängden **unika, explicit accepterade och ID-validerade node-ID:n** i det *slutliga valda* kandidatprojektet. Låt `n` vara antalet sådana noder. Identiska källpåståenden om samma nod räknas **en gång**. Ofullständiga/INVALID/BLOCKED/EXCLUDED noder bidrar inte. Om `n=0` är detta en ren förhandsvisning utan giltigt projekt: `proposedProject:null` och **inga** koordinater. Om `n>2000` ska kandidaten avvisas enligt befintliga modellgränser **innan** några koordinater skapas. Inga noder kapas.
+2. För `1<=n<=2000` beräknas antalet kolumner exakt som `cols = 1 + math.isqrt(n-1)`. Detta är `ceil(sqrt(n))` men med deterministisk heltalsaritmetik utan flyttalsavrundning. Sortera node-ID:n strikt stigande som Python Unicode-kodpunktsordning, aldrig efter läsordning, sortering med locale, naturlig siffersortering eller casefold. Varje nod tilldelas ett unikt nollbaserat index `i`.
+3. Beräkna **JSON-heltal** med `x = 110 + 260 * (i % cols)` och `y = 110 + 220 * (i // cols)`. Båda koordinaterna måste passera exakt `validate_project()`. För `n=2000` ger `cols=45`, högsta `x=11550` och högsta `y=9790`. Ingen synlig position tillåts kringgå ±100000-gränsen. `x/y` ska ha `derived_layout`-proveniens; de är inte observation av fysisk placering, kabellängd eller anslutning.
+4. Beräkna layouten **en gång** när en vald importkandidat skapas från aktuella explicit valda units. Om användaren ändrar importurvalet krävs ny serverplan och nytt godkännande, med nytt aktuellt fingerprint. Befintligt projekts koordinater får **inte** räknas om vid senare vanlig redigering, Save/Open, simuleringsanrop eller enbart återanslutning av källfiler. Historisk replay använder samma godkända node-ID-mängd, exakt sortering och layoutregel och måste producera samma kanoniska nätverkskoordinater och baseline-hash.
+
+**Oberoende testvektorer:** `n=1` ger `cols=1` och nod 0 `(110,110)`. `n=4` ger `cols=2` och index 0–3 `(110,110),(370,110),(110,330),(370,330)`. `n=5` ger `cols=3` och nodindex 4 `(370,330)`. `n=2000` ger `cols=45` med `x_max=11550` och `y_max=9790`, båda <100000. `n=2001` ger en valideringsavvisning och ingen projektmutation. Kör negativ testning vid det tidigare felet `n=1821`; ordningsinvarians med omkastad fil-/radordning och case-sensitiva ID:n; två claims om samma node-ID; saknat node-ID; noll godkända noder; Save/Open och historisk replay. Bekräfta att de härledda koordinaterna aldrig skapar en fysisk länk eller ändrar IP-/ARP-/DHCP-/ICMP-beteenden.
 
 ## 9. Etapp 4B – importplan, blandade enhetsvyer och kompakta auditmanifest
 
