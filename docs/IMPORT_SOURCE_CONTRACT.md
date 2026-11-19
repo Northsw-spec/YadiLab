@@ -336,7 +336,7 @@ Urval av en unit utökar inte automatiskt andra enheter. UI får erbjuda "Välj 
 
 **Validering och mutation:** `validate_project()` validerar manifestets typer, enumvärden och **intern** referenskonsistens mot manifestets egna sources/views/decisions. Den får **inte** kräva att ett historiskt accepterat targetKey fortfarande finns i aktuell projektgraf efter användarens redigering eller att aktuell nätverks-hash fortfarande matchar baseline; då skulle vanlig edit/Save brytas. Importplanens `proposedProject` valideras däremot mot både faktiskt källinnehåll och alla målfält **innan första importgodkännande**. Efter Save/Open utan originalfil utges aldrig ett nytt påstående om verifierad originalcell.
 
-**Separat källpaket** (explicit export): JSON `{sourceBundleVersion:"1",sources:[{sourceId,filename,kind,sha256,csvDelimiter,contentBase64}]}`. Innehåller *exakta originalbytes* i standard-base64 och är inte del av .yadilab. Export får starta endast från ett aktivt, inspekterat originalfil-set, vid ett uttryckligt klick; appen ska säga `Nedladdning initierad, filens skrivning till disk ej verifierad`, aldrig lova att filen har arkiverats. Vid återanslutning av verifierad källfil eller källpaket kontrolleras ID, SHA-256, filtyp, bladstruktur och källreferenser mot manifestet. **För att hävda att historiska accepterade nätverksfält verkligen härstammar från källan** ska servern dessutom återspela exakt de historiska mappingViews/rowValues och valda unit-ID:n som kan härledas från acceptedChanges genom samma build-candidate-motor och jämföra typade fieldValues och fieldOrigins. Bara byte-match utan korrekt återspelning får beskrivas som `SOURCE_HASH_MATCH`, inte full `SOURCE_VERIFIED`. Felaktig hash, olika celler eller oförenlig återspelning ger avslag och får inte ändra projekt eller historik. Utan källpaket/originalfil ska UI visa `Källfil ej ansluten; ursprungsceller kan inte kontrolleras`.
+**Separat källpaket** (explicit export): JSON `{sourceBundleVersion:"1",sources:[{sourceId,filename,kind,sha256,csvDelimiter,contentBase64}]}`. Innehåller *exakta originalbytes* i standard-base64 och är inte del av .yadilab. Export får starta endast från ett aktivt, inspekterat originalfil-set, vid ett uttryckligt klick; appen ska säga `Nedladdning initierad, filens skrivning till disk ej verifierad`, aldrig lova att filen har arkiverats. Vid återanslutning av verifierad källfil eller källpaket kontrolleras ID, SHA-256, filtyp, bladstruktur och källreferenser mot manifestet. **För att hävda att historiska accepterade nätverksfält verkligen härstammar från källan** ska servern dessutom återspela de **uttryckligen sparade** historiska mappingViews, transformations, rowValues, excludedUses, selectedUnitIds och projectNameAtImport genom samma build-candidate-motor och jämföra typade fieldValues och fieldOrigins. Bara byte-match utan korrekt återspelning får beskrivas som `SOURCE_HASH_MATCH`, inte full `SOURCE_VERIFIED`. Felaktig hash, olika celler eller oförenlig återspelning ger avslag och får inte ändra projekt eller historik. Utan källpaket/originalfil ska UI visa `Källfil ej ansluten; ursprungsceller kan inte kontrolleras`.
 
 **Obligatorisk användarupplysning före importgodkännande:** `Originaldokumenten lagras inte i projektfilen. Behåll källfilerna eller exportera separat källpaket för senare kontroll av ursprungsceller. Enbart projektfilen kan inte återskapa den ursprungliga arbetsboken.` Om användaren inte uttryckligen godkänner detta får arbetsytan inte ersättas. Omappade cellvärden finns i originalet men **inte** automatiskt i projektet; ingen funktion får beskriva detta som förlustfri arkivering av originalet.
 
@@ -496,30 +496,11 @@ Anropa denna endpoint när ett schema-1.4-projekt öppnas och efter ändringar i
 
 **Exakt en ny statslös read-only-endpoint** för källverifiering: `POST /api/import/verify-sources`. Den är skild från `/api/import/evidence-status`: det senare API:t kontrollerar **aldrig** originalfilen och får inte svara SOURCE_VERIFIED.
 
-**Request är exakt**:
-```json
-{
-  "project": {
-    "schemaVersion": "1.4",
-    "name": "Dokumenterat nät",
-    "zones": [],
-    "nodes": [],
-    "links": [],
-    "importEvidence": {}
-  },
-  "sources": [
-    {
-      "sourceId": "src-1",
-      "filename": "inventory.csv",
-      "contentBase64": "<base64 originalbytes>",
-      "csvDelimiter": ","
-    }
-  ]
-}
-```
-`project` ska vara hela, aktuella, strukturellt godkända 1.4-projektet (exemplets `importEvidence:{}` är **en schematisk platshållare, inte ett giltigt verkligt manifest**). `sources` innehåller **exakt samtliga** historiska sourceId från `project.importEvidence.sources`, i samma källordning, med exakt samma typade filfält som i `build-candidate`. CSV-avskiljare måste bekräftas mot det historiska importkontraktet och den faktiska avkodningen. Extra, saknade, duplicerade eller omordnade sourceId, mismatch i verkliga originalbytes, filnamn/filtyp, bladstruktur eller parserfel ger HTTP 422. Källor avläses och SHA-256 beräknas om på servern; lita aldrig på en inskickad hash.
+**Request-kontrakt:** Ett JSON-objekt med exakt två toppnycklar, `project` och `sources`. `project` är **ett komplett, faktiskt validate_project()-godkänt schema-1.4-projekt**, inte en exempelplaceholder eller ett delvis objekt. Det innehåller rotfälten `schemaVersion`, `name`, `zones`, `nodes`, `links`, `importEvidence` i exakt 1.4-form från §7.3, med verkligt historiskt manifest. `sources` är array med exakt samma källobjektform som i `build-candidate`: `{sourceId,filename,contentBase64,csvDelimiter?}` och råbytes som kontrolleras om från början. Ingen tom `importEvidence`, fabricerad projektsnapshot, okänt fält eller osignerad klientstatus godtas som giltig request.
 
-Befintlig max **8 MiB total HTTP-body**, högst **4 MiB aggregerade originalbytes**, inspektionsgränserna samt 7.6:s storlekstak gäller **hela** requesten. Ett legitimt stort schema-1.4-projekt plus originalbytes som inte ryms ska få ett tydligt `PAYLOAD_LIMIT`-avslag (i serverns vanliga `{error:"INVALID_PROJECT",message}`-form); det är en avsiktlig begränsning, inte en möjlighet att förbigå verifieringen. UI får då inte lova SOURCE_VERIFIED.
+`sources` innehåller **exakt samtliga** historiska sourceId från `project.importEvidence.sources`, i den faktiska källordningen. För CSV är `csvDelimiter` obligatoriskt med samma val som historiskt sparats; för XLSX/ODS är fältet förbjudet och manifestvärdet null. Extra, saknade, duplicerade eller omordnade sourceId, mismatch i originalbytes, avskiljare, namn/filtyp, bladstruktur eller parserfel ger HTTP 422. SHA-256 beräknas av servern från de faktiska originalbyten, inte klientens påstådda hash.
+
+Befintlig max **8 MiB total HTTP-body**, högst **4 MiB aggregerade originalbytes**, inspektionsgränserna samt 7.6:s storlekstak gäller **hela** requesten. Ett giltigt stort schema-1.4-projekt plus originalbytes som inte ryms får ett uttryckligt `PAYLOAD_LIMIT`-avslag i den vanliga `{error:"INVALID_PROJECT",message}`-formen; det är en uttrycklig begränsning, inte en anledning att kringgå kontrollen. Då får UI inte visa SOURCE_VERIFIED.
 
 **Replay i exakt ordning:**
 1. `validate_project(project)` kontrollerar nuvarande nätverksdel och historisk `importEvidence`-struktur, men kräver inte att aktuella nätverksvärden motsvarar historisk baseline.
