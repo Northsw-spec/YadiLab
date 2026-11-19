@@ -187,13 +187,16 @@ export function createImportReview({context, current, getProject, replaceProject
     views.forEach((view,index) => {
       const box = el('fieldset', {}, el('legend', {}, `MappingView ${index+1}`));
       const table = el('select',{},...tableOptions());
-      const role = el('select',{},el('option',{value:'device_inventory'},'device_inventory'),el('option',{value:'documentation_only'},'documentation_only'));
+      const role = el('select',{},el('option',{value:'device_inventory'},'device_inventory'),
+        el('option',{value:'zone_inventory'},'zone_inventory'),
+        el('option',{value:'documentation_only'},'documentation_only'));
       const header = el('input',{type:'number',min:'1',placeholder:'Rubrikrad, tomt = ingen'});
       const selected = el('input',{type:'text',placeholder:'Valda originalrader, t.ex. 2,3'});
-      const columns = {};
-      for (const field of ['node.id','node.label','node.kind','node.zoneId']) {
+      const columns = {}, columnLabels = {};
+      for (const field of ['node.id','node.label','node.kind','node.zoneId','zone.id','zone.label']) {
         columns[field] = el('input',{type:'text',placeholder:'Kolumnbokstav, t.ex. A'});
-        box.append(el('label',{},field,columns[field]));
+        columnLabels[field] = el('label',{},field,columns[field]);
+        box.append(columnLabels[field]);
       }
       const maps = el('textarea',{rows:'2',placeholder:'valueMaps JSON, t.ex. {"node.kind":{"Server":"host"}}'},'{}');
       const constants = el('textarea',{rows:'2',placeholder:'constants JSON'},'{}');
@@ -213,7 +216,19 @@ export function createImportReview({context, current, getProject, replaceProject
         for (const [key,value] of Object.entries(view.data.columns)) columns[key].value=value;
         maps.value=view.data.maps; constants.value=view.data.constants;
       } else update();
-      controls.forEach(control => control.addEventListener('change',update));
+      const showRole = () => {
+        for (const [field, control] of Object.entries(columns)) {
+          const supported = role.value === 'device_inventory' ? field.startsWith('node.')
+            : role.value === 'zone_inventory' && field.startsWith('zone.');
+          columnLabels[field].hidden = !supported;
+          if (!supported) control.value = '';
+        }
+      };
+      showRole();
+      controls.forEach(control => control.addEventListener('change', () => {
+        if (control === role) showRole();
+        update();
+      }));
       remove.addEventListener('click',()=>{views.splice(index,1); invalidate(); renderViews();});
       container.append(box);
     });
@@ -249,7 +264,7 @@ export function createImportReview({context, current, getProject, replaceProject
       el('h4',{},'Originalrader och omappade celler'),el('pre',{},JSON.stringify(value.recordReviews,null,2)),
       el('h4',{},'ImportUnits'));
     for (const unit of value.units) {
-      const item=el('label',{},`${unit.status} · ${unit.kind} ${unit.targetKey} · ${unit.unitId}`);
+      const item=el('label',{},`${unit.status} · ${unit.kind} ${unit.targetKey} · ${unit.unitId} · beroenden: ${unit.dependencies.join(', ') || 'inga'}`);
       if (unit.status==='ACTIONABLE') {
         const check=el('input',{type:'checkbox',value:unit.unitId});
         check.addEventListener('change',()=>{candidate=null; candidateToken=null; revision++; planToken=guard(); $('external-apply').disabled=true; $('external-candidate-result').replaceChildren();});
@@ -278,6 +293,7 @@ export function createImportReview({context, current, getProject, replaceProject
       candidateToken=guard();
       $('external-candidate-result').replaceChildren(el('p',{},`Fingerprint: ${candidate.fingerprint}`),
         el('p',{},`Tillämpbar: ${candidate.canApply}`),
+        el('p',{},`Föreslaget projekt: ${candidate.proposedProject?.nodes.length ?? 0} noder, ${candidate.proposedProject?.zones.length ?? 0} zoner`),
         el('pre',{},JSON.stringify(candidate.proposedProject?.nodes ?? candidate.diagnostics,null,2)));
       $('external-apply').disabled=!candidate.canApply || !$('external-warning').checked;
     } catch(error) { if (valid(token)) showError(error); }
@@ -287,7 +303,7 @@ export function createImportReview({context, current, getProject, replaceProject
     if (!candidateToken || !valid(candidateToken)) return stale();
     const picked=selected(), old=candidate, token=guard();
     if (!confirmDiscard()) return;
-    if (!confirm(`Ersätta arbetsytan med ${old.proposedProject.nodes.length} uttryckliga noder? Ingen fil sparas automatiskt.`)) return;
+    if (!confirm(`Ersätta arbetsytan med ${old.proposedProject.nodes.length} uttryckliga noder och ${old.proposedProject.zones.length} zoner? Ingen fil sparas automatiskt.`)) return;
     if (!valid(token) || picked.join(',')!==selected().join(',')) return stale();
     try {
       const fresh=(await api('/api/import/build-candidate',request(picked))).plan;
@@ -297,7 +313,7 @@ export function createImportReview({context, current, getProject, replaceProject
       const original=sources;
       replaceProject(fresh.proposedProject);
       sources=original; attached=true; renderSources(); refreshStatus();
-      notify(`Importerade ${fresh.proposedProject.nodes.length} noder. Ingen automatisk Save.`);
+      notify(`Importerade ${fresh.proposedProject.nodes.length} noder och ${fresh.proposedProject.zones.length} zoner. Ingen automatisk Save.`);
     } catch(error) { if(valid(token)) showError(error); }
   }
   async function verify(reconnected) {

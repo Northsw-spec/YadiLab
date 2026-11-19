@@ -2721,6 +2721,87 @@ def import_review_page_regression(context, base, network_mode, store, errors):
     page.close()
 
 
+def zone_import_regression(context, base, network_mode, store, errors, restart):
+    """Explicit zones and node dependencies through the real Builder and replay."""
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page, base) == network_mode
+    zone_raw = b'ID,Label\nZ1,North\n'
+    node_raw = b'ID,Label,Kind,Zone\nN1,Host,host,Z1\n'
+    page.locator('#external-import').click()
+    page.locator('#external-files').set_input_files([
+        {'name':'zones.csv','mimeType':'text/csv','buffer':zone_raw},
+        {'name':'nodes.csv','mimeType':'text/csv','buffer':node_raw}])
+    page.locator('#external-file-choices select').nth(0).select_option(',')
+    page.locator('#external-file-choices select').nth(1).select_option(',')
+    page.locator('#external-inspect-files').click()
+    expect(page.locator('#external-sources')).to_contain_text('Z1')
+    expect(page.locator('#external-sources')).to_contain_text('N1')
+    for index, (role, columns) in enumerate((
+        ('zone_inventory', {'zone.id':'A','zone.label':'B'}),
+        ('device_inventory', {'node.id':'A','node.label':'B','node.kind':'C','node.zoneId':'D'}))):
+        page.locator('#external-add-view').click()
+        view = page.locator('#external-views fieldset').nth(index)
+        view.locator('select').first.select_option(f'{index}:sheet-1')
+        view.locator('select').nth(1).select_option(role)
+        view.locator('input[placeholder^="Rubrikrad"]').fill('1')
+        view.locator('input[placeholder^="Valda originalrader"]').fill('2')
+        for field, column in columns.items():
+            view.locator('label').filter(has_text=field).locator('input').fill(column)
+        view.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+    with page.expect_response('**/api/import/build-candidate') as preview:
+        page.locator('#external-plan-button').click()
+    units = {unit['kind']:unit for unit in preview.value.json()['plan']['units']}
+    assert set(units) == {'zone','node'}
+    assert units['node']['dependencies'] == [units['zone']['unitId']]
+    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    checks.nth(0).check()
+    with page.expect_response('**/api/import/build-candidate') as missing:
+        page.locator('#external-candidate-button').click()
+    assert missing.value.json()['plan']['canApply'] is False
+    expect(page.locator('#external-apply')).to_be_disabled()
+    checks.nth(1).check()
+    with page.expect_response('**/api/import/build-candidate') as selected:
+        page.locator('#external-candidate-button').click()
+    assert selected.value.json()['plan']['canApply'] is True
+    expect(page.locator('#external-candidate-result')).to_contain_text('1 noder, 1 zoner')
+    page.locator('#external-warning').check()
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#external-apply').click()
+    expect(page.locator('#count-nodes')).to_have_text('1')
+    expect(page.locator('#count-zones')).to_have_text('1')
+    expect(page.locator('#count-links')).to_have_text('0')
+    with page.expect_download() as downloaded:
+        page.locator('#external-bundle-export').click()
+    bundle = json.loads(Path(downloaded.value.path()).read_text())
+    assert [base64.b64decode(item['contentBase64']) for item in bundle['sources']] == [zone_raw,node_raw]
+    page.locator('#external-close').click()
+    page.locator('#project-filename').fill('zones-4c')
+    page.locator('#project-filename').dispatch_event('change')
+    with page.expect_response('**/api/save') as saved:
+        page.locator('#save-project').click()
+    assert saved.value.status == 200
+    disk = store / 'zones-4c.yadilab'
+    stored = json.loads(disk.read_bytes())
+    assert stored['zones'] == [{'id':'Z1','label':'North'}]
+    assert stored['nodes'][0]['zoneId'] == 'Z1'
+    assert stored['nodes'][0]['ports'] == [] and stored['links'] == []
+    receipt = stored['importEvidence']
+    restart()
+    page.reload(wait_until='domcontentloaded')
+    page.locator('#saved-projects').select_option('zones-4c')
+    page.locator('#open-project').click()
+    expect(page.locator('#import-evidence-status')).to_contain_text('BASELINE_MATCH')
+    page.locator('#external-import').click()
+    with page.expect_response('**/api/import/verify-sources') as verified:
+        page.locator('#external-bundle-file').set_input_files({'name':'zones-sources.json',
+            'mimeType':'application/json','buffer':json.dumps(bundle).encode()})
+    assert verified.value.json()['sourceStatus'] == 'SOURCE_VERIFIED'
+    assert json.loads(disk.read_bytes())['importEvidence'] == receipt
+    assert not errors, errors
+    page.close()
+
+
 def run():
     with tempfile.TemporaryDirectory() as td, sync_playwright() as playwright:
         store = Path(td)
@@ -5250,6 +5331,7 @@ def run():
             import_review_regression(context, base, network_mode, store, errors, restart_for_import_review)
             import_review_page_regression(context, base, network_mode, store, errors)
             import_review_delimiters_regression(context, base, network_mode, store, errors)
+            zone_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)
