@@ -153,7 +153,7 @@ def browser_open(page, base):
     app = app.replace("import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';", '')
     app = app.replace("import {api} from './services/api.js';", '')
     app = app.replace("import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';", '')
-    app = app.replace("import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport, prepareInspection, submitInspection} from './features/projects/transfer.js';", '')
+    app = app.replace("import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport, prepareInspection, submitInspection, submitInspectionPage} from './features/projects/transfer.js';", '')
     app = app.replace("import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';", '')
     app = app.replace("import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';", '')
     app = app.replace("import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';", '')
@@ -2240,6 +2240,33 @@ def source_preview_regression(context, base, network_mode, store, errors):
     expect(page.locator('#preview-result')).to_contain_text('Endast förhandsvisning – inga nätverksobjekt importerade')
     assert project_file.read_bytes() == original
     assert hashlib.sha256(project_file.read_bytes()).hexdigest() == original_sha
+    many_rows = ('ID\n' + ''.join(f'{n:03d}\n' for n in range(2, 28))).encode()
+    with page.expect_response('**/api/import/inspect') as many_preview:
+        page.locator('#preview-file').set_input_files({'name': 'many.csv', 'mimeType': 'text/csv', 'buffer': many_rows})
+    assert many_preview.value.status == 200
+    expect(page.locator('#preview-result')).not_to_contain_text('A26 [text] 026')
+    with page.expect_response('**/api/import/inspect-page') as next_page:
+        page.get_by_role('button', name='Visa nästa källrader').click()
+    assert next_page.value.status == 200
+    assert [row['row'] for row in next_page.value.json()['rows']] == [26, 27]
+    expect(page.locator('[data-preview-table="sheet-1"]')).to_contain_text('A26 [text] 026')
+    expect(page.locator('#preview-result')).to_contain_text('Visade 27 av 27')
+
+    hold_http_reply(page, '/api/import/inspect-page')
+    with page.expect_response('**/api/import/inspect') as again:
+        page.locator('#preview-file').set_input_files({'name': 'race-page.csv', 'mimeType': 'text/csv', 'buffer': many_rows})
+    assert again.value.status == 200
+    with page.expect_response('**/api/import/inspect-page') as stale_page:
+        page.get_by_role('button', name='Visa nästa källrader').click()
+    assert stale_page.value.status == 200
+    page.wait_for_function('window.__heldReply')
+    with page.expect_response('**/api/import/inspect') as replacement:
+        page.locator('#preview-file').set_input_files({'name': 'replacement.csv', 'mimeType': 'text/csv', 'buffer': b'Only\nnew\n'})
+    assert replacement.value.status == 200
+    release_http_reply(page)
+    expect(page.locator('#preview-result')).to_contain_text('replacement.csv')
+    assert 'A26 [text] 026' not in page.locator('#preview-result').inner_text()
+    assert project_file.read_bytes() == original
     xlsx_bytes = make_workbook({'Älg': 'ID,x,enabled\n001,12.50,true\n'})
     with page.expect_response('**/api/import/inspect') as xlsx_reply:
         page.locator('#preview-file').set_input_files({'name': 'source.xlsx', 'mimeType': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'buffer': xlsx_bytes})
@@ -2279,6 +2306,19 @@ def source_preview_regression(context, base, network_mode, store, errors):
     release_http_reply(page)
     page.locator('#preview-tables').click()
     assert 'stale.csv' not in page.locator('#preview-result').inner_text()
+    with page.expect_response('**/api/import/inspect') as after_switch:
+        page.locator('#preview-file').set_input_files({'name': 'late-page.csv', 'mimeType': 'text/csv', 'buffer': many_rows})
+    assert after_switch.value.status == 200
+    hold_http_reply(page, '/api/import/inspect-page')
+    with page.expect_response('**/api/import/inspect-page') as page_before_switch:
+        page.get_by_role('button', name='Visa nästa källrader').click()
+    assert page_before_switch.value.status == 200
+    page.wait_for_function('window.__heldReply')
+    page.locator('#preview-close').click()
+    page.locator('#new-project').click()
+    release_http_reply(page)
+    page.locator('#preview-tables').click()
+    assert 'A26 [text] 026' not in page.locator('#preview-result').inner_text()
     assert project_file.read_bytes() == original
     page.close()
 

@@ -20,7 +20,7 @@ from .model import ProjectValidationError, topology_trace, validate_project
 from .csv_import import import_csv_tables
 from .xlsx_import import import_xlsx_workbook
 from .ods_import import import_ods_workbook
-from .import_inspection import inspect_source
+from .import_inspection import inspect_source, inspect_page
 from .spreadsheet_templates import template_bytes
 from .spreadsheet_export import export_workbook
 from .arp import ArpSession
@@ -202,6 +202,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"project": import_csv_tables(body)})
             elif path == "/api/import/inspect":
                 self._json(200, inspect_source(body))
+            elif path == "/api/import/inspect-page":
+                self._json(200, inspect_page(body))
             elif path == "/api/import/xlsx":
                 self._json(200, {"project": import_xlsx_workbook(body)})
             elif path == "/api/import/ods":

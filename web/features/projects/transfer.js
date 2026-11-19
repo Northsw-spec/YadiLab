@@ -92,3 +92,7 @@ export async function prepareInspection(file, delimiter) {
 export function submitInspection(payload) {
   return api('/api/import/inspect', payload);
 }
+
+export function submitInspectionPage(payload, tableId, fromRow) {
+  return api('/api/import/inspect-page', {...payload, tableId, fromRow});
+}

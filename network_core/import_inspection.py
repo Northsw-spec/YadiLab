@@ -63,7 +63,7 @@ def _decode_source(value: object) -> tuple[str, str, bytes, str | None]:
     return filename, extension, data, delimiter
 
 
-def _csv_table(filename: str, data: bytes, delimiter: str) -> dict:
+def _csv_table(filename: str, data: bytes, delimiter: str, from_row: int = 1) -> dict:
     try:
         content = data.decode("utf-8-sig", errors="strict")
     except UnicodeDecodeError:
@@ -77,6 +77,7 @@ def _csv_table(filename: str, data: bytes, delimiter: str) -> dict:
     populated = 0
     cell_count = 0
     preview = []
+    next_row = None
     try:
         for record in reader:
             row_count += 1
@@ -96,30 +97,55 @@ def _csv_table(filename: str, data: bytes, delimiter: str) -> dict:
                 cell_count += 1
                 if cell_count > MAX_CELLS:
                     _invalid(filename, f"more than {MAX_CELLS} populated cells")
-                if len(preview) < PREVIEW_ROWS:
+                if row_count >= from_row and len(preview) < PREVIEW_ROWS:
                     cells.append({"address": f"{_column_name(column)}{row_count}",
                                   "type": "text", "value": raw})
             if cells or any(record):
                 populated += 1
-                if len(preview) < PREVIEW_ROWS:
+                if row_count >= from_row and len(preview) < PREVIEW_ROWS:
                     preview.append({"row": row_count, "cells": cells})
+                elif row_count >= from_row and next_row is None:
+                    next_row = row_count
     except csv.Error as error:
         _invalid(f"{filename} CSV logical record {row_count + 1}", f"malformed quoting: {error}")
     return {"tableId": "sheet-1", "name": filename, "rowCount": row_count,
             "populatedRowCount": populated, "columnCount": first_width or 0,
-            "previewRows": preview}
+            "previewRows": preview, "nextRow": next_row}
 
 
-def inspect_source(value: object) -> dict:
-    """Inspect only; never change the current project or saved files."""
+def _inspect(value: object, from_row: int) -> dict:
     filename, kind, data, delimiter = _decode_source(value)
     if kind == "csv":
-        tables = [_csv_table(filename, data, delimiter)]
+        tables = [_csv_table(filename, data, delimiter, from_row)]
     else:
         from .import_workbooks import xlsx, ods
-        tables = (xlsx if kind == "xlsx" else ods)(data)
+        tables = (xlsx if kind == "xlsx" else ods)(data, from_row)
     return {"inspectionVersion": "1",
             "source": {"filename": filename, "kind": kind,
                        "sha256": hashlib.sha256(data).hexdigest()},
             "tables": tables,
             "previewRowLimit": PREVIEW_ROWS}
+
+
+def inspect_source(value: object) -> dict:
+    """Inspect only; never change the current project or saved files."""
+    result = _inspect(value, 1)
+    for table in result["tables"]:
+        del table["nextRow"]
+    return result
+
+
+def inspect_page(value: object) -> dict:
+    """Read one bounded page after validating the complete original source."""
+    if not isinstance(value, dict) or "tableId" not in value or "fromRow" not in value:
+        _invalid("page", "expected tableId and fromRow")
+    table_id, from_row = value["tableId"], value["fromRow"]
+    if type(from_row) is not int or not 1 <= from_row <= MAX_ROWS:
+        _invalid("fromRow", "expected source row 1..5001")
+    source_request = {key: item for key, item in value.items() if key not in ("tableId", "fromRow")}
+    result = _inspect(source_request, from_row)
+    table = next((table for table in result["tables"] if table["tableId"] == table_id), None)
+    if table is None:
+        _invalid("tableId", "no such table in the supplied source")
+    return {"inspectionVersion": "1", "source": result["source"],
+            "tableId": table_id, "rows": table["previewRows"], "nextRow": table["nextRow"]}
