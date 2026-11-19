@@ -491,6 +491,59 @@ Response 200 har exakt `{"manifestStatus":"MANIFEST_VALIDATED","baselineStatus":
 
 Anropa denna endpoint när ett schema-1.4-projekt öppnas och efter ändringar i projektets nätverksfält som berör detta statusvärde, med samma revisions-/stale-guard som övriga läsanrop. Skicka **inte** importEvidence med vanliga simulerings-/sessionsanrop; denna endpoint är avsiktligt en dokumentationsintegritetskontroll och får användas endast när status ska räknas om. Verifiera 200/422, förändrad baseline efter edit, identisk baseline efter undo, och inget ändrat project/SHA/Save från själva kontrollen.
 
+### 9.1.3 Fullständig återanslutning av originalkällor (från 4B)
+
+**Exakt en ny statslös read-only-endpoint** för källverifiering: `POST /api/import/verify-sources`. Den är skild från `/api/import/evidence-status`: det senare API:t kontrollerar **aldrig** originalfilen och får inte svara SOURCE_VERIFIED.
+
+**Request är exakt**:
+```json
+{
+  "project": {
+    "schemaVersion": "1.4",
+    "name": "Dokumenterat nät",
+    "zones": [],
+    "nodes": [],
+    "links": [],
+    "importEvidence": {}
+  },
+  "sources": [
+    {
+      "sourceId": "src-1",
+      "filename": "inventory.csv",
+      "contentBase64": "<base64 originalbytes>",
+      "csvDelimiter": ","
+    }
+  ]
+}
+```
+`project` ska vara hela, aktuella, strukturellt godkända 1.4-projektet (exemplets `importEvidence:{}` är **en schematisk platshållare, inte ett giltigt verkligt manifest**). `sources` innehåller **exakt samtliga** historiska sourceId från `project.importEvidence.sources`, i samma källordning, med exakt samma typade filfält som i `build-candidate`. CSV-avskiljare måste bekräftas mot det historiska importkontraktet och den faktiska avkodningen. Extra, saknade, duplicerade eller omordnade sourceId, mismatch i verkliga originalbytes, filnamn/filtyp, bladstruktur eller parserfel ger HTTP 422. Källor avläses och SHA-256 beräknas om på servern; lita aldrig på en inskickad hash.
+
+Befintlig max **8 MiB total HTTP-body**, högst **4 MiB aggregerade originalbytes**, inspektionsgränserna samt 7.6:s storlekstak gäller **hela** requesten. Ett legitimt stort schema-1.4-projekt plus originalbytes som inte ryms ska få ett tydligt `PAYLOAD_LIMIT`-avslag (i serverns vanliga `{error:"INVALID_PROJECT",message}`-form); det är en avsiktlig begränsning, inte en möjlighet att förbigå verifieringen. UI får då inte lova SOURCE_VERIFIED.
+
+**Replay i exakt ordning:**
+1. `validate_project(project)` kontrollerar nuvarande nätverksdel och historisk `importEvidence`-struktur, men kräver inte att aktuella nätverksvärden motsvarar historisk baseline.
+2. Avkoda originalbytes med samma 4A-parser; kontrollera exakt byte-SHA, sourceId, tabellstruktur och källreferenser mot historiskt `sources[]`. Originalbytes som inte matchar ger HTTP 422 utan något verifieringsintyg.
+3. Återbygg `build-candidate` med **historiskt** `projectNameAtImport`, `mappingViews`, `transformations`, `rowValues`, `excludedUses`, `selectedUnitIds` och **de nytillförda verifierade originalbytes**. Gör inga antaganden utifrån aktuellt redigerat projektnamn, nod-ID eller topologi.
+4. Kontrollera om `plan.fingerprint == importEvidence.planFingerprint`, om samtliga `acceptedChanges` har exakt samma kanoniska `unitId/changeIds/targetKind/targetKey/fieldValues/fieldOrigins` som i det historiskt byggda svaret, och om återspelat nätverk ger exakt `baselineNetworkSha256`. Jämför normaliserade typade data med kanonisk sortering, aldrig visuella etiketter.
+5. Beräkna oberoende aktuell `baselineStatus` mot den nuvarande redigerade nätverksdelen enligt §9.1.2. `SOURCE_VERIFIED` är möjligt **även om** `CHANGED_SINCE_IMPORT`, eftersom källverifiering avser historiskt kvitto och inte dagens arbetsyta.
+
+**200-svar är exakt**:
+```json
+{
+  "manifestStatus": "MANIFEST_VALIDATED",
+  "baselineStatus": "BASELINE_MATCH",
+  "sourceStatus": "SOURCE_VERIFIED",
+  "replayStatus": "MATCH",
+  "verifiedSourceIds": ["src-1"],
+  "diagnostics": []
+}
+```
+`baselineStatus` är `BASELINE_MATCH|CHANGED_SINCE_IMPORT`. Vid korrekt hash/filstruktur men **misslyckad deterministisk replay** returneras 200 med `sourceStatus:"SOURCE_HASH_MATCH"`, `replayStatus:"MISMATCH"`, `verifiedSourceIds:[]` och minst en strukturerad diagnos med `code,sourceId,tableId,row,message` (null tillåts för icke lokaliserbara fält). Detta är **inte** SOURCE_VERIFIED. Vid fullständig korrekt replay är `SOURCE_VERIFIED`, `MATCH`, och verifiedSourceIds innehåller samtliga sourceId från manifestet. Det finns ingen tyst partiell verifiering, inget `SOURCE_VERIFIED` för en enskild källa när importen omfattade flera källor, och inget projektbyte eller Save utförs. Svaret får inte användas efter byte av projekt, källor eller revisionsnummer.
+
+**Sanningsgräns:** SOURCE_VERIFIED betyder endast att de återanslutna bytesen och de historiska transformationsbesluten är internt konsistenta med projektets manifest. Det är **inte** autentisering mot en tredje part eller bevis att nätverksdokumentationen är aktuell eller korrekt i den fysiska miljön.
+
+**Testkrav:** faktisk ursprungsfil med samma SHA och samma replay; SHA-match men avsiktligt manipulerat `acceptedChanges`/planFingerprint ger SOURCE_HASH_MATCH + MISMATCH (inte SOURCE_VERIFIED); ändrad current project efter import får SOURCE_VERIFIED för historiken men CHANGED_SINCE_IMPORT; korrupt ODS/XLSX/CSV, saknad källfil, extra fil, fel filtyp, fel manifest, stor body, parserlimit och sen async response får aldrig ändra projekt/Save eller skapa falsk verifikationsstatus.
+
 ### 9.2 Integration av schema 1.4 och sanningsstatus
 
 Implementera §7.3:s **historiska** `importEvidence`; inga källceller eller originalbytes inbäddas i .yadilab. Alla id- och formatlänkar i manifestet ska kontrolleras, men efter vanliga manuella redigeringar får inte historiska unitIds/targetKeys krävas finnas i nuvarande nätverk. V1.4:s baseline-hash beräknas vid första import från kanonisk projektion; den uppdateras aldrig vid vanlig projektredigering. UI redovisar två oberoende fakta: `MANIFEST_VALIDATED / SOURCE_VERIFIED` och `BASELINE_MATCH / CHANGED_SINCE_IMPORT`.
