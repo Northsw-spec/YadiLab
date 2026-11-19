@@ -153,7 +153,7 @@ def browser_open(page, base):
     app = app.replace("import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';", '')
     app = app.replace("import {api} from './services/api.js';", '')
     app = app.replace("import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';", '')
-    app = app.replace("import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport} from './features/projects/transfer.js';", '')
+    app = app.replace("import {importKind, prepareImport, submitImport, prepareProjectExport, prepareSpreadsheetExport, prepareInspection, submitInspection} from './features/projects/transfer.js';", '')
     app = app.replace("import {presentArp, presentRoute, presentPing, presentIPv4} from './features/diagnostics/presenters.js';", '')
     app = app.replace("import {queryArp, queryRoute, queryIPv4, queryPing} from './features/diagnostics/queries.js';", '')
     app = app.replace("import {createDhcpInvestigationController} from './features/sessions/dhcp-investigation.js';", '')
@@ -2213,6 +2213,74 @@ def diagnostic_races(context, base, network_mode, errors):
         expect(page.locator('#route-result')).to_contain_text(expected)
         assert 'avvisad' not in page.locator('#route-result').inner_text()
         page.close()
+
+
+def source_preview_regression(context, base, network_mode, store, errors):
+    """Real UI and server inspection without project replacement or disk writes."""
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page, base) == network_mode
+    page.locator('#project-filename').fill('preview-proof')
+    page.locator('#project-filename').dispatch_event('change')
+    page.locator('#empty-add').click()
+    with page.expect_response('**/api/save') as saved:
+        page.locator('#save-project').click()
+    assert saved.value.status == 200
+    project_file = store / 'preview-proof.yadilab'
+    original = project_file.read_bytes()
+    original_sha = hashlib.sha256(original).hexdigest()
+    page.locator('#preview-tables').click()
+    page.locator('#preview-delimiter').select_option(',')
+    csv_bytes = 'ID,Name\n001,Älg\n'.encode()
+    with page.expect_response('**/api/import/inspect') as inspected:
+        page.locator('#preview-file').set_input_files({'name': 'source.csv', 'mimeType': 'text/csv', 'buffer': csv_bytes})
+    assert inspected.value.status == 200
+    assert inspected.value.json()['source']['sha256'] == hashlib.sha256(csv_bytes).hexdigest()
+    expect(page.locator('#preview-result')).to_contain_text('A2 [text] 001')
+    expect(page.locator('#preview-result')).to_contain_text('Endast förhandsvisning – inga nätverksobjekt importerade')
+    assert project_file.read_bytes() == original
+    assert hashlib.sha256(project_file.read_bytes()).hexdigest() == original_sha
+    xlsx_bytes = make_workbook({'Älg': 'ID,x,enabled\n001,12.50,true\n'})
+    with page.expect_response('**/api/import/inspect') as xlsx_reply:
+        page.locator('#preview-file').set_input_files({'name': 'source.xlsx', 'mimeType': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'buffer': xlsx_bytes})
+    assert xlsx_reply.value.status == 200
+    expect(page.locator('#preview-result')).to_contain_text('B2 [number] 12.50')
+    ods_parts_for_preview = ods_parts({'Älg': 'ID,x,enabled\n001,12.50,true\n'})
+    ods_parts_for_preview['content.xml'] = ods_parts_for_preview['content.xml'].replace(b'1024', b'3')
+    ods_bytes = zip_ods_parts(ods_parts_for_preview)
+    with page.expect_response('**/api/import/inspect') as ods_reply:
+        page.locator('#preview-file').set_input_files({'name': 'source.ods', 'mimeType': 'application/vnd.oasis.opendocument.spreadsheet', 'buffer': ods_bytes})
+    assert ods_reply.value.status == 200
+    expect(page.locator('#preview-result')).to_contain_text('C2 [boolean] true')
+    assert project_file.read_bytes() == original
+
+    # A is processed by real HTTP but held before app receives it; B wins.
+    hold_http_reply(page, '/api/import/inspect', first_only=True)
+    with page.expect_response('**/api/import/inspect') as old:
+        page.locator('#preview-file').set_input_files({'name': 'old.csv', 'mimeType': 'text/csv', 'buffer': b'Old\nA\n'})
+    assert old.value.status == 200
+    page.wait_for_function('window.__heldReply')
+    with page.expect_response('**/api/import/inspect') as newer:
+        page.locator('#preview-file').set_input_files({'name': 'new.csv', 'mimeType': 'text/csv', 'buffer': b'New\nB\n'})
+    assert newer.value.status == 200
+    expect(page.locator('#preview-result')).to_contain_text('new.csv')
+    release_http_reply(page)
+    expect(page.locator('#preview-result')).to_contain_text('new.csv')
+    assert 'old.csv' not in page.locator('#preview-result').inner_text()
+
+    hold_http_reply(page, '/api/import/inspect')
+    with page.expect_response('**/api/import/inspect') as pending:
+        page.locator('#preview-file').set_input_files({'name': 'stale.csv', 'mimeType': 'text/csv', 'buffer': b'Old\nC\n'})
+    assert pending.value.status == 200
+    page.wait_for_function('window.__heldReply')
+    page.locator('#preview-close').click()
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#new-project').click()
+    release_http_reply(page)
+    page.locator('#preview-tables').click()
+    assert 'stale.csv' not in page.locator('#preview-result').inner_text()
+    assert project_file.read_bytes() == original
+    page.close()
 
 
 def run():
@@ -4733,6 +4801,7 @@ def run():
             assert hashlib.sha256(ui_file.read_bytes()).hexdigest() == external_saved['sha256']
             assert ProjectStore(store).read('concurrent-ui')['project'] == external
             save_page.close()
+            source_preview_regression(context, base, network_mode, store, errors)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)

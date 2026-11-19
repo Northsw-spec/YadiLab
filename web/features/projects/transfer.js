@@ -69,3 +69,26 @@ export async function prepareSpreadsheetExport(serializedProject, format) {
     : 'application/vnd.oasis.opendocument.spreadsheet';
   return {content, type, filename: reply.filename};
 }
+
+export async function prepareInspection(file, delimiter) {
+  if (!/\.(csv|xlsx|ods)$/i.test(file.name) || file.size > 5 * 1024 * 1024) {
+    throw new Error('Välj en CSV-, XLSX- eller ODS-fil på högst 5 MiB.');
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 32768) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+  }
+  const payload = {filename: file.name, contentBase64: btoa(binary)};
+  if (/\.csv$/i.test(file.name)) {
+    if (delimiter !== ',' && delimiter !== ';') throw new Error('Välj komma eller semikolon för CSV.');
+    payload.csvDelimiter = delimiter;
+  }
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const sha256 = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  return {payload, sha256};
+}
+
+export function submitInspection(payload) {
+  return api('/api/import/inspect', payload);
+}
