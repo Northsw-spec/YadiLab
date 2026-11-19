@@ -22,6 +22,7 @@ from .xlsx_import import import_xlsx_workbook
 from .ods_import import import_ods_workbook
 from .import_inspection import inspect_source, inspect_page
 from .import_plan import build_plan
+from .import_verification import evidence_status, verify_sources
 from .spreadsheet_templates import template_bytes
 from .spreadsheet_export import export_workbook
 from .arp import ArpSession
@@ -113,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             raise ProjectValidationError("request: invalid Content-Length") from None
         if not 0 <= size <= MAX_BODY:
-            raise ProjectValidationError("request: body missing or larger than 8 MiB")
+            raise ProjectValidationError("request: PAYLOAD_LIMIT: body missing or larger than 8 MiB")
         try:
             return json.loads(self.rfile.read(size))
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -159,6 +160,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path in ("/", "/index.html", "/app.js", "/model.js", "/canvas.js",
                           "/ui/dom.js", "/services/api.js", "/features/projects/persistence.js",
                           "/features/projects/transfer.js",
+                          "/features/projects/import-review.js",
                           "/features/diagnostics/queries.js", "/features/diagnostics/presenters.js",
                           "/features/diagnostics/icmp-investigation-panel.js",
                           "/features/sessions/dhcp-investigation.js",
@@ -207,6 +209,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, inspect_page(body))
             elif path == "/api/import/build-candidate":
                 self._json(200, build_plan(body))
+            elif path == "/api/import/evidence-status":
+                self._json(200, evidence_status(body))
+            elif path == "/api/import/verify-sources":
+                self._json(200, verify_sources(body))
             elif path == "/api/import/xlsx":
                 self._json(200, {"project": import_xlsx_workbook(body)})
             elif path == "/api/import/ods":
