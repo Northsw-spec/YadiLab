@@ -176,7 +176,7 @@ Partiell inventering utan kablar är tillåten. Ett saknat kabelregister betyder
 
 I etapp 4B–4D har varje källa en stabil referens, t.ex. sourceId=src-1. Varje faktiskt blad behåller tableId=sheet-1 etc från 4A. En **MappingView** har exakt följande fält:
 
-- viewId – användarangiven unik intern ID-sträng matchande ^view-[1-9][0-9]*$; skapad lokalt av UI endast som kontroll-ID, aldrig ett nätverksobjekt.
+- viewId – av UI tilldelad unik intern ID-sträng matchande ^view-[1-9][0-9]*$; skapad lokalt av UI endast som kontroll-ID, aldrig ett nätverksobjekt.
 - sourceId, tableId – verkliga källreferenser som kontrolleras mot avkodade originalbytes.
 - role – en av de sju produktdefinierade rollerna i §8.
 - headerRow – faktiskt radnummer eller null för tabell utan rubrik.
@@ -208,7 +208,7 @@ Alla deklarationer ska strikt typkontrolleras; okända målnamn och extra reques
 
 ### 6.3 Typade källpåståenden
 
-En MappingView skapar för varje vald rad noll eller flera typade SourceClaims. En claim är {claimId,viewId,sourceRef,role,targetKind,targetKey,fields,origins}. sourceRef är (sourceId,tableId,row). fields innehåller endast de uttryckliga målfälten för rollen. origins har exakt varje fälts källcell(er), user_constant/user_decision eller derived_layout; referenserna valideras mot inspektionen.
+En MappingView skapar för varje vald rad noll eller flera typade SourceClaims. En claim är {claimId,viewId,sourceRef,role,targetKind,targetKey,fields,origins}. sourceRef är (sourceId,tableId,row). fields innehåller endast de uttryckliga målfälten för rollen. origins har exakt varje fälts källcell(er), user_constant/user_decision eller derived_layout; referenserna valideras mot inspektionen. **Om obligatorisk kanonisk identitet saknas är targetKey=null, claimen markeras BLOCKED och ingen unit skapas.** claimId får ändå beräknas deterministiskt från (viewId,sourceId,tableId,row,targetKind,null). Detta är inte ett syntetiskt nod-/port-ID. En senare radunik identitetsdeklaration kräver ett nytt aktuellt request och nytt fingerprint före en unit får skapas.
 
 En rad får via flera vyer skapa Device + Interface + andra claims. Två källrader kan beskriva samma enhet eller samma kabel; en identisk utsaga ger flera evidensreferenser men högst ett kanoniskt objekt. Motsägelser är BLOCKED och identifierar samtliga källceller.
 
@@ -308,7 +308,7 @@ Urval av en unit utökar inte automatiskt andra enheter. UI får erbjuda "Välj 
 
 **Två separata integritetsnivåer** visas i UI och testsvar:
 1. **MANIFEST_VALIDATED** – endast typ-/format-/referensintegritet i det sparade manifestet, inklusive baselineNetworkSha256:s syntax. Detta betyder **inte** att originalceller eller historiska ändringsenheter har omverifierats mot dokumentet.
-2. **SOURCE_VERIFIED** – den namngivna originalfilen/källpaketet har återanslutits, dess verkliga SHA-256 har kontrollerats byte för byte och refererade celler/rader har lästs och verifierats mot aktuell granskning. Statusen får bara visas för respektive källa när kontrollen faktiskt utförts.
+2. **SOURCE_VERIFIED** – originalfilen/källpaketet har återanslutits med korrekt faktisk SHA-256, alla refererade celler/rader har lästs, och de historiskt accepterade måländringarna har **återspelats och jämförts mot acceptedChanges.fieldValues + fieldOrigins**. Enbart en matchande originalfilshash är `SOURCE_HASH_MATCH`, inte SOURCE_VERIFIED. Statusen visas endast för verifierad källa efter denna kontroll; utan originalfil visas ingen sådan status.
 
 **En tredje oberoende dimension gäller arbetsytan:** `BASELINE_MATCH` när sha256(canonicalJson(canonicalNetworkView(currentProject))) är exakt lika med baselineNetworkSha256, annars `CHANGED_SINCE_IMPORT`. Detta är en konservativ, **projektomfattande** jämförelse; ett senare fält kan aldrig markeras `CURRENT_SOURCE_VERIFIED` enbart på grund av gammal importproveniens. När något nätverksfält ändras eller ett objekt försvinner visar UI `Historisk import; aktuellt projekt har ändrats efter import` och originalets cellreferenser som historik. En ändring som senare återställs till byte-identisk kanonisk projektsnapshot ger BASELINE_MATCH, men gör inte originalfilen SOURCE_VERIFIED utan separat källkontroll.
 
