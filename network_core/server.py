@@ -21,6 +21,7 @@ from .csv_import import import_csv_tables
 from .xlsx_import import import_xlsx_workbook
 from .ods_import import import_ods_workbook
 from .import_inspection import inspect_source, inspect_page
+from .import_plan import build_plan
 from .spreadsheet_templates import template_bytes
 from .spreadsheet_export import export_workbook
 from .arp import ArpSession
@@ -204,6 +205,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, inspect_source(body))
             elif path == "/api/import/inspect-page":
                 self._json(200, inspect_page(body))
+            elif path == "/api/import/build-candidate":
+                self._json(200, build_plan(body))
             elif path == "/api/import/xlsx":
                 self._json(200, {"project": import_xlsx_workbook(body)})
             elif path == "/api/import/ods":
@@ -213,6 +216,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ProjectValidationError(
                         "spreadsheet export: expected exactly project and format")
                 extension = body["format"]
+                if isinstance(body["project"], dict) and body["project"].get("schemaVersion") == "1.4":
+                    raise ProjectValidationError("spreadsheet export: schema 1.4 historical evidence cannot be exported losslessly")
                 if not isinstance(extension, str) or extension not in ("xlsx", "ods"):
                     raise ProjectValidationError("spreadsheet export: expected format xlsx or ods")
                 data = export_workbook(body["project"], extension)

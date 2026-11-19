@@ -12,6 +12,7 @@ from collections import deque
 from typing import Any
 
 SCHEMA_VERSION = "1.3"
+EVIDENCE_SCHEMA_VERSION = "1.4"
 LEGACY_SCHEMA_VERSION = "1.0"
 MAC_SCHEMA_VERSION = "1.1"
 VLAN_SCHEMA_VERSION = "1.2"
@@ -153,11 +154,16 @@ def blank_project(name: str = "Nytt nätverkslabb") -> dict:
 
 def validate_project(value: Any) -> dict:
     """Reject incompatible/lossy documents; normalize only explicitly declared data."""
-    p = _object(value, "project", {"schemaVersion", "name", "zones", "nodes", "links"})
+    if not isinstance(value, dict):
+        _fail("project", "expected an object")
+    is_evidence = value.get("schemaVersion") == EVIDENCE_SCHEMA_VERSION
+    required = {"schemaVersion", "name", "zones", "nodes", "links"}
+    p = _object(value, "project", required | ({"importEvidence"} if is_evidence else set()))
     version = p["schemaVersion"]
     if type(version) is not str or version not in (
-            LEGACY_SCHEMA_VERSION, MAC_SCHEMA_VERSION, VLAN_SCHEMA_VERSION, SCHEMA_VERSION):
-        _fail("project.schemaVersion", "only '1.0', '1.1', '1.2' and '1.3' are supported")
+            LEGACY_SCHEMA_VERSION, MAC_SCHEMA_VERSION, VLAN_SCHEMA_VERSION,
+            SCHEMA_VERSION, EVIDENCE_SCHEMA_VERSION):
+        _fail("project.schemaVersion", "only '1.0', '1.1', '1.2', '1.3' and '1.4' are supported")
     project = blank_project(_name(p["name"], "project.name"))
     # Never silently upgrade or rewrite a legacy document during validation.
     project["schemaVersion"] = version
@@ -178,7 +184,7 @@ def validate_project(value: Any) -> dict:
     for i, original in enumerate(_array(p["nodes"], "project.nodes")):
         loc = f"project.nodes[{i}]"
         n = _object(original, loc, {"id", "label", "kind", "x", "y", "zoneId", "ports"},
-                    {"staticRoutes"} if version == SCHEMA_VERSION else frozenset())
+                    {"staticRoutes"} if version in (SCHEMA_VERSION, EVIDENCE_SCHEMA_VERSION) else frozenset())
         nid = _id(n["id"], loc + ".id")
         if nid in nodes_by_id:
             _fail(loc, f"duplicate node ID {nid!r}")
@@ -194,8 +200,9 @@ def validate_project(value: Any) -> dict:
         seen_ports: set[str] = set()
         for pi, po in enumerate(_array(n["ports"], loc + ".ports", 128)):
             ploc = f"{loc}.ports[{pi}]"
-            optional = {"mac"} if version in (MAC_SCHEMA_VERSION, VLAN_SCHEMA_VERSION, SCHEMA_VERSION) else set()
-            if version in (VLAN_SCHEMA_VERSION, SCHEMA_VERSION):
+            optional = {"mac"} if version in (MAC_SCHEMA_VERSION, VLAN_SCHEMA_VERSION,
+                                               SCHEMA_VERSION, EVIDENCE_SCHEMA_VERSION) else set()
+            if version in (VLAN_SCHEMA_VERSION, SCHEMA_VERSION, EVIDENCE_SCHEMA_VERSION):
                 optional.add("vlan")
             port = _object(po, ploc, {"id", "name", "enabled", "ipv4"}, optional)
             pid = _id(port["id"], ploc + ".id")
@@ -282,7 +289,32 @@ def validate_project(value: Any) -> dict:
         occupied.update((e["node"], e["port"]) for e in ends)
         project["links"].append({"id": lid, "a": ends[0], "b": ends[1],
                                  "enabled": _bool(link["enabled"], loc + ".enabled")})
+    if is_evidence:
+        from .import_evidence import validate_evidence
+        try:
+            project["importEvidence"] = validate_evidence(p["importEvidence"])
+        except ProjectValidationError:
+            raise
+        except (TypeError, ValueError, KeyError, AttributeError) as error:
+            raise ProjectValidationError("importEvidence: malformed historical receipt") from error
     return project
+
+
+def canonical_network_view(value: Any) -> dict:
+    """Deep, separately validated 1.3 transport/baseline projection."""
+    from copy import deepcopy
+    project = validate_project(value)
+    if project["schemaVersion"] not in (SCHEMA_VERSION, EVIDENCE_SCHEMA_VERSION):
+        _fail("project.schemaVersion", "network projection requires schema 1.3 or 1.4")
+    projection = {key: deepcopy(project[key]) for key in
+                  ("schemaVersion", "name", "zones", "nodes", "links")}
+    projection["schemaVersion"] = SCHEMA_VERSION
+    for node in projection["nodes"]:
+        for axis in ("x", "y"):
+            number = node[axis]
+            if type(number) is float and number.is_integer():
+                node[axis] = int(number)
+    return validate_project(projection)
 
 
 def topology_trace(value: Any, start: str, target: str) -> dict:

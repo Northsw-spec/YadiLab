@@ -285,6 +285,8 @@ Detta JSON-exempel anger **exakta nycklar och datatyper**, inklusive den separat
 
 **change** har exakt `{changeId,operation,targetKind,targetKey,fieldValues,fieldOrigins}` och är **en atomär förändring**. Vid `operation:"create"` är `fieldValues` ett enda fullständigt objekt med alla kanoniska fält och `fieldOrigins` har proveniens per fält. Vid `operation:"setExplicitField"` innehåller `fieldValues` exakt ett målfält `"port.ipv4"` och `fieldOrigins` exakt samma nyckel. `setExplicitField` får endast användas av `ipBinding` för att explicit tilldela IPv4/CIDR till en redan vald och deklarerad port; alla andra generella ändringar är förbjudna. **Varje unit har maximalt en change**, men en change får ha flera giltiga ursprung. Vid `create` är `fieldPath` för ID-beräkning exakt `"__object__"`, och vid `setExplicitField` exakt `"port.ipv4"`. Ingen annan fieldPath är tillåten. Detta är en granskningsplan, inte en andra editor eller ett beständigt nätverksschema.
 
+För ett kanoniskt nodobjekt har de obligatoriska strukturfälten `ports:[]` och, när ingen zon deklarerats, `zoneId:null` tomma `fieldOrigins`-arrayer. En tom lista betyder att fältet är en validerad modellstruktur utan källpåstående; den får aldrig ersättas av en påhittad `source_cell` eller `derived_layout`. Ett uttryckligt användarbeslut om `zoneId:null` behåller däremot sitt faktiska beslutsursprung. Layoutens `x/y` har `derived_layout`.
+
 **Status och betydelse**:
 - `ACTIONABLE`: komplett, entydigt källstyrkt och validerbar tillsammans med dess explicita beroenden.
 - `NO_OP`: en deklarerad användning eller planerad enhet som inte tillför nya kanoniska fakta; ett identiskt dubbelt källpåstående får inte bli ett andra objekt.
