@@ -216,44 +216,68 @@ SourceClaims är mellanmodellen och **behöver inte** uppfylla alla krav för et
 
 ## 7. Gemensam ImportPlan, proveniens och beständighet
 
-### 7.1 Planens struktur och dispositioner
+### 7.1 Planens fullständiga och ENDA svarskontrakt
 
-Planering är ren och deterministisk. Servern returnerar en versionsbunden JSON-kompatibel ImportPlan utan ORM-objekt, funktionsreferenser eller HTML. Den innehåller exakt:
-- planVersion (strängen "1");
-- sourceManifest (hashar/namn/tabellmetadata utan originalfilbytes);
-- mappingViews (validerade användarval);
-- units (typade, granskningsbara ändringsenheter);
-- claims (typade källpåståenden med ursprung);
-- recordReviews (samtliga källrader, per vy och totalt, inklusive omappade blad);
-- diagnostics (strukturerad lista);
-- fingerprint (kanonisk SHA-256);
-- proposedProject (giltigt projekt eller null);
-- canApply (boolean).
+Planering är ren, skrivskyddad och deterministisk. **Ett enda** svar, utan dubbla plan-/projekt-/fingeravtrycksfält, är:
 
-Varje **unit** har exakt {unitId,kind,targetKey,changes,dependencies,status,diagnostics,sourceUses}. En unit får omfatta flera changes som måste godkännas/avvisas tillsammans; en källrad kan bidra till flera units och flera källrader till samma unit. Kind är node|port|zone|link|staticRoute|ipBinding. targetKey är ett av den explicita projektmodellens ID:n eller en fullt kvalificerad id-kombination.
+\`\`\`json
+{
+  "plan": {
+    "planVersion": "1",
+    "fingerprint": "<64 lowercase hex>",
+    "sourceManifest": [],
+    "mappingViews": [],
+    "rowValues": [],
+    "excludedUses": [],
+    "selectedUnitIds": [],
+    "claims": [],
+    "units": [],
+    "recordReviews": [],
+    "diagnostics": [],
+    "report": {
+      "sourceRows": 0, "sourceUses": 0, "actionable": 0, "noOp": 0,
+      "blocked": 0, "invalid": 0, "excluded": 0, "unmappedCells": 0,
+      "selectedUnits": 0, "nodes": 0, "ports": 0, "links": 0, "zones": 0,
+      "routes": 0
+    },
+    "proposedProject": null,
+    "canApply": false
+  }
+}
+\`\`\`
 
-Varje **change** har exakt {changeId,operation,targetKind,targetKey,fieldValues,fieldOrigins}. operation är create eller setExplicitField. Målobjektets identitet kommer från bekräftad källtext eller radunikt användarbeslut, aldrig position i filen eller heuristisk namnlikhet. fieldOrigins är en lista av faktiska källcellreferenser/användarbeslut per målfält; den kan innehålla flera referenser när flera rader stöder samma faktum.
+Detta JSON-exempel anger **exakta nycklar och datatyper**. Den verkliga responsen ersätter tomma arrayer och nollor med kontrollerade värden. \`proposedProject\` är antingen null eller det enda giltiga, kanoniska schema-1.4-projektet; det finns inget andra \`project\` utanför \`plan\`. \`plan.fingerprint\` är det enda fingeravtrycket i svaret. \`canApply\` är sant om och endast om \`proposedProject\` är icke-null och alla valda enheter, explicita beroenden och slutvalidering är godkända. Ett sant \`canApply\` utför aldrig själv en import eller Save. \`sourceManifest\` innehåller endast fakta verifierade från originalbytes och de format-/bladmetadata som definieras i §7.3, inte fullständiga källbytes.
 
-unit.status är exakt en av:
-- ACTIONABLE: komplett, konfliktfri och validerbar tillsammans med beroenden;
-- NO_OP: påståendet sammanfaller exakt med ett redan planerat objekt/fält och duplicerar därför inget nytt;
-- BLOCKED: saknad källa, oklar semantik, referens eller ej granskad beslutsregel;
-- INVALID: strukturellt korrekt avläst men objektet skulle bryta uttryckligt kanoniskt valideringskontrakt;
-- EXCLUDED: användaren har uttryckligen exkluderat unit/källanvändning med skäl.
+**claim** har exakt \`{claimId,viewId,sourceRef,role,targetKind,targetKey,fields,origins}\`, där \`sourceRef\` är \`{sourceId,tableId,row}\`. \`fields\` är ett JSON-objekt med endast uttryckligen valda målfält och typade, ännu inte sammanfogade kanoniska värden. \`origins\` är ett objekt \`{ "<targetField>": [Origin, ...] }\`; Origin är exakt \`{kind,sourceId,tableId,row,address,decisionId}\`. kind är \`source_cell|user_constant|user_decision|derived_layout\`; källcell kräver källa, blad, rad och originalcelladress och \`decisionId:null\`. För användarbeslut krävs ett verifierat \`decisionId\`, medan irrelevanta källkoordinater är null. Alla icke-null referenser måste existera i samma inspektion eller deklarationsmängd. En SourceClaim får vara ofullständig; dess roll och targetKind ska vara förenliga med §8.
 
-Diagnostics är {code,severity,message,sourceRefs,unitId} med severity INFO|WARNING|ERROR och stabil maskinläsbar code. UI ska aldrig försöka härleda status endast från svensk meddelandetext.
+**unit** har exakt \`{unitId,kind,targetKey,changes,dependencies,status,diagnostics,sourceUses}\`; \`kind\` är \`node|port|zone|link|staticRoute|ipBinding\`. \`targetKey\` och \`unitId\` ska följa §7.2. \`sourceUses\` är unik, sorterad array av \`{viewId,sourceId,tableId,row,claimId}\`; fler än en use kan knytas till samma unit. \`dependencies\` är sorterad unik array av andra unitId. \`status\` är en av de fem nedan; en null- eller tom-källrad får inte ge ett ACTIONABLE-objekt.
 
-**RecordReviews:** Varje faktiskt befolkat källrecord finns exakt en gång per (sourceId,tableId,row) med listade viewUses; varje vald viewUse har en status ACTIONABLE|NO_OP|BLOCKED|INVALID|EXCLUDED eller DOCUMENTATION_ONLY. Om minst en vy mappar och en annan inte gör det ska den ursprungliga raden visas som **partiellt använd**, inte som helt importerad. Unmapped source columns redovisas med exakt källa och antal; råvärden är tillgängliga endast när originalkällan är ansluten.
+**change** har exakt \`{changeId,operation,targetKind,targetKey,fieldValues,fieldOrigins}\`, där operation är \`create|setExplicitField\`, \`fieldValues\` är ett typat objekt som vid fullständigt urval kan bli en del av den kanoniska projektmodellen, och \`fieldOrigins\` är motsvarande \`{ "<fieldPath>": [Origin,...] }\`. En change kan ha flera giltiga ursprung per fält. Varje id ska följa §7.2. Denna representation är en granskningsplan, inte ett extra beständigt nätverksschema.
 
-Planen får vara partiell men föreslaget projekt kan tillämpas endast om dess valda ändringar uppfyller alla beroenden och validate_project(); blockeringar får lämnas olösta endast om de tydligt visas och inte genom något beroende förutsätts ingå i kandidaten. Ogiltig parserstruktur, okända schemafält eller felaktig planfingeravtryckning ger HTTP 422 utan projekt.
+**Status och betydelse**:
+- \`ACTIONABLE\`: komplett, entydigt källstyrkt och validerbar tillsammans med dess explicita beroenden.
+- \`NO_OP\`: en deklarerad användning eller planerad enhet som inte tillför nya kanoniska fakta; ett identiskt dubbelt källpåstående får inte bli ett andra objekt.
+- \`BLOCKED\`: saknad eller tvetydig information, ofullständigt användarbeslut eller ej tillåten referens; inte körbar.
+- \`INVALID\`: objektet eller någon explicit regel bryter det kanoniska slutkontraktet, även om cellerna gick att avkoda.
+- \`EXCLUDED\`: uttryckligen utesluten användning med användarens motivering; aldrig tillämpad.
 
-### 7.2 Beroendegraf och stabila identiteter
+**diagnostic** är exakt \`{code,severity,message,sourceRefs,unitId}\` med \`severity:INFO|WARNING|ERROR\`. \`sourceRefs\` är en unik array av \`{sourceId,tableId,row,address}\` där address får vara null när problemet avser en hel rad. \`unitId\` får vara null om inget mål ännu finns. \`code\` är stabil ASCII-kod (t.ex. \`MISSING_PORT\`), inte en översatt sträng. Status bestäms av planeringsreglerna och får inte härledas ur \`message\`. Vid konflikt ska alla relevanta källceller finnas i sourceRefs.
 
-Planen är en riktad acyklisk graf av enhetsberoenden. Bygg i logisk ordning: zone → node → port → (ipBinding, staticRoute) → link. Varje unit-ID baseras på (typ, explicit kvalificerat targetKey, operation), **inte** bara källradnummer eller antal deklarationer. Samma unit-ID med oförenligt payload eller preconditions är INVALID; identiskt bidrag dedupliceras och behåller alla origins.
+**recordReview** har exakt \`{sourceId,tableId,row,viewUses,unmappedAddresses}\`. Varje faktiskt befolkat originalrecord finns exakt en gång på denna nivå. \`viewUses\` är sorterad array av \`{viewId,claimIds,unitIds,status,reason}\` där status är \`ACTIONABLE|NO_OP|BLOCKED|INVALID|EXCLUDED|DOCUMENTATION_ONLY\` och reason är null utom vid explicit EXCLUDED. \`unmappedAddresses\` är sorterad array av de *faktiskt avkodade* källcelladresser som inte använts av någon vy. Ett record som används av två vyer får en recordReview med två viewUses, inte två recordReviews. Ett record som är endast delvis använt ska markeras delvis använt i rapporten, aldrig som helt importerad källrad. \`report.unmappedCells\` räknar distinkta adresser över källor. Fulla cellvärden visas bara om den verifierade originalfilen/källpaketet finns anslutet.
 
-Varje dependency måste peka på en existerande planunit med tillräckligt godkänt resultat eller en redan uttryckligen godkänd kanonisk fakta. Saknade beroenden, cykler och referenser till EXCLUDED/INVALID/BLOCKED-enheter får aldrig godtas som giltig kandidat.
+En valid men ofullständig källa ger en 200-plan med BLOCKED/INVALID utan att skapa ett projekt. Ogiltig parsning, okända requestfält, intern planmismatch eller korrupta källreferenser ger HTTP 422 i befintligt \`INVALID_PROJECT\`-kontrakt. En invalid unit får inte göra övriga, oberoende units oanvändbara; en selectedUnitId som är BLOCKED/INVALID/EXCLUDED eller har ouppfyllt beroende ger \`proposedProject:null\`, \`canApply:false\` och deterministisk diagnostik. Ingen partiell HTTP 200 får dölja ett fel i det faktiska request- eller filkontraktet.
 
-Urval av en unit expanderas inte tyst till andra enheter. UI får visa "Markera även beroenden" men måste kräva ett nytt, uttryckligt klick som visar exakt vilka units som tillkommer. En fysisk länk får aldrig skapa saknade noder/portar automatiskt.
+### 7.2 Identiteter, beroenden och normalisering
+
+Planen är en riktad acyklisk graf. Normativ konstruktionsordning är \`zone → node → port → (ipBinding,staticRoute) → link\`. Källfilernas rad- och blador­dning får inte ändra vilka kanoniska fakta som blir godkända.
+
+**Målidentitet**: \`targetKey\` är för node, zone eller link exakt dess validerade kanoniska \`id\`. För port och ipBinding är det en JSON-sträng med exakt två element \`[nodeId,portId]\` serialiserad utan whitespace. För staticRoute är det \`[nodeId,routeId]\` på samma sätt. Därmed finns ingen tvetydig slash-join när ID:n innehåller tecknet \`/\` eller andra skiljetecken.
+
+**Internt, deterministiskt id**: \`claimId = "cl-" + sha256(utf8(canonicalJson([viewId,sourceId,tableId,row,targetKind,targetKey])))[0:32]\`; \`unitId = "u-" + sha256(utf8(canonicalJson([kind,targetKey])))[0:32]\`; \`changeId = "c-" + sha256(utf8(canonicalJson([unitId,operation,fieldPath])))[0:32]\`. CanonicalJson för dessa identifierare följer exakt §7.4. En intern ID-kollision mellan olika identiteter ska ge HTTP 422; välj inte en ny slumpmässig ID. Dessa är **kontrollidentiteter**, aldrig nätverks- eller kabel-ID. En enhet med samma kind+targetKey förekommer högst en gång i en ImportPlan. Vid lika fakta samlas samtliga ursprung på denna unit; dubblett-claims får NO_OP-status på användningsnivån.
+
+Varje dependency måste peka på en existerande planunit med tillräckligt godkänt resultat eller på uttryckligen redan definierade fakta i samma, validerade kandidatprojekt. Inga beroenden på den arbetsyta som ska ersättas får implicit antas. Saknade beroenden, cykler och beroenden till BLOCKED/INVALID/EXCLUDED-enheter ger ett icke-tillämpbart urval. En port kräver en nod; en kabel kräver två redan deklarerade portar; en route kräver definierad nod och port. Ett ipBinding kräver redan uttryckligt deklarerad port.
+
+Urval av en unit utökar inte automatiskt andra enheter. UI får erbjuda "Välj även beroenden" men måste först visa exakt de ytterligare units och kräva ett nytt, uttryckligt användarklick. En fysisk länk får aldrig skapa saknade noder eller portar. Vid konflikt mellan två källvärden på samma målfält ska den berörda unit markeras BLOCKED, båda källreferenserna redovisas och ingen first-/last-write-wins förekomma.
 
 ### 7.3 Separera projektmanifest från originaldokument
 
