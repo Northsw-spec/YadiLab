@@ -21,6 +21,7 @@ SHA = re.compile(r'[0-9a-f]{64}\Z')
 UNIT_ID = re.compile(r'u-[0-9a-f]{32}\Z')
 ORIGIN_KEYS = {'kind', 'sourceId', 'tableId', 'row', 'address', 'decisionId'}
 NODE_FIELDS = {'id', 'label', 'kind', 'x', 'y', 'zoneId', 'ports'}
+ZONE_FIELDS = {'id', 'label'}
 
 
 def _array(value, maximum, where):
@@ -40,14 +41,14 @@ def _sorted_unique(items, where):
 def _remember_decision(registry, payload, kind, field):
     identifier = internal_id('d-', payload)
     row = payload[1] if type(payload[1]) is int else None
-    meaning = (kind, field.removeprefix('node.'), canonical_json(payload), payload[0], row)
+    meaning = (kind, field.split('.', 1)[-1], canonical_json(payload), payload[0], row)
     if identifier in registry and registry[identifier] != meaning:
         fail('decisions', 'decision ID collision')
     registry[identifier] = meaning
 
 
 def _origin(item, tables, decisions, where, *, field=None, views=(), unit=None,
-            historical_units=None):
+            historical_units=None, target_kind='node'):
     object_exact(item, ORIGIN_KEYS, where)
     kind = item['kind']
     if kind == 'source_cell':
@@ -67,7 +68,7 @@ def _origin(item, tables, decisions, where, *, field=None, views=(), unit=None,
                          item['row'] in view['selectedRows'] and
                          unit in historical_units.get((key[0], key[1], item['row'], view['viewId']), []) and
                          address[:len(address.rstrip('0123456789'))] in
-                         view['columns'].get('node.' + field, [])
+                         view['columns'].get(target_kind + '.' + field, [])
                          for view in views)
             if not mapped:
                 fail(where, 'source cell was not mapped to this field')
@@ -163,7 +164,7 @@ def validate_evidence(value):
         uses.update((view['viewId'], row) for row in rows)
         if (type(view['columns']) is not dict or not set(view['columns']) <= ROLES[view['role']] or
                 type(view['constants']) is not dict or
-                not set(view['constants']) <= (ROLES[view['role']] - {'node.id'}) or
+                not set(view['constants']) <= (ROLES[view['role']] - {'node.id', 'zone.id'}) or
                 set(view['columns']) & set(view['constants']) or
                 type(view['valueMaps']) is not dict or not set(view['valueMaps']) <= set(view['columns']) or
                 type(view['label']) is not str or len(view['label']) > 240):
@@ -292,46 +293,54 @@ def validate_evidence(value):
         object_exact(change, {'unitId', 'changeIds', 'targetKind', 'targetKey',
                               'fieldValues', 'fieldOrigins'}, 'acceptedChange')
         unit = change['unitId']
+        kind = change['targetKind']
         if (type(unit) is not str or unit not in selected or unit in accepted or
-                change['targetKind'] != 'node' or type(change['targetKey']) is not str or
-                internal_id('u-', ['node', change['targetKey']]) != unit):
+                kind not in ('node', 'zone') or type(change['targetKey']) is not str or
+                internal_id('u-', [kind, change['targetKey']]) != unit):
             fail('acceptedChanges', 'invalid unit identity')
         _id(change['targetKey'], 'acceptedChange.targetKey')
         if change['changeIds'] != [internal_id('c-', [unit, 'create', '__object__'])]:
             fail('acceptedChanges', 'invalid change ID')
         fields, origins = change['fieldValues'], change['fieldOrigins']
-        object_exact(fields, NODE_FIELDS, 'acceptedChange.fieldValues')
-        object_exact(origins, NODE_FIELDS, 'acceptedChange.fieldOrigins')
-        if fields['id'] != change['targetKey'] or fields['zoneId'] is not None or fields['ports'] != []:
-            fail('acceptedChanges', 'unsupported historical node fields')
-        normalized = validate_project({'schemaVersion': '1.3', 'name': name, 'zones': [],
-                                       'nodes': [fields], 'links': []})['nodes'][0]
-        if normalized != fields:
-            fail('acceptedChanges', 'historical values are not canonical')
+        object_exact(fields, NODE_FIELDS if kind == 'node' else ZONE_FIELDS, 'acceptedChange.fieldValues')
+        object_exact(origins, NODE_FIELDS if kind == 'node' else ZONE_FIELDS, 'acceptedChange.fieldOrigins')
+        if fields['id'] != change['targetKey'] or (kind == 'node' and fields['ports'] != []):
+            fail('acceptedChanges', 'unsupported historical fields')
         for field, refs in origins.items():
             refs = _array(refs, 128, f'fieldOrigins.{field}')
             if field in ('x', 'y') and (len(refs) != 1 or refs[0].get('kind') != 'derived_layout'):
                 fail('fieldOrigins', 'missing derived layout')
             if field == 'ports' and refs:
                 fail('fieldOrigins', 'structural defaults have no source origin')
-            if field == 'zoneId' and any(ref.get('kind') == 'source_cell' for ref in refs):
+            if field == 'zoneId' and fields['zoneId'] is None and any(ref.get('kind') == 'source_cell' for ref in refs):
                 fail('fieldOrigins', 'null zone cannot be attributed to a source cell')
-            if field in ('id', 'label', 'kind') and not refs:
-                fail('fieldOrigins', 'missing source or decision origin')
+            if field == 'zoneId' and fields['zoneId'] is not None and not refs:
+                fail('fieldOrigins', 'declared zone needs a source or decision origin')
+            if field in ('id', 'label') or (kind == 'node' and field == 'kind'):
+                if not refs:
+                    fail('fieldOrigins', 'missing source or decision origin')
             for ref in refs:
                 _origin(ref, tables, decision_ids, f'fieldOrigins.{field}',
                         field=field,
-                        views=views, unit=unit, historical_units=historical_units)
+                        views=views, unit=unit, historical_units=historical_units,
+                        target_kind=kind)
         accepted.add(unit)
     if [c['unitId'] for c in changes] != selected:
         fail('acceptedChanges', 'not sorted by selected unit ID')
-    positions = node_layout([c['targetKey'] for c in changes])
-    for change in changes:
+    zone_changes = [c for c in changes if c['targetKind'] == 'zone']
+    node_changes = [c for c in changes if c['targetKind'] == 'node']
+    zones = sorted((c['fieldValues'] for c in zone_changes), key=lambda z: z['id'])
+    nodes = sorted((c['fieldValues'] for c in node_changes), key=lambda n: n['id'])
+    if not nodes:
+        fail('acceptedChanges', 'at least one selected node required')
+    positions = node_layout([c['targetKey'] for c in node_changes])
+    for change in node_changes:
         if (change['fieldValues']['x'], change['fieldValues']['y']) != positions[change['targetKey']]:
             fail('acceptedChanges', 'historical layout differs from selected node set')
-    historical = {'schemaVersion': '1.3', 'name': name, 'zones': [],
-                  'nodes': sorted((c['fieldValues'] for c in changes), key=lambda n: n['id']),
-                  'links': []}
+    historical = {'schemaVersion': '1.3', 'name': name, 'zones': zones,
+                  'nodes': nodes, 'links': []}
+    if validate_project(historical) != historical:
+        fail('acceptedChanges', 'historical values are not canonical')
     actual_baseline = hashlib.sha256(canonical_json(canonical_network_view(historical))).hexdigest()
     if actual_baseline != value['baselineNetworkSha256']:
         fail('baselineNetworkSha256', 'does not match historical accepted network')

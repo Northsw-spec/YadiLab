@@ -11,7 +11,10 @@ from .model import (ProjectValidationError, NODE_KINDS, _id, _name,
                     validate_project, canonical_network_view)
 
 FIELDS = frozenset({'node.id', 'node.label', 'node.kind', 'node.zoneId'})
-ROLES = {'device_inventory': FIELDS, 'documentation_only': frozenset()}
+ZONE_FIELDS = frozenset({'zone.id', 'zone.label'})
+ROLES = {'device_inventory': FIELDS, 'zone_inventory': ZONE_FIELDS,
+         'documentation_only': frozenset()}
+ROLE_KIND = {'device_inventory': 'node', 'zone_inventory': 'zone'}
 VIEW_KEYS = {'viewId', 'sourceId', 'tableId', 'role', 'headerRow', 'selectedRows',
              'columns', 'valueMaps', 'constants', 'expectedHeaders', 'label'}
 REQUEST_KEYS = {'contractVersion', 'projectName', 'sources', 'mappingViews',
@@ -162,7 +165,7 @@ def _views(raw_views, tables):
             fail('mappingViews', 'unknown sourceId/tableId')
         role = view['role']
         if type(role) is not str or role not in ROLES:
-            fail('mappingViews', f'role {role!r} not implemented in 4B2')
+            fail('mappingViews', f'role {role!r} not implemented')
         rows = table['rows']
         header = view['headerRow']
         if header is not None and (type(header) is not int or header not in rows):
@@ -196,7 +199,7 @@ def _views(raw_views, tables):
             if type(mapping) is not dict or not mapping or any(type(a) is not str or type(b) is not str for a, b in mapping.items()):
                 fail('mappingViews', f'invalid valueMap for {field}')
         constants = view['constants']
-        if type(constants) is not dict or set(constants) & set(columns) or not set(constants) <= (ROLES[role] - {'node.id'}):
+        if type(constants) is not dict or set(constants) & set(columns) or not set(constants) <= (ROLES[role] - {'node.id', 'zone.id'}):
             fail('mappingViews', 'invalid constants or identity constant')
         for field, item in constants.items():
             object_exact(item, {'type', 'value'}, f'constant {field}')
@@ -258,7 +261,7 @@ def _claim(view, row, cells, row_values, decision_ids):
                          row=row, address=cell['address'])
             raw = cell['value']
             mapped = view['valueMaps'].get(field)
-            if field == 'node.id' and cell['type'] != 'text':
+            if field in ('node.id', 'zone.id') and cell['type'] != 'text':
                 if (view_id, row, field) not in row_values:
                     issues.append(('NUMERIC_ID_REQUIRES_DECISION', 'BLOCKED', [source_ref(source_id, table_id, row, cell['address'])]))
                 continue
@@ -295,13 +298,14 @@ def _claim(view, row, cells, row_values, decision_ids):
             continue
         fields[field] = candidates[0][0]
         origins[field] = sorted(all_origins, key=lambda item: canonical_json(item))
-    target_key = fields.get('node.id')
+    target_kind = ROLE_KIND[view['role']]
+    target_key = fields.get(target_kind + '.id')
     if target_key is None:
-        issues.append(('MISSING_NODE_ID', 'BLOCKED', [source_ref(source_id, table_id, row)]))
-    claim_id = internal_id('cl-', [view_id, source_id, table_id, row, 'node', target_key])
+        issues.append(('MISSING_' + target_kind.upper() + '_ID', 'BLOCKED', [source_ref(source_id, table_id, row)]))
+    claim_id = internal_id('cl-', [view_id, source_id, table_id, row, target_kind, target_key])
     claim = {'claimId': claim_id, 'viewId': view_id,
              'sourceRef': {'sourceId': source_id, 'tableId': table_id, 'row': row},
-             'role': 'device_inventory', 'targetKind': 'node', 'targetKey': target_key,
+             'role': view['role'], 'targetKind': target_kind, 'targetKey': target_key,
              'fields': fields, 'origins': origins}
     return claim, issues, used
 
@@ -322,8 +326,10 @@ def node_layout(node_ids):
 def _candidate(plan, project_name):
     selected = set(plan['selectedUnitIds'])
     units = [unit for unit in plan['units'] if unit['unitId'] in selected]
+    all_units = {unit['unitId']: unit for unit in plan['units']}
     unavailable = [unit for unit in units if unit['status'] != 'ACTIONABLE' or
-                   any(dep not in selected for dep in unit['dependencies'])]
+                   any(dep not in selected or all_units[dep]['status'] != 'ACTIONABLE'
+                       for dep in unit['dependencies'])]
     if unavailable:
         for unit in unavailable:
             item = diagnostic('SELECTED_UNIT_NOT_ACTIONABLE', [], unit['unitId'])
@@ -333,47 +339,60 @@ def _candidate(plan, project_name):
         return
     if not units:
         return
-    coordinates = node_layout([unit['targetKey'] for unit in units])
+    coordinates = node_layout([unit['targetKey'] for unit in units if unit['kind'] == 'node'])
+    if not coordinates:
+        return
     claims_by_target = {}
+    selected_targets = {(unit['kind'], unit['targetKey']) for unit in units}
     for claim in plan['claims']:
-        if claim['targetKey'] in coordinates:
-            claims_by_target.setdefault(claim['targetKey'], []).append(claim)
-    nodes = []
+        if (claim['targetKind'], claim['targetKey']) in selected_targets:
+            claims_by_target.setdefault((claim['targetKind'], claim['targetKey']), []).append(claim)
+    nodes, zones = [], []
     accepted = []
     derived = origin('derived_layout')
-    for unit in sorted(units, key=lambda item: item['unitId']):
-        target = unit['targetKey']
-        group = claims_by_target[target]
+    for unit in sorted(units, key=lambda item: (0 if item['kind'] == 'zone' else 1, item['targetKey'])):
+        target, kind = unit['targetKey'], unit['kind']
+        group = claims_by_target[(kind, target)]
         facts = {}
         provenance = {}
         for claim in group:
             for field, value in claim['fields'].items():
                 facts[field] = value
-                provenance.setdefault(field.removeprefix('node.'), []).extend(claim['origins'][field])
-        x, y = coordinates[target]
-        node = {'id': facts['node.id'], 'label': facts['node.label'],
-                'kind': facts['node.kind'], 'x': x, 'y': y,
-                'zoneId': facts.get('node.zoneId'), 'ports': []}
-        node = validate_project({'schemaVersion': '1.3', 'name': project_name,
-                                 'zones': [], 'nodes': [node], 'links': []})['nodes'][0]
-        for field in ('id', 'label', 'kind'):
+                provenance.setdefault(field.removeprefix(kind + '.'), []).extend(claim['origins'][field])
+        if kind == 'zone':
+            zone = {'id': facts['zone.id'], 'label': facts['zone.label']}
+            zone = validate_project({'schemaVersion': '1.3', 'name': project_name,
+                                     'zones': [zone], 'nodes': [], 'links': []})['zones'][0]
+            fields = zone
+            zones.append(zone)
+        else:
+            x, y = coordinates[target]
+            node = {'id': facts['node.id'], 'label': facts['node.label'],
+                    'kind': facts['node.kind'], 'x': x, 'y': y,
+                    'zoneId': facts.get('node.zoneId'), 'ports': []}
+            node = validate_project({'schemaVersion': '1.3', 'name': project_name,
+                                     'zones': zones, 'nodes': [node], 'links': []})['nodes'][0]
+            provenance['x'] = [derived]
+            provenance['y'] = [derived]
+            provenance.setdefault('zoneId', [])
+            provenance['ports'] = []
+            fields = node
+            nodes.append(node)
+        for field in (('id', 'label', 'kind') if kind == 'node' else ('id', 'label')):
             provenance[field] = sorted(provenance[field], key=canonical_json)
-        provenance['x'] = [derived]
-        provenance['y'] = [derived]
-        provenance.setdefault('zoneId', [])
-        provenance['ports'] = []
         change_id = internal_id('c-', [unit['unitId'], 'create', '__object__'])
         change = {'changeId': change_id, 'operation': 'create',
-                  'targetKind': 'node', 'targetKey': target,
-                  'fieldValues': node, 'fieldOrigins': provenance}
+                  'targetKind': kind, 'targetKey': target,
+                  'fieldValues': fields, 'fieldOrigins': provenance}
         unit['changes'] = [change]
         accepted.append({'unitId': unit['unitId'], 'changeIds': [change_id],
-                         'targetKind': 'node', 'targetKey': target,
-                         'fieldValues': node, 'fieldOrigins': provenance})
-        nodes.append(node)
+                         'targetKind': kind, 'targetKey': target,
+                         'fieldValues': fields, 'fieldOrigins': provenance})
     nodes.sort(key=lambda node: node['id'])
+    zones.sort(key=lambda zone: zone['id'])
+    accepted.sort(key=lambda change: change['unitId'])
     draft = validate_project({'schemaVersion': '1.3', 'name': project_name,
-                              'zones': [], 'nodes': nodes, 'links': []})
+                              'zones': zones, 'nodes': nodes, 'links': []})
     baseline = hashlib.sha256(canonical_json(canonical_network_view(draft))).hexdigest()
     decisions = []
     for review in plan['recordReviews']:
@@ -454,16 +473,16 @@ def build_plan(value):
     grouped = {}
     for claim in claims:
         if claim['targetKey'] is not None:
-            grouped.setdefault(claim['targetKey'], []).append(claim)
+            grouped.setdefault((claim['targetKind'], claim['targetKey']), []).append(claim)
     if len(grouped) > 10000:
         fail('units', 'more than 10000 units')
     units, diagnostics = [], []
     unit_ids = {}
-    for target, group in sorted(grouped.items()):
-        unit_id = internal_id('u-', ['node', target])
-        if unit_id in unit_ids and unit_ids[unit_id] != target:
+    for (kind, target), group in sorted(grouped.items()):
+        unit_id = internal_id('u-', [kind, target])
+        if unit_id in unit_ids and unit_ids[unit_id] != (kind, target):
             fail('units', 'internal unitId collision')
-        unit_ids[unit_id] = target
+        unit_ids[unit_id] = (kind, target)
         combined = {}
         origins = {}
         problems = []
@@ -480,18 +499,18 @@ def build_plan(value):
             if len(origins[field]) > 128:
                 fail('origins', 'more than 128 origins for field')
         if not any(p[0] == 'FIELD_CONFLICT' for p in problems):
-            for required in ('node.label', 'node.kind'):
+            for required in (('node.label', 'node.kind') if kind == 'node' else ('zone.label',)):
                 if required not in combined:
                     problems.append(('MISSING_REQUIRED_FIELD', 'BLOCKED',
                                      [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
-            for field in ('node.id', 'node.label', 'node.kind'):
+            for field in (('node.id', 'node.label', 'node.kind') if kind == 'node' else ('zone.id', 'zone.label')):
                 if field not in combined:
                     continue
                 item = combined[field][0]
                 try:
-                    if field == 'node.id':
+                    if field in ('node.id', 'zone.id'):
                         _id(item, field)
-                    elif field == 'node.label':
+                    elif field in ('node.label', 'zone.label'):
                         _name(item, field)
                     elif item not in NODE_KINDS:
                         raise ProjectValidationError('invalid node.kind')
@@ -502,9 +521,12 @@ def build_plan(value):
                                      refs or [source_ref(c['sourceRef']['sourceId'],
                                                          c['sourceRef']['tableId'], c['sourceRef']['row'])
                                               for c in group]))
-            if combined.get('node.zoneId', [None])[0] is not None:
-                problems.append(('UNDECLARED_ZONE', 'BLOCKED',
-                                 [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
+            if kind == 'node' and combined.get('node.zoneId', [None])[0] is not None:
+                zone_key = combined['node.zoneId'][0]
+                zone_group = grouped.get(('zone', zone_key))
+                if not zone_group:
+                    problems.append(('UNDECLARED_ZONE', 'BLOCKED',
+                                     [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
         status = 'INVALID' if any(p[1] == 'INVALID' for p in problems) else 'BLOCKED' if problems else 'ACTIONABLE'
         for code, _, refs in problems:
             diagnostics.append(diagnostic(code, refs, unit_id))
@@ -521,8 +543,11 @@ def build_plan(value):
             seen_fields.update(claim['fields'])
         if len(uses) > 128:
             fail('units', 'more than 128 source uses for one unit')
-        units.append({'unitId': unit_id, 'kind': 'node', 'targetKey': target,
-                      'changes': [], 'dependencies': [], 'status': status,
+        dependencies = ([internal_id('u-', ['zone', combined['node.zoneId'][0]])]
+                        if kind == 'node' and combined.get('node.zoneId', [None])[0] is not None
+                        and ('zone', combined['node.zoneId'][0]) in grouped else [])
+        units.append({'unitId': unit_id, 'kind': kind, 'targetKey': target,
+                      'changes': [], 'dependencies': dependencies, 'status': status,
                       'diagnostics': [d for d in diagnostics if d['unitId'] == unit_id],
                       'sourceUses': sorted(uses, key=lambda u: (u['viewId'], u['sourceId'], u['tableId'], u['row']))})
     for claim in claims:
@@ -553,7 +578,7 @@ def build_plan(value):
               'unmappedCells': sum(len(r['unmappedAddresses']) for r in review_list),
               'selectedUnits': len(selected),
               'nodes': sum(u['kind'] == 'node' and u['status'] == 'ACTIONABLE' for u in units),
-              'ports': 0, 'links': 0, 'zones': 0, 'routes': 0}
+              'ports': 0, 'links': 0, 'zones': sum(u['kind'] == 'zone' and u['status'] == 'ACTIONABLE' for u in units), 'routes': 0}
     plan = {'planVersion': '1', 'fingerprint': fingerprint, 'sourceManifest': manifest,
             'mappingViews': views, 'transformations': [], 'rowValues': row_values,
             'excludedUses': excluded, 'selectedUnitIds': selected, 'claims': claims,
