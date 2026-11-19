@@ -324,7 +324,7 @@ Urval av en unit utökar inte automatiskt andra enheter. UI får erbjuda "Välj 
 
 **canonicalJson(v)**: Python `json.dumps(v, ensure_ascii=False, sort_keys=True, separators=(",",":"), allow_nan=False)` följt av UTF-8, utan BOM eller avslutande newline. Tillåt endast JSON-värden: null, boolean, Unicode-sträng, ändlig exakt representerbar heltalstyp, arrayer och objekt; flyttal, NaN och Infinity i plan-/mappnings-/proveniensmetadata **avvisas**. För projektets nätverkskoordinater används det redan normaliserade kanoniska projektet med validatorns numeriska värden; testvektorn måste täcka både heltals- och giltiga flyttalskoordinater med serverns JSON-normalisering och verifiera stabila bytes. Inga JS-fingerprint beräknas från client-side JSON.stringify av osorterade objekt; servern är auktoritativ och UI behandlar dess fingerprint som opaque.
 
-**Deterministiska ID-testvektorer:** `canonicalJson(["node","SW-01"])` ger exakt UTF-8 `["node","SW-01"]`; SHA-256 är `0b0bbd73049222b0ae6089e767301fb844cd9c66008cd0d439d257b851833de9`, så `unitId` måste vara `u-0b0bbd73049222b0ae6089e767301f`. För `["port","[\\"SW-01\\",\\"Gi1/0/1\\"]"]` används den *faktiska* JSON-strängen av arrayen `["SW-01","Gi1/0/1"]` som andra element; SHA-256 är `cd5877fb95e157afef963461702f49ec4e4c0b7e332ade5f646315b3ed93f9fe`; `unitId` blir `u-cd5877fb95e157afef963461702f49ec4e4c0b`. Testa både Unicode, skiftlägeskänslighet och floatkoordinater separat.
+**Deterministiska ID-testvektorer:** `canonicalJson(["node","SW-01"])` ger exakt UTF-8 `["node","SW-01"]`; SHA-256 är `0b0bbd73049222b0ae6089e767301fb844cd9c66008cd0d439d257b851833de9`, så `unitId` måste vara `u-0b0bbd73049222b0ae6089e767301f`. För portvektorn gäller `S = '["SW-01","Gi1/0/1"]'` (S är en **sträng**, inte en nästlad JSON-array) och `canonicalJson(["port",S])`. SHA-256 är `cd5877fb95e157afef963461702f49ec4e4c0b7e332ade5f646315b3ed93f9fe`; `unitId` ska vara `u-cd5877fb95e157afef963461702f49ec4e4c0b`. Testa både Unicode, skiftlägeskänslighet och floatkoordinater separat.
 
 **fingerprint-input** är exakt JSON-objektet `{contractVersion,projectName,validatorVersion,sources,mappingViews,rowValues,excludedUses,selectedUnitIds}`. `validatorVersion` = "1.4" och `sources` innehåller endast `{sourceId,sha256,csvDelimiter}` (csvDelimiter=null för XLSX/ODS) efter verklig bytesverifiering. Projektnamn normaliseras med befintlig `_name()` innan hashning. Sortera källor stigande efter numeriskt src-index; mappingViews efter numeriskt viewId; rowValues efter viewId,row,targetField; excludedUses efter viewId,row; selectedUnitIds lexikografiskt. Varje dubblett eller ogiltigt element avvisas **före** canonicalJson. Nycklar i objekt sorteras som ovan. `fingerprint` är hex(SHA-256(canonicalJson(fingerprint-input))). Den kan användas för ändringsdetektion, inte autentisering. **Endast detta plan.fingerprint** finns i svarskontraktet.
 
@@ -421,6 +421,28 @@ För varje fält gäller:
 Semantiskt ofullständiga, men giltigt avkodade rader ger en 200-plan med synliga BLOCKED/INVALID/EXCLUDED-diagnoser. Fel request, trasig fil, falska cell-/radreferenser, fel schemaVersion eller okänd planunit ger HTTP 422 och exakt befintligt `INVALID_PROJECT`-felobjekt `{error,message}`. Ett serverinternt fel får aldrig presenteras som en lyckad plan.
 
 **Resultatkonsistens:** `plan.report` räknas om från samma units/recordReviews som visas i UI, inte från en oberoende summering. Fingerprint beräknas enbart som i §7.4. Ingen andra JSON-serialiseringsalgoritm får användas för just detta kontrakt.
+
+### 9.1.1 Läsning av valfria källrader (från 4B)
+
+4A:s maximala 25 förhandsvisningsrader är **inte** tillräckliga för att granska, markera eller rätta rad 26–5001. Därför tillkommer i 4B exakt en extra, statslös **läs-endpoint**: `POST /api/import/inspect-page`. Den får aldrig skapa planobjekt, ändra projektet eller skriva data. Återanvänd **samma filparser**, skydd och koordinatregler som 4A; ingen separat konkurrerande XLSX/ODS-/CSV-motor.
+
+Request har exakt `{filename,contentBase64,csvDelimiter?,tableId,fromRow}`: filename/contentBase64/csvDelimiter följer 4A; `tableId` är ett verkligt `sheet-N` från senaste faktiska source-inspektion; `fromRow` är ett positivt källradindex (för CSV: logiskt record). Giltigt `fromRow` är 1..5001 och får ligga i ett radgap. `tableId` som saknas eller fel källfil ger HTTP 422.
+
+Response 200 har exakt:
+```json
+{
+  "inspectionVersion": "1",
+  "source": {"filename":"inventory.csv","kind":"csv","sha256":"<64 lowercase hex>"},
+  "tableId": "sheet-1",
+  "rows": [],
+  "nextRow": null
+}
+```
+`rows` är högst 25 **befolkade** källrecords med `row` och `cells` i exakt samma form som `previewRows` i 4A, från och med första befintliga rad med `row >= fromRow`. `nextRow` är den nästa befolkade källradens originalnummer om fler finns, annars null. Inga syntetiska eller omnumrerade rader; gaps, CSV-citerade radbrytningar och tomma kolumner bevaras enligt 4A. Tillåt inga dubbletter eller överlappande `rows` vid korrekt användning av `nextRow`. Om inga rader återstår är rows=[] och nextRow=null.
+
+UI måste jämföra `source.sha256` med den fortfarande valda originalfilen och `previewGeneration` innan sidresultatet används; ett sent svar får aldrig återställa en gammal fil eller växla tabell. Radval i MappingView får skapas enbart från verkliga källrader som användaren har granskat/markerat eller uttryckligen valt med en verifierad, redovisad intervallfunktion. UI får inte automatiskt anta att osynliga rader är giltiga nätverksenheter; de kan föreslås som källdata men kräver explicit användargodkännande.
+
+**Acceptanstester**: 26:e, 100:e och sista tillåtna rad i CSV/XLSX/ODS; gles XLSX/ODS med gap mellan fysiska radnummer; CSV med citerad radbrytning; bläddring till slutet; felaktigt tableId; fel sha jämfört med ny fil; fördröjt svar efter blad-/projektbyte. Verifiera att rad 26 aldrig importeras utan explicit vald vy och radbeslut.
 
 ### 9.2 Integration av schema 1.4 och sanningsstatus
 
