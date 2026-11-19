@@ -241,6 +241,7 @@ Planering är ren, skrivskyddad och deterministisk. **Ett enda** svar, utan dubb
     "fingerprint": "<64 lowercase hex>",
     "sourceManifest": [],
     "mappingViews": [],
+    "transformations": [],
     "rowValues": [],
     "excludedUses": [],
     "selectedUnitIds": [],
@@ -260,7 +261,7 @@ Planering är ren, skrivskyddad och deterministisk. **Ett enda** svar, utan dubb
 }
 ```
 
-Detta JSON-exempel anger **exakta nycklar och datatyper**. Den verkliga responsen ersätter tomma arrayer och nollor med kontrollerade värden. `proposedProject` är antingen null eller det enda giltiga, kanoniska schema-1.4-projektet; det finns inget andra `project` utanför `plan`. `plan.fingerprint` är det enda fingeravtrycket i svaret. `canApply` är sant om och endast om `proposedProject` är icke-null och alla valda enheter, explicita beroenden och slutvalidering är godkända. Ett sant `canApply` utför aldrig själv en import eller Save. `sourceManifest` är en array av exakt `sources[]`-objektformen från §7.3 (`sourceId,filename,kind,sha256,byteLength,tables`) i samma deterministiska fil- och bladordning. Originalbytes och cellmatriser ingår inte. Alla sourceId/tableId-referenser i planen måste peka på denna array.
+Detta JSON-exempel anger **exakta nycklar och datatyper**, inklusive den separata `plan.transformations`-arrayen (sorterad kopia av servervaliderade begärandetransformationer). Den verkliga responsen ersätter tomma arrayer och nollor med kontrollerade värden. `proposedProject` är antingen null eller det enda giltiga, kanoniska schema-1.4-projektet; det finns inget andra `project` utanför `plan`. `plan.fingerprint` är det enda fingeravtrycket i svaret. `canApply` är sant om och endast om `proposedProject` är icke-null och alla valda enheter, explicita beroenden och slutvalidering är godkända. Ett sant `canApply` utför aldrig själv en import eller Save. `sourceManifest` är en array av exakt `sources[]`-objektformen från §7.3 (`sourceId,filename,kind,sha256,byteLength,tables`) i samma deterministiska fil- och bladordning. Originalbytes och cellmatriser ingår inte. Alla sourceId/tableId-referenser i planen måste peka på denna array.
 
 **claim** har exakt `{claimId,viewId,sourceRef,role,targetKind,targetKey,fields,origins}`, där `sourceRef` är `{sourceId,tableId,row}`. `fields` är ett JSON-objekt med endast uttryckligen valda målfält och typade, ännu inte sammanfogade kanoniska värden. `origins` är ett objekt `{ "<targetField>": [Origin, ...] }`; Origin är exakt `{kind,sourceId,tableId,row,address,decisionId}`. kind är `source_cell|user_constant|user_decision|derived_layout`; källcell kräver källa, blad, rad och originalcelladress och `decisionId:null`. För användarbeslut krävs ett verifierat `decisionId`, medan irrelevanta källkoordinater är null. Alla icke-null referenser måste existera i samma inspektion eller deklarationsmängd. En SourceClaim får vara ofullständig; dess roll och targetKind ska vara förenliga med §8.
 
@@ -323,8 +324,8 @@ Urval av en unit utökar inte automatiskt andra enheter. UI får erbjuda "Välj 
 - `sources[]`: `{sourceId,filename,kind,sha256,byteLength,tables}`, där tables innehåller `{tableId,name,rowCount,populatedRowCount,columnCount}`. Alla källhashar kommer från originalbytes. Inga fullständiga `cells` i projektet.
 - `mappingViews[]`: verifierade snapshots enligt §6.1 vid importerad tidpunkt; innehåller källroll, vald kolumnmappning, header och row selections, även när senare användarredigering ändrar nätverket. `transformations[]` finns separat i manifestet och motsvarar exakt den godkända planens transformationer.
 - `rowValues[]`: explicit radunika beslut enligt §9.1 med typer och identiteter; även dessa bevaras oförändrade.
-- `decisions[]`: `{sourceId,tableId,row,viewId,status,reason,unitIds}`; status är en av §7.1:s dispositioner inklusive `DOCUMENTATION_ONLY`, reason är null om ingen användarexkludering finns. Den historiska dispositionen får inte felaktigt visas som aktuell resursstatus.
-- `acceptedChanges[]`: exakt `{unitId,changeIds,targetKind,targetKey,fieldValues,fieldOrigins}`. `fieldValues` är **de accepterade kanoniskt typade historiska målfältsvärdena vid importen**, inte innehållet i originalfilen. `fieldOrigins` följer §7.1. Detta gör det möjligt att senare jämföra verifierat käll-replay med historisk import oberoende av nuvarande redigerad arbetsyta. Inga uppdiktade originalvärden.
+- `decisions[]`: `{sourceId,tableId,row,viewId,status,reason,unitIds}`. Varje historisk rad-/vyanvändning får ett beslut; för en helt **omappad** källrad används `viewId:null`, `status:"DOCUMENTATION_ONLY"`, `reason:null` och `unitIds:[]` så att inget källrecord försvinner tyst. För en rad som förekommer i flera vyer är varje viewId användning separat, med bevarat sourceId/tableId/row. Status är en av §7.1:s dispositioner inklusive `DOCUMENTATION_ONLY`, reason är null om ingen explicit användarexkludering finns. Dispositionerna ska vara konsistenta med `recordReviews` och aktuell accepterad unit-lista, men får inte senare felaktigt visas som aktuell resursstatus.
+- `acceptedChanges[]`: exakt `{unitId,changeIds,targetKind,targetKey,fieldValues,fieldOrigins}` där `changeIds` innehåller **exakt ett** verkligt `changeId` från respektive godkänd atomär unit enligt §7.1. `fieldValues` är **de accepterade kanoniskt typade historiska målfältsvärdena vid importen**, inte innehållet i originalfilen. `fieldOrigins` följer §7.1. Detta gör det möjligt att senare jämföra verifierat käll-replay med historisk import oberoende av nuvarande redigerad arbetsyta. Inga uppdiktade originalvärden.
 - `sourceStorage` är alltid `external_not_embedded`.
 
 **Två separata integritetsnivåer** visas i UI och testsvar:
@@ -603,7 +604,7 @@ Slutgränssnittet ska visa:
 
 ### 11.3 Slutliga kvalitetsgrindar
 
-**Obligatoriska regressionsklasser för 3.1:**
+**Obligatoriska regressionsklasser för 3.2:**
 
 - **C01 – Schema-1.4-edit:** alla befintliga `web/app.js`-vägar för MAC/VLAN/staticRoute, nod-, port-, zon- och kabeländringar bevarar 1.4 och oföränderlig importEvidence. Verifiera separat äldre avsiktlig 1.0–1.2→1.3-upgrade; aldrig 1.4→1.3.
 - **C02 – Historiskt kvitto:** jämför baselineNetworkSha256 mot exakt kanonisk nätverksprojektion före/efter edit, Save/Open och återställd snapshot. Manifestvaliditet och SOURCE_VERIFIED prövas oberoende av BASELINE_MATCH.
@@ -615,6 +616,12 @@ Slutgränssnittet ska visa:
 - **C08 – SHA/ID:** verifiera canonicalJson och SHA-256 mot de kända vektorerna i §7.4 samt Unicode, ändrad mapping/selectedUnitIds och annan JSON-nyckelordning.
 - **C09 – Originalarkiv:** varning om att original inte inbäddas, ingen påstått diskverifierad webbläsarnedladdning, SHA-match vid återanslutning och avslag vid mismatch eller överskriden källpaketsstorlek.
 - **C11 – Integritetsstatus-API:** `/api/import/evidence-status` jämför projektets historiska baselinesnapshot med en aktuell validerad kanonisk nätverksprojektion. Det får aldrig rapportera SOURCE_VERIFIED utan källbytes; ett gammalt HTTP-svar får inte skriva över nyare edit-status.
+- **C12 – Typade VLAN-transformationer:** godkänd `split_vlan_integer_list` omvandlar exakt `"10,20"` till `[10,20]`; utan `transformations[]` ingen implicit konvertering. Testa `parse_vlan_integer`, feloperation/fel fält, dubbletter, whitespace, ledande nollor, 4095, icke listbunden rad, fel värdetyp, fel `decisionId`, roundtrip och fingerprintmutation.
+- **C13 – Atomära changes och ID:n:** en `create` per unit med `fieldPath="__object__"` och en `setExplicitField` bara för `port.ipv4`; flera fält i ett set, create utan fullständig `fieldOrigins`, felaktigt changeId och referens till ej vald port får inte kunna appliceras. Dubbla identiska källclaims ska behålla flera origins men bara en godkänd unit.
+- **C14 – Originalverifiering:** `/api/import/verify-sources` med samtliga faktiska originalbytes ska kunna återspela exakt historiskt projektName, transformationer, radvärden, exkluderingar och valda enheter; MATCH kräver jämförbar fingerprint, acceptedChanges och baseline. `SOURCE_HASH_MATCH/MISMATCH` vid replayfel trots korrekt bytes-SHA; felaktig SHA ger 422; historisk match efter manuell edit får fortfarande `CHANGED_SINCE_IMPORT`.
+- **C15 – Numerisk canonicalJson:** metadata-float avvisas, 1/1.0/-0.0 som nätverkskoordinater normaliseras deterministiskt, 1.5 stöds, NaN/Infinity avvisas, Unicode bytes matchar Python-testvektorer. Kontrollera oförändrad simulatorsemantik och historisk baselinematch efter Save/Open.
+- **C16 – Per-array och body-gränser:** explicit `max_items` på varje nytt import/proveniensfält, 2000/2001, gränsvärde±1, total source-record/cell-budget, 128 origins, 2 MiB manifest, 8 MiB planresponse och 8 MiB raw request. Ingen tyst kapning och inga falska framgångssvar.
+- **C17 – Omappade källrader:** historiskt `decisions[]` representerar även källa utan MappingView med `viewId:null`; flera vyer på samma rad förblir separata användningar, och faktisk källhash/ursprungsposition kan fortfarande spåras vid återanslutning.
 - **C10 – Save/Open:** full diskbaserad Save/Open och omstart efter import följt av edit; korrekt importEvidence och ingen mutation från read-only sessioner.
 
 
