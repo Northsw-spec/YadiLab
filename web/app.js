@@ -11,6 +11,7 @@ import {createIcmpInvestigationController} from './features/sessions/icmp-invest
 import {createDoraSessionController} from './features/sessions/dora-session.js';
 import {createSimulationSessionController} from './features/sessions/simulation-session.js';
 import {renderIcmpInvestigationPanel} from './features/diagnostics/icmp-investigation-panel.js';
+import {createImportReview} from './features/projects/import-review.js';
 
 let project = blank();
 let selection = null;
@@ -69,6 +70,7 @@ const canvas = new TopologyCanvas($('topology'), {
       node.x = Math.max(-100000, Math.min(100000, x));
       node.y = Math.max(-100000, Math.min(100000, y));
       editRevision += 1;
+      importReview.onEdit();
       previewGeneration += 1;
       previewFile = null;
       $('preview-result').replaceChildren();
@@ -129,6 +131,7 @@ function invalidateDoraSession() {
 }
 function changed({keepTrace = false} = {}) {
   editRevision += 1;
+  importReview.onEdit();
   previewGeneration += 1;
   previewFile = null;
   $('preview-result').replaceChildren();
@@ -1453,6 +1456,7 @@ function confirmDiscard() {
 }
 function resetProject(value = blank(), pristineBlank = false) {
   workspaceRevision += 1;
+  importReview.onWorkspace();
   project = value;
   delete $('trace-target').dataset.userSelected;
   arpDiagnostic = null; arpHighlightedLinks = [];
@@ -1534,6 +1538,7 @@ async function openProject() {
     }
     workspaceRevision += 1;
     editRevision += 1;
+    importReview.onWorkspace();
     invalidateSimulationSession();
     routeLookup = null;
     ipv4Diagnostic = null;
@@ -1595,6 +1600,16 @@ function downloadExport({content, type, filename}) {
   anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
+const importReview = createImportReview({
+  context: transferContext,
+  current: transferCurrent,
+  getProject: () => project,
+  replaceProject: resetProject,
+  confirmDiscard,
+  download: downloadExport,
+  notify,
+  getPreviewGeneration: () => previewGeneration,
+});
 async function exportSpreadsheet(format) {
   const context = transferContext();
   try {

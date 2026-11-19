@@ -13,7 +13,8 @@
       <div class="brand" aria-label="{{APP_NAME}}"><div class="brand-mark" aria-hidden="true">◎</div><div><strong>{{APP_NAME}}</strong><small>CANONICAL NETWORK LAB · v0.1</small></div></div>
       <div class="header-actions">
         <button id="new-project" class="btn btn-ghost" type="button">Nytt</button>
-        <button id="import-project" class="btn btn-ghost" type="button" title="Projekt-JSON, explicita CSV-tabeller eller XLSX/ODS med namngivna blad Devices/Interfaces/Links/Zones">Importera</button>
+        <button id="import-project" class="btn btn-ghost" type="button" title="Projekt-JSON eller namngivna Devices/Interfaces/Links/Zones-tabeller">Strikt import</button>
+        <button id="external-import" class="btn btn-ghost" type="button">Extern dokumentation</button>
         <button id="preview-tables" class="btn btn-ghost" type="button">Förhandsgranska tabeller</button>
         <button id="export-project" class="btn btn-ghost" type="button" title="Kanonisk projekt-JSON">Exportera JSON</button>
         <button id="export-xlsx" class="btn btn-outline" type="button" title="Exportera aktuella dokumenterade fakta som XLSX, utan att spara projektet">Exportera XLSX</button>
@@ -30,6 +31,38 @@
       <button id="preview-choose" type="button">Välj fil</button>
       <button id="preview-close" type="button">Stäng</button>
       <div id="preview-result" aria-live="polite"></div>
+    </dialog>
+    <dialog id="external-dialog" aria-label="Extern dokumentationsimport" style="width:min(1000px,96vw);max-height:90vh;overflow:auto">
+      <h2>Extern dokumentationsimport</h2>
+      <p>Granska originalceller och välj själv vilka noduppgifter som får bli projektdata. Inga portar, kablar eller IP-adresser skapas automatiskt.</p>
+      <button id="external-close" type="button">Stäng</button>
+      <h3>1 · Originalfiler</h3>
+      <label>CSV-avskiljare <select id="external-delimiter"><option value="" selected>Välj för CSV</option><option value=",">Komma</option><option value=";">Semikolon</option></select></label>
+      <input id="external-files" type="file" accept=".csv,.xlsx,.ods" multiple>
+      <label for="external-project-name">Projektnamn</label><input id="external-project-name" class="control" value="Dokumenterat nät" maxlength="120">
+      <div id="external-sources" aria-live="polite"></div>
+      <h3>2 · Explicita mappningsvyer</h3>
+      <button id="external-add-view" type="button" disabled>Lägg till MappingView</button>
+      <div id="external-views"></div>
+      <label for="external-row-values">Radunika användarbeslut (JSON-array enligt kontraktet, t.ex. [{"viewId":"view-1","row":2,"targetField":"node.id","valueType":"text","value":"H-01"}])</label>
+      <textarea id="external-row-values" class="control" rows="3">[]</textarea>
+      <label for="external-exclusions">Uteslutna användningar (JSON-array med viewId, row och reason)</label>
+      <textarea id="external-exclusions" class="control" rows="3">[]</textarea>
+      <button id="external-plan-button" type="button" disabled>Bygg granskningsplan</button>
+      <div id="external-plan-result" aria-live="polite"></div>
+      <h3>3 · Vald kandidat</h3>
+      <button id="external-candidate-button" type="button" disabled>Begär kandidat för valda enheter</button>
+      <div id="external-candidate-result" aria-live="polite"></div>
+      <label class="check-line"><input id="external-warning" type="checkbox"> Originaldokumenten lagras inte i projektfilen. Behåll källfilerna eller exportera separat källpaket för senare kontroll av ursprungsceller. Enbart projektfilen kan inte återskapa den ursprungliga arbetsboken. Omappade källceller lagras inte automatiskt i projektet.</label>
+      <button id="external-apply" type="button" disabled>Godkänn och ersätt arbetsytan</button>
+      <button id="external-bundle-export" type="button" disabled>Exportera separat källpaket</button>
+      <h3>4 · Historisk proveniens efter Save/Open</h3>
+      <p id="external-status">Inget importkvitto öppnat.</p>
+      <label for="external-reattach-files">Återanslut alla originalfiler i historisk ordning</label>
+      <input id="external-reattach-files" type="file" accept=".csv,.xlsx,.ods" multiple>
+      <label for="external-bundle-file">Eller välj ett separat källpaket</label>
+      <input id="external-bundle-file" type="file" accept=".json,application/json">
+      <div id="external-verification" aria-live="polite"></div>
     </dialog>
     <div class="subbar"><span class="system-tag"><i class="status-dot"></i> LOKALT LABB</span><span class="separator">/</span><span id="breadcrumb">Nytt nätverkslabb</span><span class="subbar-spacer"></span><span id="save-indicator" class="save-state">Ej sparat</span></div>
     <div class="workspace">
@@ -57,6 +90,7 @@
           <label for="saved-projects" class="sr-only">Öppna sparat projekt</label>
           <select id="saved-projects" class="control"><option value="">Välj sparat projekt…</option></select>
           <button id="open-project" type="button" class="btn btn-outline full">Öppna valt projekt</button>
+          <p id="import-evidence-status" class="muted tiny" aria-live="polite">Inget historiskt importkvitto.</p>
           <p class="muted tiny">Spara skriver riktiga <code>.yadilab</code>-filer på din dator via den lokala servern.</p>
           <div class="eyebrow">MALLAR · SCHEMA 1.3</div>
           <p class="muted tiny">Märkta demonstrationsexempel – ersätt alla demouppgifter med dokumenterade fakta.</p>
