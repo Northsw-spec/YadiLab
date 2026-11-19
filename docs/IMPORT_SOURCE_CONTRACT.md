@@ -386,35 +386,60 @@ Negativa 4C-fixturer måste omfatta access/trunk med förväxlade fält, tom all
 
 Implementera de gemensamma kontrakten i §§5–8 och måltyperna device_inventory + documentation_only. Tillåt redan nu **flera views över samma blad och samma rad**, även om bara de två rollerna kan skapa resultat i denna etapp. Bygg den typade SourceClaim- och ImportPlan-gränsen så att 4C kan addera port/kabel utan att ändra grundsemantiken.
 
-### 9.1 Skrivskyddat kandidat-API
+### 9.1 Skrivskyddat kandidat-API och radunika beslut
 
-Inför exakt en ny endpoint: POST /api/import/build-candidate.
+Inför exakt **en** ny planerings-endpoint: `POST /api/import/build-candidate`. Den tar originalbytes på varje anrop, är statslös och sparar inte filer, kandidater eller användarval.
 
-Request är ett JSON-objekt med exakt {contractVersion,projectName,sources,mappingViews,excludedUses,selectedUnitIds}:
-- contractVersion:"1"; projectName följer validate_project().
-- sources är 1–8 objekt med exakt {sourceId,filename,contentBase64,csvDelimiter?}; sourceId är src-1, src-2 etc. csvDelimiter obligatoriskt enbart för CSV och alltid komma eller semikolon. Aggregat av ursprungliga filer högst 4 MiB (base64 + JSON måste även uppfylla befintlig MAX_BODY); varje källfil ska dessutom klara 4A:s egna läsgränser.
-- mappingViews är alla aktiva vyer i §6.1. En källa utan vy förblir helt omappad och måste redovisas i planen; en vy utan källstöd ger HTTP 422.
-- excludedUses har exakt {viewId,row,reason}; reason 1–240 tecken och måste vara ett aktivt användarbeslut för just den användningen.
-- selectedUnitIds är den explicita listan med planunits som användaren vill använda. Om listan är tom returneras en ren granskningsplan med proposedProject=null. Första planförhandsvisningen byggs med selectedUnitIds=[], därefter får användaren uttryckligen välja units och omplanera inför bekräftelse.
+**Exakt request-kontrakt:**
+```json
+{
+  "contractVersion": "1",
+  "projectName": "Dokumenterat nät",
+  "sources": [
+    {"sourceId":"src-1","filename":"inventory.csv","contentBase64":"<base64 originalbytes>","csvDelimiter":","}
+  ],
+  "mappingViews": [],
+  "rowValues": [],
+  "excludedUses": [],
+  "selectedUnitIds": []
+}
+```
 
-Response 200 har exakt {planVersion:"1",fingerprint,plan,project,report}, där plan följer §7 och project är null eller ett fullständigt validate_project()-godkänt projekt i schema 1.4. report har objekt med antal källrecords, användningar, ACTIONABLE/NO_OP/BLOCKED/INVALID/EXCLUDED, unmappedCells, selectedUnits, nodes,ports,links,zones,routes och warnings (strukturerade diagnostikvärden, inklusive exakta källreferenser). Inga okända fält, otydliga statussträngar eller stiliserade "success"-påståenden.
+För varje fält gäller:
+- `contractVersion`: exakt strängen "1"; okända toppnycklar avvisas.
+- `projectName`: giltigt, servernormaliserat projektnamn enligt befintlig modell (1–120 tecken, trimning där befintlig `_name` gör det).
+- `sources`: 1–8 unika objekt med exakt `{sourceId,filename,contentBase64,csvDelimiter?}`. sourceId = src-1..src-8 i verklig, användarvald ordning; inga gap/duplikat. `csvDelimiter` är obligatorisk endast för CSV och exakt komma/semikolon; förbjuden för XLSX/ODS. Högst 4 MiB **totala källbytes** och dessutom MAX_BODY för hela base64-kodade requesten. 4A:s enskilda formatgränser och samtliga strukturkontroller gäller på nytt. Servern beräknar varje källhash från verkliga bytes och avvisar identitets-/formatfel.
+- `mappingViews`: array av §6.1:s **exakt** nio fält `{viewId,sourceId,tableId,role,headerRow,selectedRows,columns,valueMaps,constants,expectedHeaders,label}` (antalet är elva fält; denna uppräkning är auktoritativ). `viewId` = view-1, view-2 ... i användarens UI-registreringsordning, unika utan luckor. `columns` är `{ "<targetField>": ["A","B",...] }` med 1–64 verkliga, unika källkolumnbokstäver per målfält; samtliga målfält måste vara tillåtna för rollen. `valueMaps` är `{ "<targetField>": { "<literalSourceText>": "<literalCanonicalText>" } }` och får enbart gälla målfält med källkolumn. `constants` är `{ "<targetField>": {"type":"text|boolean|null","value":<type-matching JSON>} }`. En målbindning får inte finnas i både columns och constants. För `headerRow:null` är expectedHeaders=[]; annars måste expectedHeaders innehålla exakt alla avkodade rubrikceller i ordning för vald rad; rubriktext används aldrig som automatisk semantisk gissning.
+- `rowValues`: array med exakt `{viewId,row,targetField,valueType,value}`. `viewId` måste existera; `row` måste vara en av just den vyns valda verkliga datarader. `targetField` måste vara tillåtet för vyns roll. `valueType` är `text|boolean|null`; value har motsvarande JSON-typ (sträng, boolean eller null). Dubblett (viewId,row,targetField) ger HTTP 422. En rowValue är **explicit användarinmatad**, inte källfakta. Den får ange radunik ID/deklaration och komplettera ett målfält med saknad källcell; om en källkolumn innehåller ett annat befolkat värde för samma fält blir resultatet BLOCKED och båda ursprungen redovisas. Null tillåts bara för nullable kanoniskt målfält. En rowValue ingår i planens fingerprint, SourceClaim och importEvidence.
+- `excludedUses`: array av exakt `{viewId,row,reason}`. `reason` är 1–240 tecken. viewId och row måste existera i det aktuella mappingView-urvalet. Dubblett (viewId,row) avvisas. Exkludering påverkar **endast just denna användning** av raden; andra vyer får fortfarande använda originalcellen efter användarens separata uttryckliga val. Ett exkluderat source-use får aldrig skapa en unit.
+- `selectedUnitIds`: sorterad unik array av existerande `unitId` från serverns tidigare plana förhandsvisning. Endast ACTIONABLE-enheter med alla uttryckligen valda dependencies får användas. Okända unitId ger HTTP 422. Förstahandsanrop med `[]` ger endast `plan.proposedProject:null` och `plan.canApply:false`; UI visar då alla förslag och låter användaren välja. Anropet med ett val rederiverar en ny plan från **samma aktuella källbytes och mappingViews** och skapar projekt endast om allt valideras. Minst en verkligt godkänd nod krävs för ett importerat kandidatprojekt; en ren dokumentationsfil får endast förhandsgranskas.
 
-En felaktig eller osäker request eller källa ger HTTP 422 med befintligt INVALID_PROJECT-felkontrakt. Semantiskt ofullständig **giltigt avkodad** källrad är däremot BLOCKED eller INVALID i en 200-plan utan att ett projekt behöver skapas. Ett projekt får bara returneras när selectedUnitIds är kompletta, konfliktfria, beroendegiltiga och slutvaliderade. Servern skriver aldrig projekt eller källor.
+**Exakt response:** endast `{"plan": ImportPlan}`, med ImportPlan:s fullständiga egenskaper i §7.1. Det finns **inga** ytterligare `project`, `fingerprint`, `report` eller `canApply` på toppnivå eller i en andra responsrepresentation. Klienten kontrollerar `plan.planVersion==="1"`; `plan.proposedProject` kan vara null; bara `plan.canApply===true` och giltig revisions-/fingerprintkontroll får möjliggöra uttrycklig användarbekräftelse. Projektet sparas aldrig av endpointen.
 
-### 9.2 Schema-1.4-gräns
+Semantiskt ofullständiga, men giltigt avkodade rader ger en 200-plan med synliga BLOCKED/INVALID/EXCLUDED-diagnoser. Fel request, trasig fil, falska cell-/radreferenser, fel schemaVersion eller okänd planunit ger HTTP 422 och exakt befintligt `INVALID_PROJECT`-felobjekt `{error,message}`. Ett serverinternt fel får aldrig presenteras som en lyckad plan.
 
-Utöka validate_project() med importEvidence såsom §7.3 anger och **inga fullständiga source.cells[]**. Alla importerade claims och planunits ska ha en verifierbar källa, och alla valda schema-1.4-fält ska ha fältproveniens. Proveniens ska i UI granskas efter Save/Open; om källor saknas markeras tydligt "ej ansluten". Källpaketexport/-import enligt §7.3 görs i samma etapp så att användaren inte bygger på en dold antagen originalbackup.
+**Resultatkonsistens:** `plan.report` räknas om från samma units/recordReviews som visas i UI, inte från en oberoende summering. Fingerprint beräknas enbart som i §7.4. Ingen andra JSON-serialiseringsalgoritm får användas för just detta kontrakt.
 
-Faktiskt projekttillstånd, filename, savedSha, revision och Save/Open förblir ägda av appens nuvarande huvudstruktur. Inget import-/planeringspaket får innehålla egen Save-implementering. Giltig kandidat ersätter den osparade arbetsytan först efter ett nytt användarklick som verifierar snapshot/fingerprint/revision.
+### 9.2 Integration av schema 1.4 och sanningsstatus
+
+Implementera §7.3:s **historiska** `importEvidence`; inga källceller eller originalbytes inbäddas i .yadilab. Alla id- och formatlänkar i manifestet ska kontrolleras, men efter vanliga manuella redigeringar får inte historiska unitIds/targetKeys krävas finnas i nuvarande nätverk. V1.4:s baseline-hash beräknas vid första import från kanonisk projektion; den uppdateras aldrig vid vanlig projektredigering. UI redovisar två oberoende fakta: `MANIFEST_VALIDATED / SOURCE_VERIFIED` och `BASELINE_MATCH / CHANGED_SINCE_IMPORT`.
+
+Uppdatera före aktivering av v1.4 **samtliga** `web/app.js`-vägar som i dag skriver `attempt.schemaVersion = '1.3'`; v1.4 och importEvidence ska bevaras efter ändring av MAC, VLAN, statiska routes, nod/port/zon/kabel och efter valideringsresponse. Äldre versioner uppgraderas endast vid avsiktlig förändring enligt nuvarande policy, aldrig på enbart Open.
+
+Simulerings-/diagnostik-/sessionsanrop ska använda den explicit validerade `canonicalNetworkView` från §7.5 för v1.4, inte full `importEvidence`-last. Save/Open, dirty-state och workspace-revisioner fortsätter att avse **hela** projektet. Detta är transportoptimering, inte en ny lagringsmotor.
+
+Källpaketexport och källpaketimport enligt §7.3 ska fungera i samma etapp och ge samma tydliga förlustvarning före projektbyte. Hash-match verifieras mot faktisk källbytes, inte klientens påstådda hash. Nedladdningsstart får aldrig rapporteras som bevis på att användaren har en färdig fil på disk. Ett saknat källpaket får aldrig ge falskt SOURCE_VERIFIED.
+
+UI måste särskilja **historisk importproveniens** från användarens senare manuella edit. Om baseline är ändrad får appen aldrig utge historiskt accepterad sourceCell som verifiering av dagens fältvärde.
 
 ### 9.3 Specifika 4B-tester
 
 - Två oberoende syntetiska inventeringar med olika rubriker och column order ger samma kanoniska expected device efter explicit mapping; ingen rubrikheuristik.
-- **En rad, två device_inventory-vyer** från samma blad, med var sin uttryckligt angiven text-ID-kolumn, ger två separata nodclaims utan att källraden dupliceras. **Två rader, ett targetKey** ger ett enda nätverksobjekt och två field origins vid lika fakta.
+- **En rad, två device_inventory-vyer** från samma blad, med var sin uttryckligt angiven text-ID-kolumn, ger två separata nodclaims utan att källraden dupliceras. **Två rader, ett targetKey** ger en enda nod med två källursprung vid lika fält. En uttrycklig `rowValues[]`-identitet tillåts endast om användaren angivit den själv och den ingår i fingerprint; en motstridig radunik användardeklaration ska blockeras.
 - Två motstridiga celler på samma target field ger BLOCKED och ingen skapad enhet.
 - En nod utan ports/links är giltigt **partiellt** projekt, inte ett fullständigt observerat nät.
 - Felaktigt typed ID, okänd node.kind, saknad användardeklaration, plan-ID-kollision, obefintlig källcell, EXCLUDED som beroende, ändrad source hash och stale UI-respons hindrar projektbyte.
-- importEvidence återläses exakt efter Save/Open och omstart; råa källceller är inte i .yadilab. Efter omstart visas korrekt "källan ej ansluten". Import av rätt källpaket återställer förmågan att granska celler; fel SHA blockeras.
+- importEvidence återläses exakt efter Save/Open och omstart; råa källceller är inte i .yadilab. Efter omstart visas korrekt "källan ej ansluten". Import av rätt källpaket återställer förmågan att granska celler; fel SHA blockeras. **Redigera därefter en port/IP/route och spara på riktigt:** projektet ska fortfarande vara schema 1.4, proveniensmanifestet oförändrat, `CHANGED_SINCE_IMPORT` synligt och alla simulatoranrop fria från importEvidence. Återställ exakt nätverksinnehåll och verifiera BASELINE_MATCH utan falskt SOURCE_VERIFIED.
 - Bytebevis för ursprungliga filer och v1.0–1.3-filer utan Save; full DIRECT_HTTP Chromium och samtliga befintliga protokolltester.
 
 ## 10. Etapp 4C – målmoduler, kablar och sammanslagna dokument
