@@ -1,6 +1,6 @@
 # Kontrakt för källtrogen dokumentationsläsning och import
 
-**Dokumentversion:** 3.1 – korrigerat integrations- och API-kontrakt 4A–4D  
+**Dokumentversion:** 3.2 – reviderat datakontrakt 4A–4D  
 **Beslutat läge:** Ett enda normerande målkontrakt för 4A–4D, reviderat efter direkt granskning av öppna importimplementationer. 4A byggs först, och därefter genomförs 4B–4D stegvis med en aktiv PR åt gången och verifierade del-PR:er inom varje etapp. Dokumentet anger krav, inte redan uppfyllda funktioner.  
 **Kodbas:** `detta repository`, referens-`main` `17acb51c8c64c3b4b7a1026514cb8b0a2177a127`.  
 **Omfattning:** Hela den beslutade funktionen för tabellinspektion, explicit fältmappning, ofullständig nätverksdokumentation, proveniens, import, profilåteranvändning och slutacceptans. Funktionerna är målkrav, inte statuspåståenden.
