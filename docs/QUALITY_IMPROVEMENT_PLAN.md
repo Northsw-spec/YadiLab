@@ -18,15 +18,16 @@ tester har körts. Detta dokument ger inte någon produktbetygsättning.
 | 3D3 | DHCP/DORA-sessionens livscykel | Integrerad i `main`; CI godkänd |
 | 3D4 | ARP/Ethernet-sessionens livscykel | Integrerad i `main`; CI godkänd |
 | 3E | Frontend-entrypoint och integrationsgränser | Integrerad i `main`; CI godkänd |
-| 4A | Skrivskyddad källtrogen tabellförhandsvisning | Kontrakt fastställt; ej implementerad |\n| 4B–4D | Explicit mappning, relationer och evidensutvärdering | Kontrakt fastställt; egna startgrindar |
+| 4A | Skrivskyddad källtrogen tabellförhandsvisning | Kontrakt fastställt; ej implementerad | 
+| 4B–4D | Explicit mappning, relationer och evidensutvärdering | Fullständigt kontrakt v3.0; stegvisa CI-grindar |
 | 5 | Oberoende protokollreferenser | Planerad |
 | 6 | Pedagogiskt felsökningsflöde | Planerad |
 | 7 | Prestanda, tillgänglighet och distribution | Planerad |
 | 8 | Oberoende slutgranskning och omvärdering | Planerad |
 
-## Etapp 4: bindande implementationskontrakt
+## Etapp 4: bindande implementationskontrakt (v3.0)
 
-Läs [IMPORT_SOURCE_CONTRACT.md](IMPORT_SOURCE_CONTRACT.md) före nästa kodetapp. Etapp 4A är den enda omedelbart tillåtna kodleveransen: skrivskyddad inspektion av CSV/XLSX/ODS utan nätverkstolkning, kandidatprojekt eller Save. 4B–4D är separata etapper med verifieringsgrindar och får inte implementeras på spekulation. Detta avsnitt anger planeringsstatus, inte verifierat genomförande.
+Läs [IMPORT_SOURCE_CONTRACT.md](IMPORT_SOURCE_CONTRACT.md) före nästa kodetapp. Etapp 4A är den enda omedelbart tillåtna kodleveransen: skrivskyddad inspektion av CSV/XLSX/ODS utan nätverkstolkning, kandidatprojekt eller Save. 4B–4D är separata etapper med verifieringsgrindar. Samma kontrakt specificerar flera roller per blad, flera mål per rad, gemensam importplan samt kompakt proveniensmanifest och separat källpaket; ingen separat plan behövs. Detta avsnitt anger planeringsstatus, inte verifierat genomförande.
 
 ## Etapp 3E: ICMP-panelens presentationsgräns
 
