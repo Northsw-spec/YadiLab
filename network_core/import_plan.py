@@ -1,8 +1,4 @@
-"""Deterministic, read-only source claims and discovery plan for external tables.
-
-No candidate project is built here. The accepted create changes and derived
-layout belong to the later schema-1.4 candidate builder.
-"""
+"""Deterministic, read-only source claims and selected import candidates."""
 from __future__ import annotations
 
 import hashlib
@@ -11,7 +7,8 @@ import math
 import re
 
 from .import_inspection import _decode_source, inspect_all_rows
-from .model import ProjectValidationError, NODE_KINDS, _id, _name
+from .model import (ProjectValidationError, NODE_KINDS, _id, _name,
+                    validate_project, canonical_network_view)
 
 FIELDS = frozenset({'node.id', 'node.label', 'node.kind', 'node.zoneId'})
 ROLES = {'device_inventory': FIELDS, 'documentation_only': frozenset()}
@@ -309,6 +306,96 @@ def _claim(view, row, cells, row_values, decision_ids):
     return claim, issues, used
 
 
+def node_layout(node_ids):
+    """§8.2 layout, only for a unique, explicitly selected valid node set."""
+    ids = sorted(set(node_ids))
+    if len(ids) != len(node_ids) or len(ids) > 2000:
+        fail('layout', 'duplicate node IDs or more than 2000 selected nodes')
+    if not ids:
+        return {}
+    cols = 1 + math.isqrt(len(ids) - 1)
+    return {node_id: (110 + 260 * (index % cols),
+                      110 + 220 * (index // cols))
+            for index, node_id in enumerate(ids)}
+
+
+def _candidate(plan, project_name):
+    selected = set(plan['selectedUnitIds'])
+    units = [unit for unit in plan['units'] if unit['unitId'] in selected]
+    unavailable = [unit for unit in units if unit['status'] != 'ACTIONABLE' or
+                   any(dep not in selected for dep in unit['dependencies'])]
+    if unavailable:
+        for unit in unavailable:
+            item = diagnostic('SELECTED_UNIT_NOT_ACTIONABLE', [], unit['unitId'])
+            unit['diagnostics'].append(item)
+            plan['diagnostics'].append(item)
+        plan['diagnostics'].sort(key=lambda d: (d['code'], d['unitId'] or '', canonical_json(d['sourceRefs'])))
+        return
+    if not units:
+        return
+    coordinates = node_layout([unit['targetKey'] for unit in units])
+    claims_by_target = {}
+    for claim in plan['claims']:
+        if claim['targetKey'] in coordinates:
+            claims_by_target.setdefault(claim['targetKey'], []).append(claim)
+    nodes = []
+    accepted = []
+    derived = origin('derived_layout')
+    for unit in sorted(units, key=lambda item: item['unitId']):
+        target = unit['targetKey']
+        group = claims_by_target[target]
+        facts = {}
+        provenance = {}
+        for claim in group:
+            for field, value in claim['fields'].items():
+                facts[field] = value
+                provenance.setdefault(field.removeprefix('node.'), []).extend(claim['origins'][field])
+        x, y = coordinates[target]
+        node = {'id': facts['node.id'], 'label': facts['node.label'],
+                'kind': facts['node.kind'], 'x': x, 'y': y,
+                'zoneId': facts.get('node.zoneId'), 'ports': []}
+        node = validate_project({'schemaVersion': '1.3', 'name': project_name,
+                                 'zones': [], 'nodes': [node], 'links': []})['nodes'][0]
+        for field in ('id', 'label', 'kind'):
+            provenance[field] = sorted(provenance[field], key=canonical_json)
+        provenance['x'] = [derived]
+        provenance['y'] = [derived]
+        provenance.setdefault('zoneId', [])
+        provenance['ports'] = []
+        change_id = internal_id('c-', [unit['unitId'], 'create', '__object__'])
+        change = {'changeId': change_id, 'operation': 'create',
+                  'targetKind': 'node', 'targetKey': target,
+                  'fieldValues': node, 'fieldOrigins': provenance}
+        unit['changes'] = [change]
+        accepted.append({'unitId': unit['unitId'], 'changeIds': [change_id],
+                         'targetKind': 'node', 'targetKey': target,
+                         'fieldValues': node, 'fieldOrigins': provenance})
+        nodes.append(node)
+    nodes.sort(key=lambda node: node['id'])
+    draft = validate_project({'schemaVersion': '1.3', 'name': project_name,
+                              'zones': [], 'nodes': nodes, 'links': []})
+    baseline = hashlib.sha256(canonical_json(canonical_network_view(draft))).hexdigest()
+    decisions = []
+    for review in plan['recordReviews']:
+        uses = review['viewUses'] or [{'viewId': None, 'status': 'DOCUMENTATION_ONLY',
+                                       'reason': None, 'unitIds': []}]
+        for use in uses:
+            decisions.append({'sourceId': review['sourceId'], 'tableId': review['tableId'],
+                              'row': review['row'], 'viewId': use['viewId'],
+                              'status': use['status'], 'reason': use['reason'],
+                              'unitIds': use['unitIds']})
+    evidence = {'evidenceVersion': '1', 'contractVersion': '1',
+                'projectNameAtImport': project_name, 'planFingerprint': plan['fingerprint'],
+                'baselineNetworkSha256': baseline, 'selectedUnitIds': plan['selectedUnitIds'],
+                'excludedUses': plan['excludedUses'], 'transformations': plan['transformations'],
+                'sources': plan['sourceManifest'], 'mappingViews': plan['mappingViews'],
+                'rowValues': plan['rowValues'], 'decisions': decisions,
+                'acceptedChanges': accepted, 'sourceStorage': 'external_not_embedded'}
+    candidate = {**draft, 'schemaVersion': '1.4', 'importEvidence': evidence}
+    plan['proposedProject'] = validate_project(candidate)
+    plan['canApply'] = True
+
+
 def build_plan(value):
     """Build a read-only discovery response from actual source bytes and explicit decisions."""
     object_exact(value, REQUEST_KEYS, 'request')
@@ -445,8 +532,6 @@ def build_plan(value):
                 diagnostics.append(diagnostic(code, refs))
     if selected and any(item not in unit_ids for item in selected):
         fail('selectedUnitIds', 'unknown unit ID')
-    if selected:
-        diagnostics.append(diagnostic('CANDIDATE_NOT_IMPLEMENTED', []))
     review_list = []
     for review in reviews.values():
         review['viewUses'].sort(key=lambda use: use['viewId'])
@@ -474,6 +559,8 @@ def build_plan(value):
             'excludedUses': excluded, 'selectedUnitIds': selected, 'claims': claims,
             'units': units, 'recordReviews': review_list, 'diagnostics': diagnostics,
             'report': report, 'proposedProject': None, 'canApply': False}
+    if selected:
+        _candidate(plan, project_name)
     result = {'plan': plan}
     if len(canonical_json(result)) > 8 * 1024 * 1024:
         fail('response', 'PLAN_TOO_LARGE: serialized plan exceeds 8 MiB')

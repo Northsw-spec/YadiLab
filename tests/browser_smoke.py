@@ -31,6 +31,7 @@ from network_core.icmp_investigation import _candidates
 from network_core.icmp_ping import EchoExchange
 from network_core.server import LabHTTPServer
 from network_core.storage import ProjectStore
+from network_core.import_plan import build_plan
 from network_core.session_idle import IDLE_TIMEOUT_SECONDS
 from network_core.simulation import MAX_OPERATIONS
 from xlsx_fixture import make_workbook, workbook_parts, zip_parts
@@ -44,6 +45,7 @@ from test_dhcp_port_vlan_fault import vlan_clients as dhcp_vlan_clients
 from test_icmp_echo import routed_reply_lab as icmp_routed_lab
 from test_icmp_investigation_lan import lan_lab as icmp_lan_lab
 from test_vlan_persistence import persisted_topology
+from test_import_plan import request as import_plan_request
 
 
 def port():
@@ -2321,6 +2323,75 @@ def source_preview_regression(context, base, network_mode, store, errors):
     assert 'A26 [text] 026' not in page.locator('#preview-result').inner_text()
     assert project_file.read_bytes() == original
     page.close()
+
+
+def import_candidate_regression(context, base, network_mode, store, errors):
+    """Open a real candidate, edit/save its history, and inspect protocol bytes."""
+    proposal = import_plan_request(b'ID,Label,Kind\nH-01,Imported host,host\n')
+    unit = build_plan(proposal)['plan']['units'][0]['unitId']
+    proposal['selectedUnitIds'] = [unit]
+    candidate = build_plan(proposal)['plan']['proposedProject']
+    assert candidate['schemaVersion'] == '1.4'
+    ProjectStore(store).save('candidate-4b3', candidate, None)
+    path = store / 'candidate-4b3.yadilab'
+    before = hashlib.sha256(path.read_bytes()).hexdigest()
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    try:
+        assert browser_open(page, base) == network_mode
+        page.locator('#saved-projects').select_option('candidate-4b3')
+        page.locator('#open-project').click()
+        expect(page.locator('[data-node-id="H-01"]')).to_have_count(1)
+        page.locator('[data-item-type="node"][data-item-id="H-01"]').click()
+        page.locator('#node-label').fill('Edited host')
+        page.locator('#node-label').dispatch_event('change')
+        page.locator('#new-port-name').fill('eth0')
+        page.locator('#submit-port').click()
+        with page.expect_response('**/api/validate') as ipv4:
+            page.locator('[data-port-ipv4="port-1"]').fill('192.0.2.10/24')
+            page.locator('[data-port-ipv4="port-1"]').dispatch_event('change')
+        assert ipv4.value.status == 200
+        with page.expect_response('**/api/validate') as mac:
+            page.locator('[data-port-mac="port-1"]').fill('02:00:00:00:00:0A')
+            page.locator('[data-port-mac="port-1"]').dispatch_event('change')
+        assert mac.value.status == 200
+        assert mac.value.json()['project']['schemaVersion'] == '1.4'
+        page.locator('#route-source').select_option('H-01')
+        page.locator('#route-destination-ip').fill('192.0.2.20')
+        with page.expect_response('**/api/routing/connected') as lookup:
+            page.locator('#run-route-lookup').click()
+        assert lookup.value.status == 200
+        sent = json.loads(lookup.value.request.post_data)
+        assert sent['project']['schemaVersion'] == '1.3'
+        assert 'importEvidence' not in sent['project']
+        expect(page.locator('#route-result')).to_contain_text('Routingstatus: MATCH')
+        page.locator('#new-route-destination').fill('203.0.113.0/24')
+        page.locator('#new-route-next-hop').fill('192.0.2.1')
+        page.locator('#new-route-out-port').select_option('port-1')
+        with page.expect_response('**/api/validate') as route:
+            page.locator('#add-static-route').click()
+        assert route.value.status == 200
+        assert route.value.json()['project']['schemaVersion'] == '1.4'
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == before
+        with page.expect_response('**/api/save') as saved:
+            page.locator('#save-project').click()
+        assert saved.value.status == 200
+        disk = json.loads(path.read_bytes())
+        assert disk['schemaVersion'] == '1.4'
+        assert disk['importEvidence'] == candidate['importEvidence']
+        assert disk['nodes'][0]['staticRoutes'][0]['id'] == 'route-1'
+        assert disk['nodes'][0]['ports'][0]['mac'] == '02:00:00:00:00:0A'
+        final_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        page.reload(wait_until='domcontentloaded')
+        page.locator('#saved-projects').select_option('candidate-4b3')
+        page.locator('#open-project').click()
+        expect(page.locator('[data-node-id="H-01"]')).to_have_count(1)
+        page.locator('[data-item-type="node"][data-item-id="H-01"]').click()
+        expect(page.locator('[data-route-card="route-1"]')).to_have_count(1)
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == final_sha
+        print('PASS Chromium schema 1.4: historical receipt, edit, protocol projection, Save/Open')
+    finally:
+        page.close()
 
 
 def run():
@@ -4842,6 +4913,7 @@ def run():
             assert ProjectStore(store).read('concurrent-ui')['project'] == external
             save_page.close()
             source_preview_regression(context, base, network_mode, store, errors)
+            import_candidate_regression(context, base, network_mode, store, errors)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)

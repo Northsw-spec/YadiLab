@@ -1224,7 +1224,7 @@ function renderInspector() {
         value.kind === 'switch' ? null : field('MAC-adress (valfri, explicit)', input(port.mac || '', async next => {
           const attempt = copy(project);
           // Legacy documents upgrade in memory on deliberate edit, never on Open.
-          attempt.schemaVersion = '1.3';
+          if (attempt.schemaVersion !== '1.4') attempt.schemaVersion = '1.3';
           const portCopy = attempt.nodes.find(n => n.id === value.id).ports.find(p => p.id === port.id);
           portCopy.mac = next.trim() || null;
           try {
@@ -1253,7 +1253,7 @@ function renderInspector() {
             } else {
               delete portCopy.vlan;
             }
-            attempt.schemaVersion = '1.3';
+            if (attempt.schemaVersion !== '1.4') attempt.schemaVersion = '1.3';
             try {
               const normalized = await api('/api/validate', attempt);
               project = normalized.project;
@@ -1289,7 +1289,7 @@ function renderInspector() {
       box.append(small('Endast explicit next-hop i eget utgående IPv4-subnät. Routingtabell innebär inte paketleverans.'));
       const commitRouteChange = async (routeId, fieldName, newValue) => {
         const attempt = copy(project);
-        attempt.schemaVersion = '1.3';
+        if (attempt.schemaVersion !== '1.4') attempt.schemaVersion = '1.3';
         const route = attempt.nodes.find(n => n.id === value.id)
           .staticRoutes.find(r => r.id === routeId);
         route[fieldName] = newValue;
@@ -1312,7 +1312,7 @@ function renderInspector() {
             {dataset:{routeOutPort:route.id}})),
           button('Ta bort statisk route', async () => {
             const attempt = copy(project);
-            attempt.schemaVersion = '1.3';
+            if (attempt.schemaVersion !== '1.4') attempt.schemaVersion = '1.3';
             const node = attempt.nodes.find(n => n.id === value.id);
             node.staticRoutes = node.staticRoutes.filter(r => r.id !== route.id);
             try {
@@ -1332,7 +1332,7 @@ function renderInspector() {
           return;
         }
         const attempt = copy(project);
-        attempt.schemaVersion = '1.3';
+        if (attempt.schemaVersion !== '1.4') attempt.schemaVersion = '1.3';
         const node = attempt.nodes.find(n => n.id === value.id);
         node.staticRoutes ||= [];
         node.staticRoutes.push({

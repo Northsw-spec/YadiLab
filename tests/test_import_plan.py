@@ -190,9 +190,10 @@ class ImportPlanTests(unittest.TestCase):
         chosen['selectedUnitIds'] = ['u-0b0bbd73049222b0ae6089e767301fb8']
         plan = build_plan(chosen)['plan']
         self.assertNotEqual(plan['fingerprint'], baseline)
-        self.assertIsNone(plan['proposedProject'])
-        self.assertFalse(plan['canApply'])
-        self.assertIn('CANDIDATE_NOT_IMPLEMENTED', [d['code'] for d in plan['diagnostics']])
+        self.assertEqual(plan['proposedProject']['schemaVersion'], '1.4')
+        self.assertTrue(plan['canApply'])
+        self.assertEqual(plan['units'][0]['changes'][0]['changeId'],
+                         'c-b8d5c4d8b632f6649c65c06f220a54bc')
 
     def test_explicit_value_maps_row_decision_and_conflict(self):
         req = request(b'ID,Label,Kind\n,Core,managed switch\n')
