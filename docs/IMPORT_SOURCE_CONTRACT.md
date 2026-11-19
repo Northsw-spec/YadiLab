@@ -220,7 +220,7 @@ SourceClaims är mellanmodellen och **behöver inte** uppfylla alla krav för et
 
 Planering är ren, skrivskyddad och deterministisk. **Ett enda** svar, utan dubbla plan-/projekt-/fingeravtrycksfält, är:
 
-\`\`\`json
+```json
 {
   "plan": {
     "planVersion": "1",
@@ -244,77 +244,105 @@ Planering är ren, skrivskyddad och deterministisk. **Ett enda** svar, utan dubb
     "canApply": false
   }
 }
-\`\`\`
+```
 
-Detta JSON-exempel anger **exakta nycklar och datatyper**. Den verkliga responsen ersätter tomma arrayer och nollor med kontrollerade värden. \`proposedProject\` är antingen null eller det enda giltiga, kanoniska schema-1.4-projektet; det finns inget andra \`project\` utanför \`plan\`. \`plan.fingerprint\` är det enda fingeravtrycket i svaret. \`canApply\` är sant om och endast om \`proposedProject\` är icke-null och alla valda enheter, explicita beroenden och slutvalidering är godkända. Ett sant \`canApply\` utför aldrig själv en import eller Save. \`sourceManifest\` innehåller endast fakta verifierade från originalbytes och de format-/bladmetadata som definieras i §7.3, inte fullständiga källbytes.
+Detta JSON-exempel anger **exakta nycklar och datatyper**. Den verkliga responsen ersätter tomma arrayer och nollor med kontrollerade värden. `proposedProject` är antingen null eller det enda giltiga, kanoniska schema-1.4-projektet; det finns inget andra `project` utanför `plan`. `plan.fingerprint` är det enda fingeravtrycket i svaret. `canApply` är sant om och endast om `proposedProject` är icke-null och alla valda enheter, explicita beroenden och slutvalidering är godkända. Ett sant `canApply` utför aldrig själv en import eller Save. `sourceManifest` innehåller endast fakta verifierade från originalbytes och de format-/bladmetadata som definieras i §7.3, inte fullständiga källbytes.
 
-**claim** har exakt \`{claimId,viewId,sourceRef,role,targetKind,targetKey,fields,origins}\`, där \`sourceRef\` är \`{sourceId,tableId,row}\`. \`fields\` är ett JSON-objekt med endast uttryckligen valda målfält och typade, ännu inte sammanfogade kanoniska värden. \`origins\` är ett objekt \`{ "<targetField>": [Origin, ...] }\`; Origin är exakt \`{kind,sourceId,tableId,row,address,decisionId}\`. kind är \`source_cell|user_constant|user_decision|derived_layout\`; källcell kräver källa, blad, rad och originalcelladress och \`decisionId:null\`. För användarbeslut krävs ett verifierat \`decisionId\`, medan irrelevanta källkoordinater är null. Alla icke-null referenser måste existera i samma inspektion eller deklarationsmängd. En SourceClaim får vara ofullständig; dess roll och targetKind ska vara förenliga med §8.
+**claim** har exakt `{claimId,viewId,sourceRef,role,targetKind,targetKey,fields,origins}`, där `sourceRef` är `{sourceId,tableId,row}`. `fields` är ett JSON-objekt med endast uttryckligen valda målfält och typade, ännu inte sammanfogade kanoniska värden. `origins` är ett objekt `{ "<targetField>": [Origin, ...] }`; Origin är exakt `{kind,sourceId,tableId,row,address,decisionId}`. kind är `source_cell|user_constant|user_decision|derived_layout`; källcell kräver källa, blad, rad och originalcelladress och `decisionId:null`. För användarbeslut krävs ett verifierat `decisionId`, medan irrelevanta källkoordinater är null. Alla icke-null referenser måste existera i samma inspektion eller deklarationsmängd. En SourceClaim får vara ofullständig; dess roll och targetKind ska vara förenliga med §8.
 
-**unit** har exakt \`{unitId,kind,targetKey,changes,dependencies,status,diagnostics,sourceUses}\`; \`kind\` är \`node|port|zone|link|staticRoute|ipBinding\`. \`targetKey\` och \`unitId\` ska följa §7.2. \`sourceUses\` är unik, sorterad array av \`{viewId,sourceId,tableId,row,claimId}\`; fler än en use kan knytas till samma unit. \`dependencies\` är sorterad unik array av andra unitId. \`status\` är en av de fem nedan; en null- eller tom-källrad får inte ge ett ACTIONABLE-objekt.
+**unit** har exakt `{unitId,kind,targetKey,changes,dependencies,status,diagnostics,sourceUses}`; `kind` är `node|port|zone|link|staticRoute|ipBinding`. `targetKey` och `unitId` ska följa §7.2. `sourceUses` är unik, sorterad array av `{viewId,sourceId,tableId,row,claimId}`; fler än en use kan knytas till samma unit. `dependencies` är sorterad unik array av andra unitId. `status` är en av de fem nedan; en null- eller tom-källrad får inte ge ett ACTIONABLE-objekt.
 
-**change** har exakt \`{changeId,operation,targetKind,targetKey,fieldValues,fieldOrigins}\`, där operation är \`create|setExplicitField\`, \`fieldValues\` är ett typat objekt som vid fullständigt urval kan bli en del av den kanoniska projektmodellen, och \`fieldOrigins\` är motsvarande \`{ "<fieldPath>": [Origin,...] }\`. En change kan ha flera giltiga ursprung per fält. Varje id ska följa §7.2. Denna representation är en granskningsplan, inte ett extra beständigt nätverksschema.
+**change** har exakt `{changeId,operation,targetKind,targetKey,fieldValues,fieldOrigins}`, där operation är `create|setExplicitField`, `fieldValues` är ett typat objekt som vid fullständigt urval kan bli en del av den kanoniska projektmodellen, och `fieldOrigins` är motsvarande `{ "<fieldPath>": [Origin,...] }`. En change kan ha flera giltiga ursprung per fält. Varje id ska följa §7.2. Denna representation är en granskningsplan, inte ett extra beständigt nätverksschema.
 
 **Status och betydelse**:
-- \`ACTIONABLE\`: komplett, entydigt källstyrkt och validerbar tillsammans med dess explicita beroenden.
-- \`NO_OP\`: en deklarerad användning eller planerad enhet som inte tillför nya kanoniska fakta; ett identiskt dubbelt källpåstående får inte bli ett andra objekt.
-- \`BLOCKED\`: saknad eller tvetydig information, ofullständigt användarbeslut eller ej tillåten referens; inte körbar.
-- \`INVALID\`: objektet eller någon explicit regel bryter det kanoniska slutkontraktet, även om cellerna gick att avkoda.
-- \`EXCLUDED\`: uttryckligen utesluten användning med användarens motivering; aldrig tillämpad.
+- `ACTIONABLE`: komplett, entydigt källstyrkt och validerbar tillsammans med dess explicita beroenden.
+- `NO_OP`: en deklarerad användning eller planerad enhet som inte tillför nya kanoniska fakta; ett identiskt dubbelt källpåstående får inte bli ett andra objekt.
+- `BLOCKED`: saknad eller tvetydig information, ofullständigt användarbeslut eller ej tillåten referens; inte körbar.
+- `INVALID`: objektet eller någon explicit regel bryter det kanoniska slutkontraktet, även om cellerna gick att avkoda.
+- `EXCLUDED`: uttryckligen utesluten användning med användarens motivering; aldrig tillämpad.
 
-**diagnostic** är exakt \`{code,severity,message,sourceRefs,unitId}\` med \`severity:INFO|WARNING|ERROR\`. \`sourceRefs\` är en unik array av \`{sourceId,tableId,row,address}\` där address får vara null när problemet avser en hel rad. \`unitId\` får vara null om inget mål ännu finns. \`code\` är stabil ASCII-kod (t.ex. \`MISSING_PORT\`), inte en översatt sträng. Status bestäms av planeringsreglerna och får inte härledas ur \`message\`. Vid konflikt ska alla relevanta källceller finnas i sourceRefs.
+**diagnostic** är exakt `{code,severity,message,sourceRefs,unitId}` med `severity:INFO|WARNING|ERROR`. `sourceRefs` är en unik array av `{sourceId,tableId,row,address}` där address får vara null när problemet avser en hel rad. `unitId` får vara null om inget mål ännu finns. `code` är stabil ASCII-kod (t.ex. `MISSING_PORT`), inte en översatt sträng. Status bestäms av planeringsreglerna och får inte härledas ur `message`. Vid konflikt ska alla relevanta källceller finnas i sourceRefs.
 
-**recordReview** har exakt \`{sourceId,tableId,row,viewUses,unmappedAddresses}\`. Varje faktiskt befolkat originalrecord finns exakt en gång på denna nivå. \`viewUses\` är sorterad array av \`{viewId,claimIds,unitIds,status,reason}\` där status är \`ACTIONABLE|NO_OP|BLOCKED|INVALID|EXCLUDED|DOCUMENTATION_ONLY\` och reason är null utom vid explicit EXCLUDED. \`unmappedAddresses\` är sorterad array av de *faktiskt avkodade* källcelladresser som inte använts av någon vy. Ett record som används av två vyer får en recordReview med två viewUses, inte två recordReviews. Ett record som är endast delvis använt ska markeras delvis använt i rapporten, aldrig som helt importerad källrad. \`report.unmappedCells\` räknar distinkta adresser över källor. Fulla cellvärden visas bara om den verifierade originalfilen/källpaketet finns anslutet.
+**recordReview** har exakt `{sourceId,tableId,row,viewUses,unmappedAddresses}`. Varje faktiskt befolkat originalrecord finns exakt en gång på denna nivå. `viewUses` är sorterad array av `{viewId,claimIds,unitIds,status,reason}` där status är `ACTIONABLE|NO_OP|BLOCKED|INVALID|EXCLUDED|DOCUMENTATION_ONLY` och reason är null utom vid explicit EXCLUDED. `unmappedAddresses` är sorterad array av de *faktiskt avkodade* källcelladresser som inte använts av någon vy. Ett record som används av två vyer får en recordReview med två viewUses, inte två recordReviews. Ett record som är endast delvis använt ska markeras delvis använt i rapporten, aldrig som helt importerad källrad. `report.unmappedCells` räknar distinkta adresser över källor. Fulla cellvärden visas bara om den verifierade originalfilen/källpaketet finns anslutet.
 
-En valid men ofullständig källa ger en 200-plan med BLOCKED/INVALID utan att skapa ett projekt. Ogiltig parsning, okända requestfält, intern planmismatch eller korrupta källreferenser ger HTTP 422 i befintligt \`INVALID_PROJECT\`-kontrakt. En invalid unit får inte göra övriga, oberoende units oanvändbara; en selectedUnitId som är BLOCKED/INVALID/EXCLUDED eller har ouppfyllt beroende ger \`proposedProject:null\`, \`canApply:false\` och deterministisk diagnostik. Ingen partiell HTTP 200 får dölja ett fel i det faktiska request- eller filkontraktet.
+En valid men ofullständig källa ger en 200-plan med BLOCKED/INVALID utan att skapa ett projekt. Ogiltig parsning, okända requestfält, intern planmismatch eller korrupta källreferenser ger HTTP 422 i befintligt `INVALID_PROJECT`-kontrakt. En invalid unit får inte göra övriga, oberoende units oanvändbara; en selectedUnitId som är BLOCKED/INVALID/EXCLUDED eller har ouppfyllt beroende ger `proposedProject:null`, `canApply:false` och deterministisk diagnostik. Ingen partiell HTTP 200 får dölja ett fel i det faktiska request- eller filkontraktet.
 
 ### 7.2 Identiteter, beroenden och normalisering
 
-Planen är en riktad acyklisk graf. Normativ konstruktionsordning är \`zone → node → port → (ipBinding,staticRoute) → link\`. Källfilernas rad- och blador­dning får inte ändra vilka kanoniska fakta som blir godkända.
+Planen är en riktad acyklisk graf. Normativ konstruktionsordning är `zone → node → port → (ipBinding,staticRoute) → link`. Källfilernas rad- och blador­dning får inte ändra vilka kanoniska fakta som blir godkända.
 
-**Målidentitet**: \`targetKey\` är för node, zone eller link exakt dess validerade kanoniska \`id\`. För port och ipBinding är det en JSON-sträng med exakt två element \`[nodeId,portId]\` serialiserad utan whitespace. För staticRoute är det \`[nodeId,routeId]\` på samma sätt. Därmed finns ingen tvetydig slash-join när ID:n innehåller tecknet \`/\` eller andra skiljetecken.
+**Målidentitet**: `targetKey` är för node, zone eller link exakt dess validerade kanoniska `id`. För port och ipBinding är det en JSON-sträng med exakt två element `[nodeId,portId]` serialiserad utan whitespace. För staticRoute är det `[nodeId,routeId]` på samma sätt. Därmed finns ingen tvetydig slash-join när ID:n innehåller tecknet `/` eller andra skiljetecken.
 
-**Internt, deterministiskt id**: \`claimId = "cl-" + sha256(utf8(canonicalJson([viewId,sourceId,tableId,row,targetKind,targetKey])))[0:32]\`; \`unitId = "u-" + sha256(utf8(canonicalJson([kind,targetKey])))[0:32]\`; \`changeId = "c-" + sha256(utf8(canonicalJson([unitId,operation,fieldPath])))[0:32]\`. CanonicalJson för dessa identifierare följer exakt §7.4. En intern ID-kollision mellan olika identiteter ska ge HTTP 422; välj inte en ny slumpmässig ID. Dessa är **kontrollidentiteter**, aldrig nätverks- eller kabel-ID. En enhet med samma kind+targetKey förekommer högst en gång i en ImportPlan. Vid lika fakta samlas samtliga ursprung på denna unit; dubblett-claims får NO_OP-status på användningsnivån.
+**Internt, deterministiskt id**: `claimId = "cl-" + sha256(utf8(canonicalJson([viewId,sourceId,tableId,row,targetKind,targetKey])))[0:32]`; `unitId = "u-" + sha256(utf8(canonicalJson([kind,targetKey])))[0:32]`; `changeId = "c-" + sha256(utf8(canonicalJson([unitId,operation,fieldPath])))[0:32]`. CanonicalJson för dessa identifierare följer exakt §7.4. En intern ID-kollision mellan olika identiteter ska ge HTTP 422; välj inte en ny slumpmässig ID. Dessa är **kontrollidentiteter**, aldrig nätverks- eller kabel-ID. En enhet med samma kind+targetKey förekommer högst en gång i en ImportPlan. Vid lika fakta samlas samtliga ursprung på denna unit; dubblett-claims får NO_OP-status på användningsnivån.
 
 Varje dependency måste peka på en existerande planunit med tillräckligt godkänt resultat eller på uttryckligen redan definierade fakta i samma, validerade kandidatprojekt. Inga beroenden på den arbetsyta som ska ersättas får implicit antas. Saknade beroenden, cykler och beroenden till BLOCKED/INVALID/EXCLUDED-enheter ger ett icke-tillämpbart urval. En port kräver en nod; en kabel kräver två redan deklarerade portar; en route kräver definierad nod och port. Ett ipBinding kräver redan uttryckligt deklarerad port.
 
 Urval av en unit utökar inte automatiskt andra enheter. UI får erbjuda "Välj även beroenden" men måste först visa exakt de ytterligare units och kräva ett nytt, uttryckligt användarklick. En fysisk länk får aldrig skapa saknade noder eller portar. Vid konflikt mellan två källvärden på samma målfält ska den berörda unit markeras BLOCKED, båda källreferenserna redovisas och ingen first-/last-write-wins förekomma.
 
-### 7.3 Separera projektmanifest från originaldokument
+### 7.3 Kompakt, historiskt importkvitto och separat källa
 
-**Reviderat och bindande beslut:** Lägg **inte** alla lästa celler eller binär XLSX/ODS-data i varje .yadilab-projekt. Det vore stora projektfiler, dubblerat källinnehåll och otydlig sekretesshantering. Skilj på:
-1. **Kanoniskt projekt** – endast de validerade nätverksobjekt som simuleringsmotorn förstår.
-2. **Litet, beständigt importEvidence-manifest** – vilka filer/rader/mappningsvyer som bidrog, SHA-256, uttryckliga beslut och varningar. Aldrig hela originalfilens cellinnehåll.
-3. **Separat originalkällpaket** – källbytes på uttryckligt användarval, exporterat som en fristående JSON-fil; aldrig automatisk Save, molnsynk eller osynlig kopia.
+**Bindande beslut:** ingen inbäddning av alla avkodade kalkylbladsceller eller original-CSV/XLSX/ODS-bytes i den kanoniska .yadilab-filen. Behåll de uttryckligen validerade nätverksobjekten, ett **historiskt importkvitto** i `importEvidence` och originalfilerna separat hos användaren. Detta minskar projektfilens storlek och förebygger oavsiktligt arkiverande av okänd information i simuleringsprojektet. Det bevisar **inte** att användaren faktiskt sparat en extern backup.
 
-Etapp 4B inför en enda versionsbunden ändring av projektformatet: schemaVersion "1.4" med **en ny root-nyckel importEvidence**, men utan de fullständiga source.cells[] från föregående kontrakt. För 1.4 är importEvidence exakt:
-- evidenceVersion: "1";
-- sources: [{sourceId,filename,kind,sha256,byteLength,tables:[{tableId,name,rowCount,populatedRowCount,columnCount}]}];
-- mappingViews: snapshots av §6.1:s validerade mappningsvyer;
-- decisions: [{sourceId,tableId,row,viewId,status,reason,unitIds}];
-- acceptedChanges: [{unitId,changeIds,targetKind,targetKey,fieldOrigins}];
-- sourceStorage: konstantsträngen "external_not_embedded".
+**Schema 1.4** har exakt samma nätverksfält som 1.3 samt en ny obligatorisk rot-nyckel `importEvidence`. `importEvidence` är exakt:
 
-Allt ska bevaras över faktisk Save/Open och programomstart. Varje sourceId/tableId/row/viewId, unitId och fieldOrigins måste vara referensmässigt konsistent och valideras av **samma validate_project()**. Protokollmotorer ska ignorera importEvidence. Inga andra extra root-fält, inga dolda projektmigreringar och inga implicit uppgraderade 1.0–1.3-filer.
+```json
+{
+  "evidenceVersion": "1",
+  "baselineNetworkSha256": "<64 lowercase hex>",
+  "sources": [],
+  "mappingViews": [],
+  "rowValues": [],
+  "decisions": [],
+  "acceptedChanges": [],
+  "sourceStorage": "external_not_embedded"
+}
+```
 
-**Detta manifest är en auditindex, inte originalets dataarkiv.** Existerar inte den ursprungliga källfilen efter återöppning visar UI "Källa ej ansluten; originalvärden kan inte granskas" och dess hash/celladresser, aldrig påhittade cellvärden. Importerade kanoniska nätverksfält förblir läsbara utan källan. En användare som vill kunna verifiera ursprungsrader efter ett år måste behålla originalfil(er) eller explicit exportera källpaket.
+- `baselineNetworkSha256` beräknas **en gång** vid importgodkännandet av det validate_project-normaliserade nätverksinnehållet, utan proveniens, via canonicalNetworkView och canonicalJson enligt §7.5 och §7.4. Manifestet är därefter **oföränderlig historik**, inte en självläkande förteckning över arbetsytans aktuella värden. Vanlig redigering ändrar aldrig detta hash, originalreferenser eller accepterade importbeslut.
+- `sources[]`: `{sourceId,filename,kind,sha256,byteLength,tables}`, där tables innehåller `{tableId,name,rowCount,populatedRowCount,columnCount}`. Alla källhashar kommer från originalbytes. Inga fullständiga `cells` i projektet.
+- `mappingViews[]`: verifierade snapshots enligt §6.1 vid importerad tidpunkt; innehåller källroll, vald kolumnmappning, header och row selections, även när senare användarredigering ändrar nätverket.
+- `rowValues[]`: explicit radunika beslut enligt §9.1 med typer och identiteter; även dessa bevaras oförändrade.
+- `decisions[]`: `{sourceId,tableId,row,viewId,status,reason,unitIds}`; status är en av §7.1:s dispositioner inklusive `DOCUMENTATION_ONLY`, reason är null om ingen användarexkludering finns. Den historiska dispositionen får inte felaktigt visas som aktuell resursstatus.
+- `acceptedChanges[]`: `{unitId,changeIds,targetKind,targetKey,fieldOrigins}`. `fieldOrigins` följer §7.1 och innehåller källa eller användarbeslut; inga uppdiktade originalvärden.
+- `sourceStorage` är alltid `external_not_embedded`.
 
-**Källpaket:** UI erbjuder senast i 4B ett separat explicit "Exportera originalkällor" som skriver JSON med exakt {sourceBundleVersion:"1",sources:[{sourceId,filename,kind,sha256,contentBase64}]}. Det är fristående från .yadilab och innehåller originalbytes i base64. Om användaren importerar paketet senare avkodas alla filer strikt, återinspekteras av samma 4A-parser och verifieras mot det öppnade projektets hash och sourceId. Hash-/fil-/strukturmismatch ger avslag, inga metadata skrivs automatiskt. Inga externa filvägar eller skript accepteras från paketet.
+**Två separata integritetsnivåer** visas i UI och testsvar:
+1. **MANIFEST_VALIDATED** – endast typ-/format-/referensintegritet i det sparade manifestet, inklusive baselineNetworkSha256:s syntax. Detta betyder **inte** att originalceller eller historiska ändringsenheter har omverifierats mot dokumentet.
+2. **SOURCE_VERIFIED** – den namngivna originalfilen/källpaketet har återanslutits, dess verkliga SHA-256 har kontrollerats byte för byte och refererade celler/rader har lästs och verifierats mot aktuell granskning. Statusen får bara visas för respektive källa när kontrollen faktiskt utförts.
 
-**Obligatorisk användarupplysning vid godkännande:** "Originaldokumenten sparas inte automatiskt i projektet. Behåll originalfilerna eller exportera källpaket för att kunna granska ursprungsceller senare." Varje omappad/olöst cell finns kvar oförändrad i **originalkällan**, men inte i .yadilab. Tyst förlust får inte påstås vara förhindrad om användaren inte fått denna varning och valt att fortsätta.
+**En tredje oberoende dimension gäller arbetsytan:** `BASELINE_MATCH` när sha256(canonicalJson(canonicalNetworkView(currentProject))) är exakt lika med baselineNetworkSha256, annars `CHANGED_SINCE_IMPORT`. Detta är en konservativ, **projektomfattande** jämförelse; ett senare fält kan aldrig markeras `CURRENT_SOURCE_VERIFIED` enbart på grund av gammal importproveniens. När något nätverksfält ändras eller ett objekt försvinner visar UI `Historisk import; aktuellt projekt har ändrats efter import` och originalets cellreferenser som historik. En ändring som senare återställs till byte-identisk kanonisk projektsnapshot ger BASELINE_MATCH, men gör inte originalfilen SOURCE_VERIFIED utan separat källkontroll.
 
-**Gränser:** v1.4 importEvidence måste rymmas inom exakt mätt MAX_BODY/Save-gräns; sätt en separat hård maximal serialiserad importEvidence-storlek på 2 MiB och avvisa med ett begripligt fel om den överskrids. Beskär aldrig origins, sourceRefs eller decisions för att passa. Själva .yadilab-kandidatens sammanlagda serialiserade bytes ska kontrolleras före godkännande. Om modellen är för stor kan användaren importera mindre källmängd uttryckligen.
+**Validering och mutation:** `validate_project()` validerar manifestets typer, enumvärden och **intern** referenskonsistens mot manifestets egna sources/views/decisions. Den får **inte** kräva att ett historiskt accepterat targetKey fortfarande finns i aktuell projektgraf efter användarens redigering eller att aktuell nätverks-hash fortfarande matchar baseline; då skulle vanlig edit/Save brytas. Importplanens `proposedProject` valideras däremot mot både faktiskt källinnehåll och alla målfält **innan första importgodkännande**. Efter Save/Open utan originalfil utges aldrig ett nytt påstående om verifierad originalcell.
 
-### 7.4 Replay och stale-preview
+**Separat källpaket** (explicit export): JSON `{sourceBundleVersion:"1",sources:[{sourceId,filename,kind,sha256,contentBase64}]}`. Innehåller *exakta originalbytes* i standard-base64 och är inte del av .yadilab. Export får starta endast från ett aktivt, inspekterat originalfil-set, vid ett uttryckligt klick; appen ska säga `Nedladdning initierad, filens skrivning till disk ej verifierad`, aldrig lova att filen har arkiverats. Vid återanslutning av verifierad källfil eller källpaket kontrolleras ID, SHA-256, filtyp, bladstruktur och källreferenser mot manifestet. Felaktig hash eller olika celler ger avslag och får inte ändra projekt eller historik. Utan källpaket/originalfil ska UI visa `Källfil ej ansluten; ursprungsceller kan inte kontrolleras`.
 
-Importplanens fingerprint är SHA-256 av kanonisk JSON över planVersion, källhashar, hela mappingViews, explicit exkludering/val, projektName och målvalideringsversion; sortera JSON-objektnycklar rekursivt och serialisera UTF-8 med fasta separatorer och utan NaN/Infinity. Undvik att inkludera klockslag, UI-text eller radordning i osorterade hashtabeller. Testa att indata med annan JSON-nyckelordning får samma fingerprint och att ändrade fält, källa, val och beroenden ändrar det.
+**Obligatorisk användarupplysning före importgodkännande:** `Originaldokumenten lagras inte i projektfilen. Behåll källfilerna eller exportera separat källpaket för senare kontroll av ursprungsceller. Enbart projektfilen kan inte återskapa den ursprungliga arbetsboken.` Om användaren inte uttryckligen godkänner detta får arbetsytan inte ersättas. Omappade cellvärden finns i originalet men **inte** automatiskt i projektet; ingen funktion får beskriva detta som förlustfri arkivering av originalet.
 
-Inget serverlagrat/importerat sessionstillstånd krävs. Förhandsvisning och planering är skrivskyddade. UI fångar exakt källhashar, mappningsrev, planfingeravtryck, workspaceRevision och editRevision före varje asynkront anrop. Svar som inte matchar aktuella värden ska kastas. Precis före arbetsytebyte krävs ny kontroll av revisioner och en aktuell, validerad plan med samma fingerprint. En äldre eller annan fliks plan får aldrig ersätta nyare arbetsyta. När import godkänts blir arbetsytan osparad tills befintlig Save används.
+**Resursgränser:** maximalt 2 MiB UTF-8-serialiserat `importEvidence` och dessutom faktisk `MAX_BODY` för hela projektets reala Save-JSON. Räkna bytes före användarbekräftelse; avvisa överstora kandidater eller erbjud ett uttryckligt mindre urval. Ursprung och decisions får aldrig tyst beskäras. Ett nytt importbeslut skapar ett nytt kvitto och ersätter det föregående **endast** genom ett separat uttryckligt projektbyte med vanlig Save-semantik; ingen dold sammanslagning av historik krävs.
 
-### 7.5 Version och kompatibilitet
+### 7.4 Exakt canonicalJson, fingerprint och stale-guard
 
-Modelldelen av schema 1.4 ska vara semantiskt densamma som 1.3. Bevara validering av gamla schemaVersion-strängar och deras exakta fältgränser. Uppdatera alla kodvägar som jämför 1.3 exakt (inklusive statiska routes och VLAN/MAC) så att 1.4 får samma protokollfunktioner. Schema 1.4 ska kunna användas av befintlig simuleringsmotor utan att proveniensen blir aktiv topologi.
+**canonicalJson(v)**: Python `json.dumps(v, ensure_ascii=False, sort_keys=True, separators=(",",":"), allow_nan=False)` följt av UTF-8, utan BOM eller avslutande newline. Tillåt endast JSON-värden: null, boolean, Unicode-sträng, ändlig exakt representerbar heltalstyp, arrayer och objekt; flyttal, NaN och Infinity i plan-/mappnings-/proveniensmetadata **avvisas**. För projektets nätverkskoordinater används det redan normaliserade kanoniska projektet med validatorns numeriska värden; testvektorn måste täcka både heltals- och giltiga flyttalskoordinater med serverns JSON-normalisering och verifiera stabila bytes. Inga JS-fingerprint beräknas från client-side JSON.stringify av osorterade objekt; servern är auktoritativ och UI behandlar dess fingerprint som opaque.
 
-Äldre filer ska vara byte-identiska fram till ett uttryckligt Save; öppning validerar men migrerar aldrig. Export av v1.4 till en tabellvariant som inte kan bevara manifestet ska avvisas med ett begripligt förlustmeddelande – ingen tyst nedgradering. Projekt som saknar importEvidence är inte v1.4.
+**fingerprint-input** är exakt JSON-objektet `{contractVersion,projectName,validatorVersion,sources,mappingViews,rowValues,excludedUses,selectedUnitIds}`. `validatorVersion` = "1.4" och `sources` innehåller endast `{sourceId,sha256,csvDelimiter}` (csvDelimiter=null för XLSX/ODS) efter verklig bytesverifiering. Projektnamn normaliseras med befintlig `_name()` innan hashning. Sortera källor stigande efter numeriskt src-index; mappingViews efter numeriskt viewId; rowValues efter viewId,row,targetField; excludedUses efter viewId,row; selectedUnitIds lexikografiskt. Varje dubblett eller ogiltigt element avvisas **före** canonicalJson. Nycklar i objekt sorteras som ovan. `fingerprint` är hex(SHA-256(canonicalJson(fingerprint-input))). Den kan användas för ändringsdetektion, inte autentisering. **Endast detta plan.fingerprint** finns i svarskontraktet.
+
+Status-, report- och planunit-arrayer sorteras också deterministiskt (units: kind,targetKey; claims: viewId,sourceId,tableId,row,targetKind,targetKey; diagnostics: code,unitId,sourceRefs; recordReviews: sourceId,tableId,row). Sorteringsnycklar och serialisering ska få **testvektorer med exakta förväntade bytes och SHA-256** i testsviten. Samma logiska request med annan JSON-nyckelordning ger samma fingerprint, medan ändrat källbyte, avskiljare, roll, radval, rowValue, excludedUse, projektName, selectedUnitId eller valideringsversion ger nytt hash.
+
+**Stale-guard:** Före varje asynkront 4A-/4B-/4C-anrop fångar UI aktuella originalfilers SHA-256, previewGeneration, mappingRevision, plan.fingerprint (om plan redan finns), workspaceRevision och editRevision. Efter svar och vid slutligt godkännande måste **alla** relevanta komponenter fortfarande matcha. Ett gammalt svar får inte ändra källvy, plan, aktuellt projekt eller Save-status. Den slutliga valda ImportPlan måste beräknas på nytt av servern från aktuella bytes och hela requesten; godkänn bara om fingerprint och alla kontrollrevisioner matchar senast granskad plan. Ingen server- eller browsercache får vara enda aukktoritet för ett importgodkännande.
+
+### 7.5 Schema 1.4, befintlig editor och simulatorprojektion
+
+Schema 1.4 har **exakt** samma kanoniska nätverksbetydelse som 1.3 men kräver historiskt `importEvidence`. `network_core/model.py` ska acceptera gamla 1.0–1.3 helt oförändrat och 1.4 med korrekt manifest. All 1.3-funktionalitet för `staticRoutes`, MAC och VLAN måste också tillåtas för 1.4; idag gör flera kodvägar jämförelsen `version == SCHEMA_VERSION` där SCHEMA_VERSION="1.3". Samtliga sådana gränser och frontend-schemakontroller måste täckas av test.
+
+**Kritisk redigeringsinvariant:** I befintliga `web/app.js` finns flera uttryckliga `attempt.schemaVersion = '1.3'` vid ändring av MAC, VLAN och route. Vid en avsiktlig funktion som redan kräver uppgradering ska **endast** dokument 1.0–1.2 uppgraderas till 1.3, enligt befintlig policy. Dokument 1.3 förblir 1.3; dokument **1.4 förblir alltid 1.4 med samma historiska importEvidence** vid alla ändringar, radering, validering, Save/Open och projekt-export. Ingen redigering får skriva tillbaka "1.3" på ett 1.4-projekt, radera importEvidence eller skapa automatisk 1.4-migration av äldre filer. Testa ALLA inspector-/Builder-vägar som kan skriva över project, inklusive async validator-svar, nod-/zon-/port-/kabelborttagning och staticRoutes. Att projektets aktuella nätverksdel ändras ska endast påverka härledd `CHANGED_SINCE_IMPORT`-status; den historiska provenance-delen ska vara oförändrad.
+
+**canonicalNetworkView(project)** definieras för beräkningar/transport som en **icke-mutativ, djupt kopierad och separat validerad** projektion med exakt `{schemaVersion:"1.3", name, zones, nodes, links}`, innehållande alla verkligt deklarerade 1.3-kompatibla nätverksfält och inga `importEvidence`-fält. Den byggs från ett redan validate_project()-validerat original 1.4, bibehåller nod-, port-, länk-, VLAN-/MAC-/route-ID och ordning, och valideras även med gamla 1.3-vägen. Projektionen är en **transportvy**, inte ett parallellt kanoniskt lagringsformat eller en extra auktoritet. För schema 1.0–1.3 skickas deras faktiska oförändrade nätverksdokument enligt existerande kontrakt.
+
+Alla simulerings-/diagnostik-/sessionsanrop som annars skickar `JSON.stringify(project)` ska skicka `canonicalNetworkView(project)` **för 1.4** så att importEvidence inte kopieras med varje trafik- eller sessionsrequest. Befintligt original, sparad SHA, full-revisionssnapshot och sessionernas invalidationsregler förblir knutna till den verkliga fullständiga projektmodellen, inte bara transportvyn. Protokollmotorer ska aldrig läsa proveniens som alternativa nätverksfakta. Före och efter separationen måste verkliga DHCP/ARP/ICMP/IPv4-/routingfall ge samma resultat för identiska nätverksfält.
+
+`baselineNetworkSha256` i §7.3 beräknas som SHA-256(canonicalJson(canonicalNetworkView(project))) på **originalets godkända nätverksdel vid importen**. Samma nätverksprojektion används för att jämföra aktuell arbetsyta mot historisk baseline, inte för att verifiera originalkällan.
+
+Existerande strikta kalkylbladsexport ska fortsatt acceptera endast de gamla uttryckligen stödda schemana. För 1.4 måste den förklara att export skulle förlora manifest/proveniens och avvisa exporten, inte konvertera tyst till 1.3. Befintliga .json/.yadilab-, Save/Open- och optimistiska SHA-konfliktkontrakt gäller oförändrat. Äldre filer ska vara byte-identiska utan Save och får inte uppgraderas genom enbart Open.
 
 ## 8. Fast måltypskatalog för källpåståenden
 
@@ -323,7 +351,7 @@ Dessa **sju generiska roller** är produktens egna semantiska kategorier, inte p
 | role | Deklarerade fält / mappningsmöjligheter | Tillåten effekt |
 |---|---|---|
 | device_inventory | node.id, node.label, node.kind, node.zoneId | En eller flera enheter via flera views/rows |
-| interface_inventory | port.nodeId, port.id, port.name, port.enabled, port.ipv4, port.mac, port.vlanMode, port.accessVlan, port.allowedVlans | Port under uttryckligen deklarerad nod |
+| interface_inventory | port.nodeId, port.id, port.name, port.enabled, port.ipv4, port.mac, port.vlanMode, port.accessVlan, port.allowedVlans | Validerad port; VLAN-fälten är **endast mappningsfält** som måste kombineras exakt till modellens nästlade port.vlan (§8.1) |
 | cable_register | link.id, link.aNode, link.aPort, link.bNode, link.bPort, link.enabled | Länk med två verkligt specificerade portändpunkter |
 | zone_inventory | zone.id, zone.label | Zon |
 | static_route_register | route.nodeId, route.id, route.destination, route.nextHop, route.outPort | Route på explicit router/host enligt modell |
@@ -339,6 +367,18 @@ Dessa **sju generiska roller** är produktens egna semantiska kategorier, inte p
 **Sammanfogning:** Samma targetKey och samma fältvärden från flera källclaims sammanfogas med alla origins och högst ett objekt. Olika värden på samma fält ger BLOCKED och rapport om båda källcellerna. En källa som bara bidrar med ett fåtal kompletterande fält kan utgöra en del av en enhet; alla nödvändiga fält kontrolleras innan unit blir ACTIONABLE. Mellanmodellen får vara ofullständig, men inte det objekt som skickas till validate_project().
 
 **Representation:** Modell, tillverkare, serienummer, rackplacering, anteckningar och andra uttryckliga källfält saknar i dag allmänna mål i nätverksmodellen. De ska i importöversikten visas som omappade/icke representerbara, inte omvandlas till nodtype, port eller topologi. Deras faktiska värden kan endast återvisas från ansluten originalkälla/källpaket. Användaren måste aktivt godkänna denna begränsning innan partiell import.
+
+### 8.1 Exakt VLAN-översättning från mappningsfält
+
+`port.vlanMode`, `port.accessVlan` och `port.allowedVlans` är **inte** fält på den kanoniska porten. Vid kandidatbygget ska de konstruera **ett** valfritt `port.vlan`-objekt enligt redan existerande `network_core/model.py::_vlan_config()`:
+- Utan explicit `port.vlanMode` och utan befolkade VLAN-fält: **utelämna** `vlan` (inte automatisk `null`, ingen antagen access-VLAN).
+- Explicit `vlanMode="access"` kräver exakt ett heltal `accessVlan` inom 1..4094 och att `allowedVlans` saknas. Kanoniskt resultat: `{"mode":"access","vlan":10}`.
+- Explicit `vlanMode="trunk"` kräver en användarbekräftad, icke-tom lista av **unika** heltal 1..4094 i `allowedVlans`; `accessVlan` ska saknas. Resultat: `{"mode":"trunk","allowedVlans":[10,20]}`.
+- Fältkombinationer med båda accessVlan och allowedVlans, null/blankt mode men befolkade fält, okänd mode, dubblett VLAN, flyttalsvärde, mellanslag som kräver gissad normalisering eller VLAN på annan nodtyp än `switch` är BLOCKED/INVALID enligt explicit diagnostic; inga delar sparas.
+- Källtext som `"10,20"` är **inte automatiskt** array. Den kräver ett uttryckligt, testat användarbeslut som delar på kommatecken, och varje element typkontrolleras som heltal. Den exakta originalsträngen och beslutets ID bevaras i fältproveniens. Ordningen bevaras i kanoniskt resultat; samma identitets- och konfliktskydd gäller om flera vyer anger samma port.vlan.
+- `port.mac` får bara bindas enligt nuvarande validator; switchportens MAC får inte antas vara endpoint-MAC.
+
+Negativa 4C-fixturer måste omfatta access/trunk med förväxlade fält, tom allowedVlans, otillåten VLAN och fel nodtyp. Positiva fixturer ska jämföra den kompletta genererade `port.vlan`-JSON med oberoende handskrivet förväntat resultat.
 
 ## 9. Etapp 4B – importplan, blandade enhetsvyer och kompakta auditmanifest
 
