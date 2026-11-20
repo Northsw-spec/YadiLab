@@ -138,10 +138,12 @@ def browser_open(page, base):
     persistence = persistence.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     transfer = (ROOT / 'web/features/projects/transfer.js').read_text(encoding='utf8')
     transfer = transfer.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
+    mapping_profiles = (ROOT / 'web/features/projects/mapping-profiles.js').read_text(encoding='utf8').replace('export ', '')
     import_review = (ROOT / 'web/features/projects/import-review.js').read_text(encoding='utf8')
     import_review = import_review.replace("import {$, el} from '../../ui/dom.js';", '')
     import_review = import_review.replace("import {api} from '../../services/api.js';", '')
     import_review = import_review.replace("import {prepareInspection, submitInspection, submitInspectionPage, prepareSourceBundle, readSourceBundle} from './transfer.js';", '').replace('export ', '')
+    import_review = import_review.replace("import {validateMappingProfile, exportMappingProfile, bindMappingProfile} from './mapping-profiles.js';", '')
     queries = (ROOT / 'web/features/diagnostics/queries.js').read_text(encoding='utf8')
     queries = queries.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     presenters = (ROOT / 'web/features/diagnostics/presenters.js').read_text(encoding='utf8').replace('export ', '')
@@ -170,7 +172,7 @@ def browser_open(page, base):
     app = app.replace("import {createSimulationSessionController} from './features/sessions/simulation-session.js';", '')
     app = app.replace("import {renderIcmpInvestigationPanel} from './features/diagnostics/icmp-investigation-panel.js';", '')
     app = app.replace("import {createImportReview} from './features/projects/import-review.js';", '')
-    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + import_review + '\n' + queries + '\n' + presenters + '\n' + icmp_panel + '\n' + investigation + '\n' + icmp_investigation + '\n' + dora_session + '\n' + simulation_session + '\n' + app)
+    page.add_script_tag(content=model + '\n' + canvas + '\n' + dom + '\n' + api + '\n' + persistence + '\n' + transfer + '\n' + mapping_profiles + '\n' + import_review + '\n' + queries + '\n' + presenters + '\n' + icmp_panel + '\n' + investigation + '\n' + icmp_investigation + '\n' + dora_session + '\n' + simulation_session + '\n' + app)
     return 'BRIDGED_LOCAL_HTTP'
 
 
@@ -3141,6 +3143,190 @@ def integrated_4c_regression(context, base, network_mode, store, errors, restart
     page.close()
 
 
+def mapping_profile_regression(context, base, network_mode, store, errors, restart):
+    """Real profile download and reuse against a new inspected CSV source."""
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page, base) == network_mode
+    old = b'Node,Label,Kind,Port,Name,Enabled\nH1,Host 1,host,eth0,Ethernet 0,yes\nSW1,Switch 1,switch,g1,Gigabit 1,no\n'
+    new = b'Node,Label,Kind,Port,Name,Enabled\nR2,Router 2,router,eth0,Ethernet 0,yes\nH2,Host 2,host,eth1,Ethernet 1,no\n'
+    wrong = b'Kind,Node,Label,Port,Name,Enabled\nrouter,R2,Router 2,eth0,Ethernet 0,yes\n'
+    def inspect(raw, filename):
+        page.locator('#external-files').set_input_files({'name':filename,'mimeType':'text/csv','buffer':raw})
+        page.locator('#external-file-choices select').first.select_option(',')
+        page.locator('#external-inspect-files').click()
+        expect(page.locator('#external-sources')).to_contain_text(filename)
+    page.locator('#external-import').click()
+    page.locator('#external-profile-file').set_input_files({
+        'name':'no-source.json','mimeType':'application/json','buffer':b'{"profileVersion":"1","views":[]}'})
+    expect(page.locator('#external-profile-status')).to_contain_text('Inspektera aktuella originalfiler')
+    inspect(old,'synthetic-only-old.csv')
+    for index, (role, columns) in enumerate((
+        ('device_inventory', {'node.id':'A','node.label':'B','node.kind':'C'}),
+        ('interface_inventory', {'port.nodeId':'A','port.id':'D','port.name':'E','port.enabled':'F'}),
+    )):
+        page.locator('#external-add-view').click()
+        mapping=page.locator('#external-views fieldset').nth(index)
+        mapping.locator('select').first.select_option('0:sheet-1')
+        mapping.locator('select').nth(1).select_option(role)
+        mapping.locator('input[placeholder^="Rubrikrad"]').fill('1')
+        mapping.locator('input[placeholder^="Valda originalrader"]').fill('2,3')
+        for field, column in columns.items():
+            mapping.locator('label').filter(has_text=field).locator('input').fill(column)
+        if index==1:
+            mapping.locator('textarea[placeholder^="valueMaps"]').fill(
+                '{"port.enabled":{"yes":"true","no":"false"}}')
+        mapping.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+    with page.expect_download() as downloaded:
+        page.locator('#external-profile-export').click()
+    profile_bytes=Path(downloaded.value.path()).read_bytes()
+    profile=json.loads(profile_bytes)
+    assert set(profile)=={'profileVersion','views'} and profile['profileVersion']=='1'
+    assert len(profile['views'])==2
+    assert set(profile['views'][0])=={
+        'role','headerRow','expectedHeaders','columns','valueMaps','constants','transformations','label'}
+    assert profile['views'][1]['valueMaps']=={'port.enabled':{'yes':'true','no':'false'}}
+    for forbidden in ('sourceId','tableId','viewId','selectedRows','sourceManifest',
+                      'acceptedChanges','contentBase64','planFingerprint'):
+        assert forbidden not in profile_bytes.decode()
+    expect(page.locator('#external-profile-status')).to_contain_text('ej verifierad')
+    def import_profile():
+        page.locator('#external-profile-file').set_input_files({
+            'name':'mapping-profile.json','mimeType':'application/json','buffer':profile_bytes})
+        expect(page.locator('#external-profile-bindings select')).to_have_count(2)
+        for control in page.locator('#external-profile-bindings select').all():
+            control.select_option('0:sheet-1')
+    inspect(wrong,'synthetic-only-wrong.csv')
+    import_profile()
+    page.locator('#external-profile-confirm').click()
+    expect(page.locator('#external-profile-status')).to_contain_text('kolumn A')
+    assert page.locator('#external-views fieldset').count()==0
+    assert page.locator('[data-node-id]').count()==0
+    for filename, data, message in (
+        ('empty.json', b'', '256 KiB'),
+        ('invalid.json', b'{broken', 'JSON'),
+        ('invalid-utf8.json', b'\xff', 'giltig UTF-8'),
+        ('source-bundle.json', b'{"sourceBundleVersion":"1","sources":[]}', 'profil'),
+        ('oversized.json', b'x'*(256*1024+1), '256 KiB'),
+    ):
+        page.locator('#external-profile-file').set_input_files({
+            'name':filename,'mimeType':'application/json','buffer':data})
+        expect(page.locator('#external-profile-status')).to_contain_text(message)
+        assert page.locator('#external-views fieldset').count()==0
+    import_profile()
+    page.locator('#external-add-view').click()
+    assert page.locator('#external-profile-confirm').is_disabled()
+    page.locator('#external-views fieldset').last.get_by_text('Ta bort vy').click()
+    assert page.locator('#external-views fieldset').count()==0
+    page.evaluate("""() => {
+      window.__originalProfileRead = File.prototype.arrayBuffer;
+      File.prototype.arrayBuffer = function() {
+        if (this.name !== 'mapping-profile.json') return window.__originalProfileRead.call(this);
+        const file = this;
+        return new Promise(resolve => {
+          window.__releaseProfileRead = () => window.__originalProfileRead.call(file).then(resolve);
+        });
+      };
+    }""")
+    page.locator('#external-profile-file').set_input_files([])
+    page.locator('#external-profile-file').set_input_files({
+        'name':'mapping-profile.json','mimeType':'application/json','buffer':profile_bytes})
+    page.wait_for_function('window.__releaseProfileRead !== undefined')
+    inspect(new,'synthetic-only-new.csv')
+    page.evaluate('window.__releaseProfileRead()')
+    expect(page.locator('#toast')).to_contain_text('Granskningen ändrades under anropet')
+    assert page.locator('#external-profile-bindings select').count()==0
+    page.evaluate('() => { File.prototype.arrayBuffer = window.__originalProfileRead; }')
+    import_profile()
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#external-profile-confirm').click()
+    expect(page.locator('#external-views fieldset')).to_have_count(2)
+    assert all(box.locator('input[placeholder^="Valda originalrader"]').input_value()==''
+               for box in page.locator('#external-views fieldset').all())
+    for box in page.locator('#external-views fieldset').all():
+        box.locator('input[placeholder^="Valda originalrader"]').fill('2,3')
+        box.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+    page.locator('#external-project-name').fill('synthetic only profile reuse')
+    page.locator('#external-project-name').dispatch_event('change')
+    with page.expect_response('**/api/import/build-candidate') as planned:
+        page.locator('#external-plan-button').click()
+    discovery=planned.value.json()['plan']
+    assert len(discovery['units'])==4 and len(discovery['claims'])==4
+    assert discovery['sourceManifest'][0]['sha256']==hashlib.sha256(new).hexdigest()
+    print('4D1 profile source SHA-256:', discovery['sourceManifest'][0]['sha256'],
+          'plan fingerprint:', discovery['fingerprint'])
+    assert all(claim['sourceRef']['sourceId']=='src-1' for claim in discovery['claims'])
+    checks=page.locator('#external-plan-result input[type="checkbox"]')
+    for index in range(checks.count()): checks.nth(index).check()
+    with page.expect_response('**/api/import/build-candidate') as selected:
+        page.locator('#external-candidate-button').click()
+    candidate=selected.value.json()['plan']
+    assert candidate['canApply']
+    first_box=page.locator('#external-views fieldset').first
+    rows_control=first_box.locator('input[placeholder^="Valda originalrader"]')
+    rows_control.fill('2')
+    rows_control.dispatch_event('change')
+    assert page.locator('#external-apply').is_disabled()
+    rows_control.fill('2,3')
+    rows_control.dispatch_event('change')
+    with page.expect_response('**/api/import/build-candidate'):
+        page.locator('#external-plan-button').click()
+    checks=page.locator('#external-plan-result input[type="checkbox"]')
+    for index in range(checks.count()): checks.nth(index).check()
+    with page.expect_response('**/api/import/build-candidate') as selected:
+        page.locator('#external-candidate-button').click()
+    candidate=selected.value.json()['plan']
+    assert candidate['canApply']
+    expected={'schemaVersion':'1.3','name':'synthetic only profile reuse','zones':[],
+      'nodes':[
+        {'id':'H2','label':'Host 2','kind':'host','x':110,'y':110,'zoneId':None,
+         'ports':[{'id':'eth1','name':'Ethernet 1','enabled':False,'ipv4':None}]},
+        {'id':'R2','label':'Router 2','kind':'router','x':370,'y':110,'zoneId':None,
+         'ports':[{'id':'eth0','name':'Ethernet 0','enabled':True,'ipv4':None}]},
+      ],'links':[]}
+    assert canonical_network_view(candidate['proposedProject'])==expected
+    receipt=candidate['proposedProject']['importEvidence']
+    assert receipt['sources'][0]['filename']=='synthetic-only-new.csv'
+    port_change=next(c for c in receipt['acceptedChanges'] if c['targetKind']=='port' and
+                     c['targetKey']=='["R2","eth0"]')
+    assert {r['kind'] for r in port_change['fieldOrigins']['enabled']}=={'source_cell','user_decision'}
+    page.locator('#external-warning').check()
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#external-apply').click()
+    expect(page.locator('[data-node-id]')).to_have_count(2)
+    with page.expect_download() as bundle_download:
+        page.locator('#external-bundle-export').click()
+    bundle=json.loads(Path(bundle_download.value.path()).read_bytes())
+    page.locator('#external-close').click()
+    filename='synthetic-only-profile-reuse'
+    disk=store/f'{filename}.yadilab'
+    assert not disk.exists()
+    page.locator('#project-filename').fill(filename)
+    page.locator('#project-filename').dispatch_event('change')
+    with page.expect_response('**/api/save') as saved: page.locator('#save-project').click()
+    assert saved.value.status==200
+    stored=json.loads(disk.read_bytes())
+    assert canonical_network_view(stored)==expected
+    assert stored['importEvidence']==receipt and stored['schemaVersion']=='1.4'
+    restart()
+    page.reload(wait_until='domcontentloaded')
+    page.locator('#saved-projects').select_option(filename)
+    page.locator('#open-project').click()
+    expect(page.locator('[data-node-id]')).to_have_count(2)
+    expect(page.locator('#import-evidence-status')).to_contain_text('BASELINE_MATCH')
+    expect(page.locator('#import-evidence-status')).to_contain_text('Källfil ej ansluten')
+    page.locator('#external-import').click()
+    with page.expect_response('**/api/import/verify-sources') as verified:
+        page.locator('#external-bundle-file').set_input_files({
+            'name':'synthetic-only-sources.json','mimeType':'application/json',
+            'buffer':json.dumps(bundle).encode()})
+    assert verified.value.json()['sourceStatus']=='SOURCE_VERIFIED'
+    assert verified.value.json()['replayStatus']=='MATCH'
+    assert json.loads(disk.read_bytes())==stored
+    assert not errors, errors
+    page.close()
+
+
 def run():
     with tempfile.TemporaryDirectory() as td, sync_playwright() as playwright:
         store = Path(td)
@@ -3160,7 +3346,8 @@ def run():
         module_responses = {}
         def record_module(response):
             for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
-                           'features/projects/transfer.js', 'features/projects/import-review.js',
+                           'features/projects/transfer.js', 'features/projects/mapping-profiles.js',
+                           'features/projects/import-review.js',
                            'features/diagnostics/queries.js',
                            'features/diagnostics/presenters.js',
                            'features/diagnostics/icmp-investigation-panel.js',
@@ -3177,7 +3364,8 @@ def run():
             expect(page.locator('#empty-state')).to_be_visible()
             if network_mode == 'DIRECT_HTTP':
                 for module in ('ui/dom.js', 'services/api.js', 'features/projects/persistence.js',
-                               'features/projects/transfer.js', 'features/projects/import-review.js',
+                               'features/projects/transfer.js', 'features/projects/mapping-profiles.js',
+                               'features/projects/import-review.js',
                                'features/diagnostics/queries.js',
                                'features/diagnostics/presenters.js',
                                'features/diagnostics/icmp-investigation-panel.js',
@@ -5677,6 +5865,7 @@ def run():
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, route=True)
             cable_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             integrated_4c_regression(context, base, network_mode, store, errors, restart_for_import_review)
+            mapping_profile_regression(context, base, network_mode, store, errors, restart_for_import_review)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)

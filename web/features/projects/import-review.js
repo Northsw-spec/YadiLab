@@ -1,6 +1,7 @@
 import {$, el} from '../../ui/dom.js';
 import {api} from '../../services/api.js';
 import {prepareInspection, submitInspection, submitInspectionPage, prepareSourceBundle, readSourceBundle} from './transfer.js';
+import {validateMappingProfile, exportMappingProfile, bindMappingProfile} from './mapping-profiles.js';
 
 // Validate a whole page before either the displayed rows or selectable source rows change.
 export function validateReviewPage(page, source, table, fromRow) {
@@ -46,17 +47,26 @@ export function createImportReview({context, current, getProject, replaceProject
   const dialog = $('external-dialog');
   let sources = [], fileChoices = [], views = [], plan = null, candidate = null, planToken = null, candidateToken = null, attached = false;
   let revision = 0, statusGeneration = 0, sourceGeneration = 0;
+  let pendingProfile = null, pendingToken = null;
+  function clearPendingProfile() {
+    pendingProfile = null; pendingToken = null;
+    $('external-profile-bindings').replaceChildren();
+    $('external-profile-confirm').disabled = true;
+  }
   const note = message => { $('external-plan-result').textContent = message; };
   const stale = () => notify('Granskningen ändrades under anropet. Upprepa granskningen.', true);
-  const guard = () => ({context: context(), revision, hashes: sources.map(s => s.sha256).join(','),
+  const guard = () => ({context: context(), revision, sourceGeneration,
+    hashes: sources.map(s => s.sha256).join(','),
     preview: getPreviewGeneration(), choices: JSON.stringify(views.map(v => v.data)),
     fingerprint: plan?.fingerprint ?? null});
   const valid = token => current(token.context) && token.revision === revision &&
+    token.sourceGeneration === sourceGeneration &&
     token.hashes === sources.map(s => s.sha256).join(',') &&
     token.preview === getPreviewGeneration() &&
     token.choices === JSON.stringify(views.map(v => v.data)) &&
     token.fingerprint === (plan?.fingerprint ?? null);
   function invalidate() {
+    clearPendingProfile();
     revision++; plan = null; candidate = null; planToken = null; candidateToken = null;
     $('external-candidate-button').disabled = true;
     $('external-apply').disabled = true;
@@ -90,6 +100,8 @@ export function createImportReview({context, current, getProject, replaceProject
     $('external-verification').replaceChildren();
     $('external-add-view').disabled = true; $('external-plan-button').disabled = true;
     $('external-bundle-export').disabled = true;
+    $('external-profile-export').disabled = true;
+    $('external-profile-status').textContent='';
     ++statusGeneration;
     queueMicrotask(refreshStatus);
   }
@@ -131,6 +143,7 @@ export function createImportReview({context, current, getProject, replaceProject
   function discardInspections() {
     ++sourceGeneration; sources = []; views = []; attached = false;
     refreshStatus(); invalidate(); renderViews(); renderSources();
+    $('external-profile-status').textContent='Ny källa vald; tidigare profilbindning är ogiltig.';
   }
   function renderFileChoices() {
     const target = $('external-file-choices'); target.replaceChildren();
@@ -253,9 +266,10 @@ export function createImportReview({context, current, getProject, replaceProject
       remove.addEventListener('click',()=>{views.splice(index,1); invalidate(); renderViews();});
       container.append(box);
     });
+    $('external-profile-export').disabled = !views.length;
   }
-  function request(selectedUnitIds) {
-    const mappingViews = views.map((view,index) => {
+  function mappingViewsRequest() {
+    return views.map((view,index) => {
       const data=view.data, [sourceIndex,tableId]=data.table.split(':');
       const meta=sources[Number(sourceIndex)].inspection.tables.find(t=>t.tableId===tableId);
       const headerRow=data.header === '' ? null : Number(data.header);
@@ -271,12 +285,18 @@ export function createImportReview({context, current, getProject, replaceProject
         columns,valueMaps:JSON.parse(data.maps),constants:JSON.parse(data.constants),
         expectedHeaders:headerCells?.map(c=>c.value) ?? [],label:data.label};
     });
+  }
+  function transformationsRequest() {
+    return views.flatMap((view,index) => [
+      view.data.accessTransform && {viewId:`view-${index+1}`,targetField:'port.accessVlan',operation:view.data.accessTransform,delimiter:null},
+      view.data.trunkTransform && {viewId:`view-${index+1}`,targetField:'port.allowedVlans',operation:view.data.trunkTransform,delimiter:','},
+    ].filter(Boolean));
+  }
+  function request(selectedUnitIds) {
+    const mappingViews = mappingViewsRequest();
     return {contractVersion:'1',projectName:$('external-project-name').value,
       sources:sourceRequest(),mappingViews,
-      transformations:views.flatMap((view,index) => [
-        view.data.accessTransform && {viewId:`view-${index+1}`,targetField:'port.accessVlan',operation:view.data.accessTransform,delimiter:null},
-        view.data.trunkTransform && {viewId:`view-${index+1}`,targetField:'port.allowedVlans',operation:view.data.trunkTransform,delimiter:','},
-      ].filter(Boolean)),
+      transformations:transformationsRequest(),
       rowValues:JSON.parse($('external-row-values').value),
       excludedUses:JSON.parse($('external-exclusions').value),selectedUnitIds};
   }
@@ -383,6 +403,57 @@ export function createImportReview({context, current, getProject, replaceProject
     }
   });
   $('external-add-view').addEventListener('click',()=>{ if(views.length>=64)return showError(new Error('Högst 64 MappingViews.')); views.push({}); renderViews(); invalidate(); });
+  $('external-profile-export').addEventListener('click',()=>{
+    try {
+      const profile=exportMappingProfile(mappingViewsRequest(),transformationsRequest());
+      download({content:JSON.stringify(profile,null,2)+'\n',type:'application/json',filename:'mapping-profile.json'});
+      $('external-profile-status').textContent='Nedladdning initierad, filens skrivning till disk ej verifierad';
+    } catch(error) { showError(error); }
+  });
+  $('external-profile-file').addEventListener('change',async event=>{
+    const file=event.target.files[0]; if(!file)return;
+    event.target.value='';
+    clearPendingProfile();
+    const token=guard();
+    try {
+      if (!sources.length) throw new Error('Inspektera aktuella originalfiler före profilimport.');
+      if (!file.name.toLowerCase().endsWith('.json') || file.size===0 || file.size>256*1024)
+        throw new Error('Välj en JSON-profil på högst 256 KiB.');
+      const raw=await file.arrayBuffer();
+      if (!valid(token)) return stale();
+      let decoded, parsed;
+      try { decoded=new TextDecoder('utf-8',{fatal:true}).decode(raw); }
+      catch { throw new Error('Profilen är inte giltig UTF-8.'); }
+      try { parsed=JSON.parse(decoded); }
+      catch { throw new Error('Profilen innehåller ogiltig JSON.'); }
+      const profile=validateMappingProfile(parsed);
+      if (!valid(token)) return stale();
+      pendingProfile=profile; pendingToken=token;
+      const bindings=$('external-profile-bindings');
+      bindings.replaceChildren(...profile.views.map((item,index) => el('label',{},
+        `Profilvy ${index+1}: ${item.role} · ${item.label} · rubrikrad ${item.headerRow ?? 'ingen'} · `,
+        el('select',{},el('option',{value:''},'Välj inspekterad källtabell'),...tableOptions()))));
+      $('external-profile-confirm').disabled=false;
+      $('external-profile-status').textContent='Välj uttryckligen en tabell för varje profilvy. Inga originalrader väljs automatiskt.';
+    } catch(error) {
+      if (valid(token)) { $('external-profile-status').textContent=error.message; showError(error); }
+    }
+  });
+  $('external-profile-confirm').addEventListener('click',()=>{
+    try {
+      if (!pendingProfile || !pendingToken || !valid(pendingToken)) return stale();
+      const choices=[...$('external-profile-bindings').querySelectorAll('select')].map(control=>{
+        const [sourceIndex,tableId]=control.value.split(':');
+        return {sourceIndex:control.value ? Number(sourceIndex) : -1,tableId:tableId || ''};
+      });
+      const bound=bindMappingProfile(pendingProfile,choices,sources);
+      if (!confirm(`Ersätta aktuella MappingViews med ${bound.length} profilvyer? Välj originalrader på nytt. Inget projekt skapas eller sparas.`)) return;
+      if (!valid(pendingToken)) return stale();
+      views=bound.map(data=>({data}));
+      invalidate(); renderViews();
+      $('external-profile-status').textContent=`${bound.length} profilvyer bundna till aktuella källtabeller. Välj originalrader på nytt.`;
+    } catch(error) { $('external-profile-status').textContent=error.message; showError(error); }
+  });
   for(const id of ['external-project-name','external-row-values','external-exclusions']) $(''+id).addEventListener('input',invalidate);
   $('external-plan-button').addEventListener('click',buildPreview);
   $('external-candidate-button').addEventListener('click',buildCandidate);

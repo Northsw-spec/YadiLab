@@ -45,6 +45,14 @@
       <h3>2 · Explicita mappningsvyer</h3>
       <button id="external-add-view" type="button" disabled>Lägg till MappingView</button>
       <div id="external-views"></div>
+      <h4>Återanvändbara mappningsprofiler</h4>
+      <p>En profil innehåller endast mappningsregler. Bind varje vy till en inspekterad tabell och välj originalrader på nytt.</p>
+      <button id="external-profile-export" type="button" disabled>Exportera mappningsprofil</button>
+      <label for="external-profile-file">Importera mappningsprofil (.json)</label>
+      <input id="external-profile-file" type="file" accept=".json,application/json">
+      <div id="external-profile-bindings" aria-live="polite"></div>
+      <button id="external-profile-confirm" type="button" disabled>Bekräfta tabellbindningar och ersätt MappingViews</button>
+      <p id="external-profile-status" aria-live="polite"></p>
       <label for="external-row-values">Radunika användarbeslut (JSON-array enligt kontraktet, t.ex. [{"viewId":"view-1","row":2,"targetField":"node.id","valueType":"text","value":"H-01"}])</label>
       <textarea id="external-row-values" class="control" rows="3">[]</textarea>
       <label for="external-exclusions">Uteslutna användningar (JSON-array med viewId, row och reason)</label>
