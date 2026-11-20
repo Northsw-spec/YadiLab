@@ -11,7 +11,7 @@ from network_core.storage import ProjectStore
 from test_import_plan import source, view
 
 
-def port_request(raw=b'Device,Label,Kind,Port,PortName,Enabled\nSW-01,Core,switch,Gi1/0/1,Uplink,true\n'):
+def port_request(raw=b'Device,Label,Kind,Port,PortName,Enabled\nSW-01,Core,switch,Gi1_0_1,Uplink,true\n'):
     headers = ('Device', 'Label', 'Kind', 'Port', 'PortName', 'Enabled')
     node = view({'node.id': ['A'], 'node.label': ['B'], 'node.kind': ['C']},
                 headers=headers)
@@ -30,9 +30,9 @@ class PortImportTests(unittest.TestCase):
         discovery = build_plan(req)['plan']
         units = {unit['kind']: unit for unit in discovery['units']}
         self.assertEqual(set(units), {'node', 'port'})
-        self.assertEqual(units['port']['targetKey'], '["SW-01","Gi1/0/1"]')
+        self.assertEqual(units['port']['targetKey'], '["SW-01","Gi1_0_1"]')
         self.assertEqual(units['port']['unitId'],
-                         internal_id('u-', ['port', '["SW-01","Gi1/0/1"]']))
+                         internal_id('u-', ['port', '["SW-01","Gi1_0_1"]']))
         self.assertEqual(units['port']['dependencies'], [units['node']['unitId']])
         self.assertEqual(len(discovery['recordReviews'][1]['viewUses']), 2)
         self.assertEqual(discovery['report']['ports'], 1)
@@ -51,14 +51,14 @@ class PortImportTests(unittest.TestCase):
         self.assertTrue(plan['canApply'])
         project = plan['proposedProject']
         self.assertEqual(project['nodes'][0]['ports'],
-                         [{'id': 'Gi1/0/1', 'name': 'Uplink',
+                         [{'id': 'Gi1_0_1', 'name': 'Uplink',
                            'enabled': True, 'ipv4': None}])
         self.assertEqual(project['links'], [])
         self.assertEqual(validate_project(project), project)
         changes = {item['targetKind']: item for item in project['importEvidence']['acceptedChanges']}
         self.assertEqual(changes['node']['fieldValues']['ports'], [])
         self.assertEqual(changes['port']['fieldValues'],
-                         {'nodeId': 'SW-01', 'id': 'Gi1/0/1', 'name': 'Uplink',
+                         {'nodeId': 'SW-01', 'id': 'Gi1_0_1', 'name': 'Uplink',
                           'enabled': True, 'ipv4': None})
         self.assertEqual(changes['port']['fieldOrigins']['ipv4'], [])
         self.assertEqual(changes['port']['fieldOrigins']['enabled'][0]['kind'], 'source_cell')
@@ -98,8 +98,8 @@ class PortImportTests(unittest.TestCase):
         self.assertIn('MISSING_REQUIRED_FIELD', [d['code'] for d in plan['diagnostics']])
 
         raw = (b'Device,Label,Kind,Port,PortName,Enabled\n'
-               b'SW-01,Core,switch,Gi1/0/1,Uplink,true\n'
-               b'SW-01,Core,switch,Gi1/0/1,Uplink,false\n')
+               b'SW-01,Core,switch,Gi1_0_1,Uplink,true\n'
+               b'SW-01,Core,switch,Gi1_0_1,Uplink,false\n')
         req = port_request(raw)
         for v in req['mappingViews']:
             v['selectedRows'] = [2, 3]
@@ -108,9 +108,17 @@ class PortImportTests(unittest.TestCase):
         self.assertEqual(port['status'], 'BLOCKED')
         self.assertIn('FIELD_CONFLICT', [d['code'] for d in plan['diagnostics']])
 
+    def test_port_id_must_obey_canonical_model(self):
+        req = port_request(b'Device,Label,Kind,Port,PortName,Enabled\n'
+                           b'SW-01,Core,switch,Gi1/0/1,Uplink,true\n')
+        plan = build_plan(req)['plan']
+        port = next(unit for unit in plan['units'] if unit['kind'] == 'port')
+        self.assertEqual(port['status'], 'INVALID')
+        self.assertIn('INVALID_PORT_ID', [d['code'] for d in plan['diagnostics']])
+
     def test_explicit_boolean_and_origin(self):
         req = port_request(b'Device,Label,Kind,Port,PortName,Enabled\n'
-                           b'SW-01,Core,switch,Gi1/0/1,Uplink,yes\n')
+                           b'SW-01,Core,switch,Gi1_0_1,Uplink,yes\n')
         discovery = build_plan(req)['plan']
         self.assertIn('UNMAPPED_BOOLEAN', [d['code'] for d in discovery['diagnostics']])
         req['mappingViews'][1]['valueMaps'] = {'port.enabled': {'yes': 'true', 'no': 'false'}}
