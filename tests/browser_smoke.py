@@ -2807,13 +2807,13 @@ def port_import_regression(context, base, network_mode, store, errors, restart):
     page = context.new_page()
     page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
     assert browser_open(page, base) == network_mode
-    raw = b'Device,Label,Kind,Port,PortName,Enabled\nSW-01,Core,switch,Gi1/0/1,Uplink,true\n'
+    raw = b'Device,Label,Kind,Port,PortName,Enabled\nSW-01,Core,switch,Gi1_0_1,Uplink,true\n'
     page.locator('#external-import').click()
     page.locator('#external-files').set_input_files({
         'name':'ports.csv','mimeType':'text/csv','buffer':raw})
     page.locator('#external-file-choices select').first.select_option(',')
     page.locator('#external-inspect-files').click()
-    expect(page.locator('#external-sources')).to_contain_text('Gi1/0/1')
+    expect(page.locator('#external-sources')).to_contain_text('Gi1_0_1')
     for index, (role, columns) in enumerate((
         ('device_inventory', {'node.id':'A','node.label':'B','node.kind':'C'}),
         ('interface_inventory', {'port.nodeId':'A','port.id':'D',
@@ -2832,7 +2832,7 @@ def port_import_regression(context, base, network_mode, store, errors, restart):
     units = {unit['kind']:unit for unit in preview.value.json()['plan']['units']}
     assert set(units) == {'node', 'port'}
     assert units['port']['dependencies'] == [units['node']['unitId']]
-    assert units['port']['targetKey'] == '["SW-01","Gi1/0/1"]'
+    assert units['port']['targetKey'] == '["SW-01","Gi1_0_1"]'
     checks = page.locator('#external-plan-result input[type="checkbox"]')
     assert checks.count() == 2
     checks.nth(1).check()
@@ -2845,7 +2845,7 @@ def port_import_regression(context, base, network_mode, store, errors, restart):
         page.locator('#external-candidate-button').click()
     project = selected.value.json()['plan']['proposedProject']
     assert project['nodes'][0]['ports'] == [
-        {'id':'Gi1/0/1','name':'Uplink','enabled':True,'ipv4':None}]
+        {'id':'Gi1_0_1','name':'Uplink','enabled':True,'ipv4':None}]
     assert project['links'] == []
     page.locator('#external-warning').check()
     page.once('dialog', lambda dialog: dialog.accept())
