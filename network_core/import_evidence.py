@@ -177,9 +177,11 @@ def validate_evidence(value):
             for label in labels:
                 if column_index(label) > table['columnCount']:
                     fail('columns', 'column out of table')
-        for mapping in view['valueMaps'].values():
-            if type(mapping) is not dict or any(type(k) is not str or type(v) is not str for k, v in mapping.items()):
+        for field, mapping in view['valueMaps'].items():
+            if type(mapping) is not dict or not mapping or any(type(k) is not str or type(v) is not str for k, v in mapping.items()):
                 fail('valueMaps', 'invalid mapping')
+            if field == 'port.enabled' and any(v not in ('true', 'false') for v in mapping.values()):
+                fail('valueMaps', 'invalid port.enabled mapping')
         for field, item in view['constants'].items():
             object_exact(item, {'type', 'value'}, 'constant')
             if not ((item['type'] == 'text' and type(item['value']) is str) or
