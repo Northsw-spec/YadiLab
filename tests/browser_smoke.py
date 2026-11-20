@@ -2427,7 +2427,8 @@ def import_review_regression(context, base, network_mode, store, errors, restart
     assert inspection.value.status == 200
     expect(page.locator('#external-sources')).to_contain_text(source_hash)
     expect(page.locator('#external-sources')).not_to_contain_text('stale.csv')
-    expect(page.locator('#external-sources')).to_contain_text('D2="first"')
+    expect(page.locator('#external-sources td[data-address="D2"]')).to_contain_text('first')
+    expect(page.locator('#external-sources td[data-address="D2"]')).to_contain_text('D2 · text')
     page.locator('#external-add-view').click()
     view = page.locator('#external-views fieldset').first
     view.locator('input[placeholder^="Rubrikrad"]').fill('1')
@@ -2442,17 +2443,20 @@ def import_review_regression(context, base, network_mode, store, errors, restart
     assert len(plan['claims']) == 2
     assert len(plan['units']) == 2
     assert plan['report']['unmappedCells'] >= 2
-    assert page.locator('#external-plan-result input[type="checkbox"]').count() == 2
-    page.locator('#external-plan-result input[type="checkbox"]').first.check()
-    page.locator('#external-plan-result input[type="checkbox"]').last.check()
+    page.locator('#external-plan-result .source-link').filter(has_text='D2').click()
+    expect(page.locator('#external-source-focus')).to_contain_text('D2 · text · first')
+    expect(page.locator('#external-sources td.source-highlight')).to_contain_text('first')
+    assert page.locator('#external-plan-result .unit-choice').count() == 2
+    page.locator('#external-plan-result .unit-choice').first.check()
+    page.locator('#external-plan-result .unit-choice').last.check()
     hold_http_reply(page, '/api/import/build-candidate', first_only=True)
     page.locator('#external-candidate-button').click()
     expect(page.locator('#external-candidate-button')).to_be_visible()
     page.wait_for_function('window.__heldReply === true')
-    page.locator('#external-plan-result input[type="checkbox"]').last.uncheck()
+    page.locator('#external-plan-result .unit-choice').last.uncheck()
     release_http_reply(page)
     expect(page.locator('#external-apply')).to_be_disabled()
-    page.locator('#external-plan-result input[type="checkbox"]').last.check()
+    page.locator('#external-plan-result .unit-choice').last.check()
     with page.expect_response('**/api/import/build-candidate') as chosen:
         page.locator('#external-candidate-button').click()
     assert chosen.value.status == 200
@@ -2547,6 +2551,87 @@ def import_review_regression(context, base, network_mode, store, errors, restart
     page.close()
 
 
+def import_review_ui_regression(context, base, network_mode, store, errors, restart):
+    """4D2: visible row/column decisions, exclusions, plan, candidate and disk replay."""
+    page=context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page,base)==network_mode
+    raw=b'Label,Kind\nAlpha,host\nIgnored,host\n'
+    page.locator('#external-import').click()
+    page.locator('#external-files').set_input_files({'name':'ui.csv','mimeType':'text/csv','buffer':raw})
+    page.locator('#external-file-choices select').select_option(',')
+    page.locator('#external-inspect-files').click()
+    expect(page.locator('#external-sources .source-grid tbody tr')).to_have_count(3)
+    expect(page.locator('#external-sources td[data-address="A2"]')).to_contain_text('Alpha')
+    page.locator('#external-add-view').click()
+    first=page.locator('#external-views fieldset').first
+    first.locator('input[placeholder^="Rubrikrad"]').fill('1')
+    first.locator('input[placeholder^="Rubrikrad"]').dispatch_event('change')
+    expect(page.locator('#external-sources .source-grid th').nth(1)).to_contain_text('Label')
+    first.locator('.row-picker label').filter(has_text='Rad 2').locator('input').check()
+    first.locator('.row-picker label').filter(has_text='Rad 3').locator('input').check()
+    assert first.locator('input[placeholder^="Valda originalrader"]').input_value()=='2,3'
+    assert first.locator('input[placeholder^="Kolumnbokstav"]').first.get_attribute('list')
+    first.locator('label').filter(has_text='node.label').locator('input').fill('A')
+    first.locator('label').filter(has_text='node.kind').locator('input').fill('B')
+    first.locator('label').filter(has_text='node.kind').locator('input').dispatch_event('change')
+    visual=first.locator('.review-decision-controls')
+    visual.locator('select').nth(1).select_option('node.zoneId')
+    visual.locator('select').nth(2).select_option('null')
+    visual.get_by_text('Lägg till Constant').click()
+    page.locator('#external-add-view').click()
+    second=page.locator('#external-views fieldset').nth(1)
+    second.locator('select').nth(1).select_option('documentation_only')
+    second.locator('.row-picker label').filter(has_text='Rad 2').locator('input').check()
+    assert first.locator('input[placeholder^="Valda originalrader"]').input_value()=='2,3'
+    editor=page.locator('#external-decision-editor')
+    editor.locator('select').first.select_option('view-1:2')
+    editor.locator('select').nth(1).select_option('node.id')
+    editor.locator('input[placeholder="Uttryckligt värde"]').fill('H-01')
+    editor.get_by_text('Lägg till radbeslut').click()
+    editor.locator('select').first.select_option('view-1:3')
+    editor.locator('input[placeholder="Motivering till exkludering"]').fill('Ofullständigt underlag')
+    editor.get_by_text('Exkludera denna radanvändning').click()
+    with page.expect_response('**/api/import/build-candidate') as response:
+        page.locator('#external-plan-button').click()
+    request=json.loads(response.value.request.post_data)
+    assert request['rowValues']==[{'viewId':'view-1','row':2,'targetField':'node.id','valueType':'text','value':'H-01'}]
+    assert request['excludedUses']==[{'viewId':'view-1','row':3,'reason':'Ofullständigt underlag'}]
+    assert request['mappingViews'][0]['constants']=={'node.zoneId':{'type':'null','value':None}}
+    plan=response.value.json()['plan']
+    assert plan['report']['excluded']==1 and plan['report']['actionable']==1
+    assert page.locator('#external-plan-result .unit-choice').count()==1
+    expect(page.locator('#external-plan-result')).to_contain_text('Omappade celler')
+    page.locator('#external-plan-result .unit-choice').check()
+    with page.expect_response('**/api/import/build-candidate') as chosen:
+        page.locator('#external-candidate-button').click()
+    assert chosen.value.json()['plan']['canApply'] is True
+    expect(page.locator('#external-candidate-result')).to_contain_text('Portar')
+    page.locator('#external-warning').check()
+    page.once('dialog',lambda dialog:dialog.accept())
+    page.locator('#external-apply').click()
+    expect(page.locator('#count-nodes')).to_have_text('1')
+    page.locator('#external-close').click()
+    page.locator('#project-filename').fill('review-ui-4d2')
+    page.locator('#project-filename').dispatch_event('change')
+    with page.expect_response('**/api/save') as saved: page.locator('#save-project').click()
+    assert saved.value.status==200
+    stored=json.loads((store/'review-ui-4d2.yadilab').read_bytes())
+    assert stored['nodes'][0]['id']=='H-01'
+    receipt=stored['importEvidence']
+    restart(); page.reload(wait_until='domcontentloaded')
+    page.locator('#saved-projects').select_option('review-ui-4d2')
+    page.locator('#open-project').click()
+    page.locator('#external-import').click()
+    expect(page.locator('#external-history')).to_contain_text('BASELINE_MATCH')
+    expect(page.locator('#external-history')).to_contain_text('Källfil ej ansluten')
+    page.locator('#external-reattach-files').set_input_files({'name':'ui.csv','mimeType':'text/csv','buffer':raw})
+    expect(page.locator('#external-history')).to_contain_text('SOURCE_VERIFIED')
+    assert json.loads((store/'review-ui-4d2.yadilab').read_bytes())['importEvidence']==receipt
+    assert not errors,errors
+    page.close()
+
+
 def import_review_delimiters_regression(context, base, network_mode, store, errors):
     """Per-source CSV decisions reach planning, bundle export and replay unchanged."""
     page = context.new_page()
@@ -2597,8 +2682,8 @@ def import_review_delimiters_regression(context, base, network_mode, store, erro
     plan = preview.value.json()['plan']
     assert {unit['targetKey'] for unit in plan['units']} == {'SW-01','H-01'}
     assert all(unit['status']=='ACTIONABLE' for unit in plan['units'])
-    page.locator('#external-plan-result input[type="checkbox"]').first.check()
-    page.locator('#external-plan-result input[type="checkbox"]').last.check()
+    page.locator('#external-plan-result .unit-choice').first.check()
+    page.locator('#external-plan-result .unit-choice').last.check()
     page.locator('#external-candidate-button').click()
     expect(page.locator('#external-candidate-result')).to_contain_text('Tillämpbar: true')
     page.locator('#external-warning').check()
@@ -2640,7 +2725,7 @@ def import_review_delimiters_regression(context, base, network_mode, store, erro
         probe.locator('#external-inspect-files').click()
         expect(probe.locator('#external-sources')).to_contain_text(filename)
         probe.locator('#external-plan-button').click()
-        expect(probe.locator('#external-plan-result')).to_contain_text('Fingerprint:')
+        expect(probe.locator('#external-plan-result')).to_contain_text('Planfingerprint:')
         probe.close()
 
 
@@ -2656,7 +2741,7 @@ def import_review_page_regression(context, base, network_mode, store, errors):
     page.locator('#external-file-choices select').select_option(',')
     with page.expect_response('**/api/import/inspect'):
         page.locator('#external-inspect-files').click()
-    expect(page.locator('#external-sources')).not_to_contain_text('Rad 26:')
+    expect(page.locator('#external-sources td[data-address="A26"]')).to_have_count(0)
     button = page.get_by_role('button', name='Visa fler originalrader')
     def wrong_sha(reply): reply['source']['sha256'] = '0'*64
     def wrong_name(reply): reply['source']['filename'] = 'wrong.csv'
@@ -2680,7 +2765,7 @@ def import_review_page_regression(context, base, network_mode, store, errors):
         with page.expect_response('**/api/import/inspect-page'):
             button.click()
         expect(button).to_be_enabled()
-        expect(page.locator('#external-sources')).not_to_contain_text('Rad 26:')
+        expect(page.locator('#external-sources td[data-address="A26"]')).to_have_count(0)
         page.unroute('**/api/import/inspect-page', intercept)
     page.locator('#external-add-view').click()
     view = page.locator('#external-views fieldset').first
@@ -2691,18 +2776,16 @@ def import_review_page_regression(context, base, network_mode, store, errors):
     with page.expect_response('**/api/import/inspect-page') as good:
         button.click()
     assert [item['row'] for item in good.value.json()['rows']] == [26,27]
-    expect(page.locator('#external-sources')).to_contain_text('Rad 26:')
+    expect(page.locator('#external-sources td[data-address="A26"]')).to_contain_text('026')
     expect(button).to_be_disabled()
     assert {file.name:file.read_bytes() for file in store.glob('*.yadilab')} == disk_before
-    # Exactly 25 populated records yield a valid empty terminal page.
+    # Exactly 25 populated records need no empty terminal request.
     raw25 = ('ID\n' + ''.join(f'{number:03d}\n' for number in range(2, 26))).encode()
     page.locator('#external-files').set_input_files({'name':'terminal.csv','mimeType':'text/csv','buffer':raw25})
     page.locator('#external-file-choices select').select_option(',')
     page.locator('#external-inspect-files').click()
     button = page.get_by_role('button', name='Visa fler originalrader')
-    with page.expect_response('**/api/import/inspect-page') as terminal:
-        button.click()
-    assert terminal.value.json()['rows'] == [] and terminal.value.json()['nextRow'] is None
+    expect(page.locator('#external-sources')).to_contain_text('Förhandsvisade 25 av 25')
     expect(button).to_be_disabled()
     # A pending page cannot survive MappingView, file or workspace changes.
     for change in ('mapping','file','project'):
@@ -2721,7 +2804,7 @@ def import_review_page_regression(context, base, network_mode, store, errors):
             page.locator('#external-close').click()
             page.locator('#new-project').click()
         release_http_reply(page)
-        expect(page.locator('#external-sources')).not_to_contain_text('Rad 26:')
+        expect(page.locator('#external-sources td[data-address="A26"]')).to_have_count(0)
         if change == 'project': page.locator('#external-import').click()
     assert {file.name:file.read_bytes() for file in store.glob('*.yadilab')} == disk_before
     page.close()
@@ -2760,7 +2843,7 @@ def zone_import_regression(context, base, network_mode, store, errors, restart):
     units = {unit['kind']:unit for unit in preview.value.json()['plan']['units']}
     assert set(units) == {'zone','node'}
     assert units['node']['dependencies'] == [units['zone']['unitId']]
-    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    checks = page.locator('#external-plan-result .unit-choice')
     checks.nth(0).check()
     with page.expect_response('**/api/import/build-candidate') as missing:
         page.locator('#external-candidate-button').click()
@@ -2861,7 +2944,7 @@ def port_import_regression(context, base, network_mode, store, errors, restart, 
     if route:
         assert units['staticRoute']['dependencies'] == sorted(
             [units['node']['unitId'],units['port']['unitId'],units['ipBinding']['unitId']])
-    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    checks = page.locator('#external-plan-result .unit-choice')
     assert checks.count() == (4 if route else 3 if ipv4 else 2)
     checks.nth(0 if ipv4 or route else 1).check()
     with page.expect_response('**/api/import/build-candidate') as omitted:
@@ -2976,7 +3059,7 @@ def cable_import_regression(context, base, network_mode, store, errors, restart)
     assert link_unit['status'] == 'ACTIONABLE'
     assert link_unit['dependencies'] == sorted(u['unitId'] for u in discovery['units'] if u['kind']=='port')
     assert len(discovery['recordReviews']) == 3
-    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    checks = page.locator('#external-plan-result .unit-choice')
     assert checks.count() == 5
     for index in range(checks.count()):
         checks.nth(index).check()
@@ -3067,7 +3150,7 @@ def integrated_4c_regression(context, base, network_mode, store, errors, restart
     assert len(discovery['units'])==25
     assert {u['kind'] for u in discovery['units']} == {
         'zone','node','port','ipBinding','staticRoute','link'}
-    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    checks = page.locator('#external-plan-result .unit-choice')
     assert checks.count()==25
     for index in range(checks.count()):
         checks.nth(index).check()
@@ -3086,7 +3169,7 @@ def integrated_4c_regression(context, base, network_mode, store, errors, restart
     link_id.dispatch_event('change')
     with page.expect_response('**/api/import/build-candidate'):
         page.locator('#external-plan-button').click()
-    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    checks = page.locator('#external-plan-result .unit-choice')
     for index in range(checks.count()):
         checks.nth(index).check()
     with page.expect_response('**/api/import/build-candidate') as response:
@@ -3173,10 +3256,16 @@ def mapping_profile_regression(context, base, network_mode, store, errors, resta
         mapping.locator('input[placeholder^="Valda originalrader"]').fill('2,3')
         for field, column in columns.items():
             mapping.locator('label').filter(has_text=field).locator('input').fill(column)
-        if index==1:
-            mapping.locator('textarea[placeholder^="valueMaps"]').fill(
-                '{"port.enabled":{"yes":"true","no":"false"}}')
         mapping.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+        if index==1:
+            visual=mapping.locator('.review-decision-controls')
+            visual.locator('select').first.select_option('port.enabled')
+            visual.locator('input[placeholder="Originalvärde"]').fill('yes')
+            visual.locator('input[placeholder="Uttryckligt målvärde"]').fill('true')
+            visual.get_by_text('Lägg till ValueMap').click()
+            visual.locator('input[placeholder="Originalvärde"]').fill('no')
+            visual.locator('input[placeholder="Uttryckligt målvärde"]').fill('false')
+            visual.get_by_text('Lägg till ValueMap').click()
     with page.expect_download() as downloaded:
         page.locator('#external-profile-export').click()
     profile_bytes=Path(downloaded.value.path()).read_bytes()
@@ -3256,7 +3345,7 @@ def mapping_profile_regression(context, base, network_mode, store, errors, resta
     print('4D1 profile source SHA-256:', discovery['sourceManifest'][0]['sha256'],
           'plan fingerprint:', discovery['fingerprint'])
     assert all(claim['sourceRef']['sourceId']=='src-1' for claim in discovery['claims'])
-    checks=page.locator('#external-plan-result input[type="checkbox"]')
+    checks=page.locator('#external-plan-result .unit-choice')
     for index in range(checks.count()): checks.nth(index).check()
     with page.expect_response('**/api/import/build-candidate') as selected:
         page.locator('#external-candidate-button').click()
@@ -3271,7 +3360,7 @@ def mapping_profile_regression(context, base, network_mode, store, errors, resta
     rows_control.dispatch_event('change')
     with page.expect_response('**/api/import/build-candidate'):
         page.locator('#external-plan-button').click()
-    checks=page.locator('#external-plan-result input[type="checkbox"]')
+    checks=page.locator('#external-plan-result .unit-choice')
     for index in range(checks.count()): checks.nth(index).check()
     with page.expect_response('**/api/import/build-candidate') as selected:
         page.locator('#external-candidate-button').click()
@@ -5856,6 +5945,7 @@ def run():
             source_preview_regression(context, base, network_mode, store, errors)
             import_candidate_regression(context, base, network_mode, store, errors)
             import_review_regression(context, base, network_mode, store, errors, restart_for_import_review)
+            import_review_ui_regression(context, base, network_mode, store, errors, restart_for_import_review)
             import_review_page_regression(context, base, network_mode, store, errors)
             import_review_delimiters_regression(context, base, network_mode, store, errors)
             zone_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
