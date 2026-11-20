@@ -191,13 +191,15 @@ export function createImportReview({context, current, getProject, replaceProject
         el('option',{value:'zone_inventory'},'zone_inventory'),
         el('option',{value:'interface_inventory'},'interface_inventory'),
         el('option',{value:'ip_plan'},'ip_plan'),
+        el('option',{value:'static_route_register'},'static_route_register'),
         el('option',{value:'documentation_only'},'documentation_only'));
       const header = el('input',{type:'number',min:'1',placeholder:'Rubrikrad, tomt = ingen'});
       const selected = el('input',{type:'text',placeholder:'Valda originalrader, t.ex. 2,3'});
       const columns = {}, columnLabels = {};
       for (const field of ['node.id','node.label','node.kind','node.zoneId','zone.id','zone.label',
         'port.nodeId','port.id','port.name','port.enabled','port.vlanMode','port.accessVlan','port.allowedVlans','port.ipv4',
-        'ip.nodeId','ip.portId','ip.ipv4']) {
+        'ip.nodeId','ip.portId','ip.ipv4',
+        'route.nodeId','route.id','route.destination','route.nextHop','route.outPort']) {
         columns[field] = el('input',{type:'text',placeholder:'Kolumnbokstav, t.ex. A'});
         columnLabels[field] = el('label',{},field,columns[field]);
         box.append(columnLabels[field]);
@@ -234,7 +236,8 @@ export function createImportReview({context, current, getProject, replaceProject
           const supported = role.value === 'device_inventory' ? field.startsWith('node.')
             : role.value === 'zone_inventory' ? field.startsWith('zone.')
             : role.value === 'interface_inventory' ? field.startsWith('port.')
-            : role.value === 'ip_plan' && field.startsWith('ip.');
+            : role.value === 'ip_plan' ? field.startsWith('ip.')
+            : role.value === 'static_route_register' && field.startsWith('route.');
           columnLabels[field].hidden = !supported;
           if (!supported) control.value = '';
         }
