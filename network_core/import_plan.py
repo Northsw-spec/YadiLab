@@ -18,15 +18,18 @@ PORT_FIELDS = frozenset({'port.nodeId', 'port.id', 'port.name', 'port.enabled',
 IP_FIELDS = frozenset({'ip.nodeId', 'ip.portId', 'ip.ipv4'})
 ROUTE_FIELDS = frozenset({'route.nodeId', 'route.id', 'route.destination',
                           'route.nextHop', 'route.outPort'})
+LINK_FIELDS = frozenset({'link.id', 'link.aNode', 'link.aPort',
+                         'link.bNode', 'link.bPort', 'link.enabled'})
 VLAN_INTEGER = re.compile(r'[1-9][0-9]{0,3}\Z')
 VLAN_LIST = re.compile(r'[1-9][0-9]{0,3}(,[1-9][0-9]{0,3})*\Z')
 ROLES = {'device_inventory': FIELDS, 'zone_inventory': ZONE_FIELDS,
          'interface_inventory': PORT_FIELDS, 'ip_plan': IP_FIELDS,
          'static_route_register': ROUTE_FIELDS,
+         'cable_register': LINK_FIELDS,
          'documentation_only': frozenset()}
 ROLE_KIND = {'device_inventory': 'node', 'zone_inventory': 'zone',
              'interface_inventory': 'port', 'ip_plan': 'ipBinding',
-             'static_route_register': 'staticRoute'}
+             'static_route_register': 'staticRoute', 'cable_register': 'link'}
 VIEW_KEYS = {'viewId', 'sourceId', 'tableId', 'role', 'headerRow', 'selectedRows',
              'columns', 'valueMaps', 'constants', 'expectedHeaders', 'label'}
 REQUEST_KEYS = {'contractVersion', 'projectName', 'sources', 'mappingViews',
@@ -127,7 +130,7 @@ def diagnostic(code, refs, unit_id=None, severity='ERROR'):
 def _typed_value(value_type, value, field, where):
     if value_type == 'text' and type(value) is str and field not in ('port.accessVlan', 'port.allowedVlans'):
         return value
-    if value_type == 'boolean' and type(value) is bool and field == 'port.enabled':
+    if value_type == 'boolean' and type(value) is bool and field in ('port.enabled', 'link.enabled'):
         return value
     if value_type == 'null' and value is None and field == 'node.zoneId':
         return None
@@ -231,10 +234,10 @@ def _views(raw_views, tables):
         for field, mapping in maps.items():
             if type(mapping) is not dict or not mapping or any(type(a) is not str or type(b) is not str for a, b in mapping.items()):
                 fail('mappingViews', f'invalid valueMap for {field}')
-            if field == 'port.enabled' and any(b not in ('true', 'false') for b in mapping.values()):
-                fail('mappingViews', 'port.enabled valueMaps must produce exact true/false strings')
+            if field in ('port.enabled', 'link.enabled') and any(b not in ('true', 'false') for b in mapping.values()):
+                fail('mappingViews', 'enabled valueMaps must produce exact true/false strings')
         constants = view['constants']
-        if type(constants) is not dict or set(constants) & set(columns) or not set(constants) <= (ROLES[role] - {'node.id', 'zone.id', 'port.nodeId', 'port.id', 'ip.nodeId', 'ip.portId', 'route.nodeId', 'route.id', 'route.outPort'}):
+        if type(constants) is not dict or set(constants) & set(columns) or not set(constants) <= (ROLES[role] - {'node.id', 'zone.id', 'port.nodeId', 'port.id', 'ip.nodeId', 'ip.portId', 'route.nodeId', 'route.id', 'route.outPort', 'link.id', 'link.aNode', 'link.aPort', 'link.bNode', 'link.bPort'}):
             fail('mappingViews', 'invalid constants or identity constant')
         for field, item in constants.items():
             object_exact(item, {'type', 'value'}, f'constant {field}')
@@ -335,11 +338,12 @@ def _claim(view, row, cells, row_values, decision_ids, transformations):
                 candidates.append((parsed, [src, origin('user_decision', decision_id=decision)]))
                 continue
             if field in ('node.id', 'zone.id', 'port.id', 'port.nodeId', 'ip.nodeId', 'ip.portId',
-                         'route.nodeId', 'route.id', 'route.outPort') and cell['type'] != 'text':
+                         'route.nodeId', 'route.id', 'route.outPort', 'link.id',
+                         'link.aNode', 'link.aPort', 'link.bNode', 'link.bPort') and cell['type'] != 'text':
                 if (view_id, row, field) not in row_values:
                     issues.append(('NUMERIC_ID_REQUIRES_DECISION', 'BLOCKED', [source_ref(source_id, table_id, row, cell['address'])]))
                 continue
-            if field == 'port.enabled':
+            if field in ('port.enabled', 'link.enabled'):
                 if cell['type'] == 'boolean':
                     if mapped is not None:
                         issues.append(('BOOLEAN_MAPPING_TYPE_MISMATCH', 'BLOCKED', [source_ref(source_id, table_id, row, cell['address'])]))
@@ -477,11 +481,34 @@ def _candidate(plan, project_name):
     for claim in plan['claims']:
         if (claim['targetKind'], claim['targetKey']) in selected_targets:
             claims_by_target.setdefault((claim['targetKind'], claim['targetKey']), []).append(claim)
-    nodes, zones = [], []
+    occupied = {}
+    for unit in units:
+        if unit['kind'] != 'link':
+            continue
+        group = claims_by_target[('link', unit['targetKey'])]
+        facts = {field: value for claim in group
+                 for field, value in claim['fields'].items()}
+        for side in ('a', 'b'):
+            endpoint = (facts[f'link.{side}Node'], facts[f'link.{side}Port'])
+            if endpoint in occupied:
+                refs = [source_ref(ref['sourceId'], ref['tableId'], ref['row'], ref['address'])
+                        for claim in group for field in (f'link.{side}Node', f'link.{side}Port')
+                        for ref in claim['origins'].get(field, []) if ref['kind'] == 'source_cell']
+                item = diagnostic('PORT_OCCUPIED', sorted(refs, key=canonical_json), unit['unitId'])
+                unit['diagnostics'].append(item)
+                plan['diagnostics'].append(item)
+                plan['diagnostics'].sort(key=lambda d: (d['code'], d['unitId'] or '', canonical_json(d['sourceRefs'])))
+                return
+            occupied[endpoint] = unit['unitId']
+    if sum(unit['kind'] == 'link' for unit in units) > 5000:
+        plan['diagnostics'].append(diagnostic('TOO_MANY_LINKS', [], None))
+        return
+    nodes, zones, links = [], [], []
     accepted = []
     derived = origin('derived_layout')
     for unit in sorted(units, key=lambda item: ({'zone': 0, 'node': 1, 'port': 2,
-                                                'ipBinding': 3, 'staticRoute': 4}[item['kind']], item['targetKey'])):
+                                                'ipBinding': 3, 'staticRoute': 4,
+                                                'link': 5}[item['kind']], item['targetKey'])):
         target, kind = unit['targetKey'], unit['kind']
         group = claims_by_target[(kind, target)]
         facts = {}
@@ -540,17 +567,29 @@ def _candidate(plan, project_name):
             port['ipv4'] = facts['port.ipv4']
             fields = {'port.ipv4': facts['port.ipv4']}
             provenance['port.ipv4'] = sorted(provenance['port.ipv4'], key=canonical_json)
-        else:
+        elif kind == 'staticRoute':
             node_id, route_id = json.loads(target)
             owner = next(n for n in nodes if n['id'] == node_id)
             route = {'id': route_id, 'destination': facts['route.destination'],
                      'nextHop': facts['route.nextHop'], 'outPort': facts['route.outPort']}
             owner.setdefault('staticRoutes', []).append(route)
             fields = {'nodeId': node_id, **route}
+        else:
+            link = {'id': facts['link.id'],
+                    'a': {'node': facts['link.aNode'], 'port': facts['link.aPort']},
+                    'b': {'node': facts['link.bNode'], 'port': facts['link.bPort']},
+                    'enabled': facts['link.enabled']}
+            links.append(link)
+            provenance['a'] = sorted(provenance.pop('aNode', []) + provenance.pop('aPort', []),
+                                     key=canonical_json)
+            provenance['b'] = sorted(provenance.pop('bNode', []) + provenance.pop('bPort', []),
+                                     key=canonical_json)
+            fields = link
         for field in (('id', 'label', 'kind') if kind == 'node' else
                       ('nodeId', 'id', 'name', 'enabled') if kind == 'port' else
                       ('id', 'label') if kind == 'zone' else
-                      ('nodeId', 'id', 'destination', 'nextHop', 'outPort') if kind == 'staticRoute' else ()):
+                      ('nodeId', 'id', 'destination', 'nextHop', 'outPort') if kind == 'staticRoute' else
+                      ('id', 'enabled') if kind == 'link' else ()):
             provenance[field] = sorted(provenance[field], key=canonical_json)
         operation = 'setExplicitField' if kind == 'ipBinding' else 'create'
         change_id = internal_id('c-', [unit['unitId'], operation,
@@ -568,9 +607,10 @@ def _candidate(plan, project_name):
             node['staticRoutes'].sort(key=lambda route: route['id'])
     nodes.sort(key=lambda node: node['id'])
     zones.sort(key=lambda zone: zone['id'])
+    links.sort(key=lambda link: link['id'])
     accepted.sort(key=lambda change: change['unitId'])
     draft = validate_project({'schemaVersion': '1.3', 'name': project_name,
-                              'zones': zones, 'nodes': nodes, 'links': []})
+                              'zones': zones, 'nodes': nodes, 'links': links})
     baseline = hashlib.sha256(canonical_json(canonical_network_view(draft))).hexdigest()
     decisions = []
     for review in plan['recordReviews']:
@@ -686,22 +726,25 @@ def build_plan(value):
                              ('port.nodeId', 'port.id', 'port.name', 'port.enabled') if kind == 'port' else
                              ('port.ipv4',) if kind == 'ipBinding' else
                              ('route.nodeId', 'route.id', 'route.destination', 'route.nextHop', 'route.outPort') if kind == 'staticRoute' else
+                             ('link.id', 'link.aNode', 'link.aPort', 'link.bNode', 'link.bPort', 'link.enabled') if kind == 'link' else
                              ('zone.label',)):
                 if required not in combined:
                     problems.append(('MISSING_REQUIRED_FIELD', 'BLOCKED',
                                      [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
             for field in (('node.id', 'node.label', 'node.kind') if kind == 'node' else
                           ('port.nodeId', 'port.id', 'port.name', 'port.enabled') if kind == 'port' else
+                          ('link.id', 'link.aNode', 'link.aPort', 'link.bNode', 'link.bPort', 'link.enabled') if kind == 'link' else
                           ('zone.id', 'zone.label')):
                 if field not in combined:
                     continue
                 item = combined[field][0]
                 try:
-                    if field in ('node.id', 'zone.id', 'port.id', 'port.nodeId'):
+                    if field in ('node.id', 'zone.id', 'port.id', 'port.nodeId',
+                                 'link.id', 'link.aNode', 'link.aPort', 'link.bNode', 'link.bPort'):
                         _id(item, field)
                     elif field in ('node.label', 'zone.label', 'port.name'):
                         _name(item, field)
-                    elif field == 'port.enabled':
+                    elif field in ('port.enabled', 'link.enabled'):
                         if type(item) is not bool:
                             raise ProjectValidationError('invalid port.enabled')
                     elif item not in NODE_KINDS:
@@ -778,6 +821,18 @@ def build_plan(value):
                                      for o in origins.get(field, []) if o['kind'] == 'source_cell']
                             problems.append(('INVALID_' + field.upper().replace('.', '_'),
                                              'INVALID', cells or refs))
+            if kind == 'link' and all(field in combined for field in
+                                       ('link.aNode', 'link.aPort', 'link.bNode', 'link.bPort')):
+                a_node, b_node = combined['link.aNode'][0], combined['link.bNode'][0]
+                if a_node == b_node:
+                    problems.append(('INTERNAL_LINK', 'INVALID',
+                                     [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
+                for side in ('a', 'b'):
+                    node_id, port_id = combined[f'link.{side}Node'][0], combined[f'link.{side}Port'][0]
+                    port_key = canonical_json([node_id, port_id]).decode('utf-8')
+                    if ('port', port_key) not in grouped:
+                        problems.append(('UNDECLARED_' + side.upper() + '_PORT', 'BLOCKED',
+                                         [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
             if kind == 'node' and combined.get('node.zoneId', [None])[0] is not None:
                 zone_key = combined['node.zoneId'][0]
                 zone_group = grouped.get(('zone', zone_key))
@@ -820,6 +875,13 @@ def build_plan(value):
                                   for dep_kind, dep_key in (('node', node_id), ('port', port_key),
                                                              ('ipBinding', port_key))
                                   if (dep_kind, dep_key) in grouped)
+        elif kind == 'link':
+            dependencies = sorted(internal_id('u-', ['port', port_key])
+                                  for side in ('a', 'b')
+                                  if f'link.{side}Node' in combined and f'link.{side}Port' in combined
+                                  if (port_key := canonical_json([combined[f'link.{side}Node'][0],
+                                                                  combined[f'link.{side}Port'][0]]).decode('utf-8'))
+                                  if ('port', port_key) in grouped)
         units.append({'unitId': unit_id, 'kind': kind, 'targetKey': target,
                       'changes': [], 'dependencies': dependencies, 'status': status,
                       'diagnostics': [d for d in diagnostics if d['unitId'] == unit_id],
@@ -847,10 +909,11 @@ def build_plan(value):
                                   if u['viewId'] == use['viewId'])
                 review_use['status'] = 'BLOCKED'
     for unit in units:
-        if unit['kind'] not in ('ipBinding', 'staticRoute') or unit['status'] != 'ACTIONABLE':
+        if unit['kind'] not in ('ipBinding', 'staticRoute', 'link') or unit['status'] != 'ACTIONABLE':
             continue
         if any(by_unit_id[dep]['status'] != 'ACTIONABLE' for dep in unit['dependencies']):
-            item = diagnostic('UNAVAILABLE_ROUTE_DEPENDENCY' if unit['kind'] == 'staticRoute' else 'UNAVAILABLE_PORT', [], unit['unitId'])
+            item = diagnostic('UNAVAILABLE_ROUTE_DEPENDENCY' if unit['kind'] == 'staticRoute' else
+                              'UNAVAILABLE_LINK_ENDPOINT' if unit['kind'] == 'link' else 'UNAVAILABLE_PORT', [], unit['unitId'])
             unit['status'] = 'BLOCKED'
             unit['diagnostics'].append(item)
             diagnostics.append(item)
@@ -887,7 +950,9 @@ def build_plan(value):
               'selectedUnits': len(selected),
               'nodes': sum(u['kind'] == 'node' and u['status'] == 'ACTIONABLE' for u in units),
               'ports': sum(u['kind'] == 'port' and u['status'] == 'ACTIONABLE' for u in units),
-              'links': 0, 'zones': sum(u['kind'] == 'zone' and u['status'] == 'ACTIONABLE' for u in units), 'routes': 0}
+              'links': sum(u['kind'] == 'link' and u['status'] == 'ACTIONABLE' for u in units),
+              'zones': sum(u['kind'] == 'zone' and u['status'] == 'ACTIONABLE' for u in units),
+              'routes': sum(u['kind'] == 'staticRoute' and u['status'] == 'ACTIONABLE' for u in units)}
     plan = {'planVersion': '1', 'fingerprint': fingerprint, 'sourceManifest': manifest,
             'mappingViews': views, 'transformations': transformations, 'rowValues': row_values,
             'excludedUses': excluded, 'selectedUnitIds': selected, 'claims': claims,

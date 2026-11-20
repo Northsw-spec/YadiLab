@@ -26,6 +26,7 @@ NODE_FIELDS = {'id', 'label', 'kind', 'x', 'y', 'zoneId', 'ports'}
 ZONE_FIELDS = {'id', 'label'}
 PORT_FIELDS = {'nodeId', 'id', 'name', 'enabled', 'ipv4'}
 ROUTE_FIELDS = {'nodeId', 'id', 'destination', 'nextHop', 'outPort'}
+LINK_FIELDS = {'id', 'a', 'b', 'enabled'}
 VLAN_FIELDS = {'vlanMode', 'accessVlan', 'allowedVlans'}
 
 
@@ -75,6 +76,10 @@ def _origin(item, tables, decisions, where, *, field=None, views=(), unit=None,
                          address[:len(address.rstrip('0123456789'))] in
                          (view['columns'].get('ip.ipv4', []) + view['columns'].get('port.ipv4', [])
                           if target_kind == 'ipBinding' and field == 'port.ipv4' else
+                          (view['columns'].get('link.aNode', []) + view['columns'].get('link.aPort', [])
+                           if field == 'a' else
+                           view['columns'].get('link.bNode', []) + view['columns'].get('link.bPort', []))
+                          if target_kind == 'link' and field in ('a', 'b') else
                           sum((view['columns'].get('port.' + name, []) for name in VLAN_FIELDS), [])
                           if target_kind == 'port' and field == 'vlan' else
                           view['columns'].get(('route' if target_kind == 'staticRoute' else target_kind) + '.' + field, []))
@@ -88,6 +93,8 @@ def _origin(item, tables, decisions, where, *, field=None, views=(), unit=None,
                 decisions[item['decisionId']][0] != kind or
                 (field is not None and decisions[item['decisionId']][1] not in
                  (VLAN_FIELDS if target_kind == 'port' and field == 'vlan' else
+                  {'aNode', 'aPort'} if target_kind == 'link' and field == 'a' else
+                  {'bNode', 'bPort'} if target_kind == 'link' and field == 'b' else
                   {'ipv4'} if target_kind == 'ipBinding' else {field})) or
                 not any(unit in units and view_id == decisions[item['decisionId']][3] and
                         (decisions[item['decisionId']][4] is None or row == decisions[item['decisionId']][4])
@@ -175,7 +182,7 @@ def validate_evidence(value):
         uses.update((view['viewId'], row) for row in rows)
         if (type(view['columns']) is not dict or not set(view['columns']) <= ROLES[view['role']] or
                 type(view['constants']) is not dict or
-                not set(view['constants']) <= (ROLES[view['role']] - {'node.id', 'zone.id', 'port.nodeId', 'port.id', 'ip.nodeId', 'ip.portId', 'route.nodeId', 'route.id', 'route.outPort'}) or
+                not set(view['constants']) <= (ROLES[view['role']] - {'node.id', 'zone.id', 'port.nodeId', 'port.id', 'ip.nodeId', 'ip.portId', 'route.nodeId', 'route.id', 'route.outPort', 'link.id', 'link.aNode', 'link.aPort', 'link.bNode', 'link.bPort'}) or
                 set(view['columns']) & set(view['constants']) or
                 type(view['valueMaps']) is not dict or not set(view['valueMaps']) <= set(view['columns']) or
                 type(view['label']) is not str or len(view['label']) > 240):
@@ -189,7 +196,7 @@ def validate_evidence(value):
         for field, mapping in view['valueMaps'].items():
             if type(mapping) is not dict or not mapping or any(type(k) is not str or type(v) is not str for k, v in mapping.items()):
                 fail('valueMaps', 'invalid mapping')
-            if field == 'port.enabled' and any(v not in ('true', 'false') for v in mapping.values()):
+            if field in ('port.enabled', 'link.enabled') and any(v not in ('true', 'false') for v in mapping.values()):
                 fail('valueMaps', 'invalid port.enabled mapping')
         for field, item in view['constants'].items():
             object_exact(item, {'type', 'value'}, 'constant')
@@ -310,7 +317,7 @@ def validate_evidence(value):
         unit = change['unitId']
         kind = change['targetKind']
         if (type(unit) is not str or unit not in selected or unit in accepted or
-                kind not in ('node', 'zone', 'port', 'ipBinding', 'staticRoute') or type(change['targetKey']) is not str or
+                kind not in ('node', 'zone', 'port', 'ipBinding', 'staticRoute', 'link') or type(change['targetKey']) is not str or
                 internal_id('u-', [kind, change['targetKey']]) != unit):
             fail('acceptedChanges', 'invalid unit identity')
         if kind in ('port', 'ipBinding', 'staticRoute'):
@@ -333,7 +340,7 @@ def validate_evidence(value):
         fields, origins = change['fieldValues'], change['fieldOrigins']
         expected_fields = (NODE_FIELDS if kind == 'node' else PORT_FIELDS if kind == 'port'
                            else {'port.ipv4'} if kind == 'ipBinding' else
-                           ROUTE_FIELDS if kind == 'staticRoute' else ZONE_FIELDS)
+                           ROUTE_FIELDS if kind == 'staticRoute' else LINK_FIELDS if kind == 'link' else ZONE_FIELDS)
         if kind == 'port' and 'vlan' in fields:
             expected_fields = expected_fields | {'vlan'}
         object_exact(fields, expected_fields, 'acceptedChange.fieldValues')
@@ -348,6 +355,9 @@ def validate_evidence(value):
         elif kind == 'staticRoute':
             if fields['nodeId'] != pair[0] or fields['id'] != pair[1]:
                 fail('acceptedChanges', 'route identity differs from target')
+        elif kind == 'link':
+            if fields['id'] != change['targetKey'] or type(fields['enabled']) is not bool:
+                fail('acceptedChanges', 'link identity or enabled type invalid')
         elif fields['id'] != change['targetKey'] or (kind == 'node' and fields['ports'] != []):
             fail('acceptedChanges', 'unsupported historical fields')
         for field, refs in origins.items():
@@ -360,7 +370,7 @@ def validate_evidence(value):
                 fail('fieldOrigins', 'null zone cannot be attributed to a source cell')
             if field == 'zoneId' and fields['zoneId'] is not None and not refs:
                 fail('fieldOrigins', 'declared zone needs a source or decision origin')
-            if field in ('id', 'label', 'nodeId', 'name', 'enabled') or (kind == 'node' and field == 'kind') or kind == 'staticRoute':
+            if field in ('id', 'label', 'nodeId', 'name', 'enabled') or (kind == 'node' and field == 'kind') or kind == 'staticRoute' or (kind == 'link' and field in ('a', 'b')):
                 if not refs:
                     fail('fieldOrigins', 'missing source or decision origin')
             if ((kind == 'port' and field == 'vlan') or
@@ -379,6 +389,7 @@ def validate_evidence(value):
     port_changes = [c for c in changes if c['targetKind'] == 'port']
     binding_changes = [c for c in changes if c['targetKind'] == 'ipBinding']
     route_changes = [c for c in changes if c['targetKind'] == 'staticRoute']
+    link_changes = [c for c in changes if c['targetKind'] == 'link']
     zones = sorted((c['fieldValues'] for c in zone_changes), key=lambda z: z['id'])
     nodes = sorted((deepcopy(c['fieldValues']) for c in node_changes), key=lambda n: n['id'])
     nodes_by_id = {node['id']: node for node in nodes}
@@ -408,6 +419,16 @@ def validate_evidence(value):
         node['ports'].sort(key=lambda port: port['id'])
         if 'staticRoutes' in node:
             node['staticRoutes'].sort(key=lambda route: route['id'])
+    links = []
+    for change in link_changes:
+        values = change['fieldValues']
+        for side in ('a', 'b'):
+            end = values[side]
+            if (type(end) is not dict or set(end) != {'node', 'port'} or
+                    canonical_json([end['node'], end['port']]).decode('utf-8') not in selected_ports):
+                fail('acceptedChanges', 'link endpoint has no selected port')
+        links.append(deepcopy(values))
+    links.sort(key=lambda link: link['id'])
     if not nodes:
         fail('acceptedChanges', 'at least one selected node required')
     positions = node_layout([c['targetKey'] for c in node_changes])
@@ -415,7 +436,7 @@ def validate_evidence(value):
         if (change['fieldValues']['x'], change['fieldValues']['y']) != positions[change['targetKey']]:
             fail('acceptedChanges', 'historical layout differs from selected node set')
     historical = {'schemaVersion': '1.3', 'name': name, 'zones': zones,
-                  'nodes': nodes, 'links': []}
+                  'nodes': nodes, 'links': links}
     if validate_project(historical) != historical:
         fail('acceptedChanges', 'historical values are not canonical')
     actual_baseline = hashlib.sha256(canonical_json(canonical_network_view(historical))).hexdigest()
