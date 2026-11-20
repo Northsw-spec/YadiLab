@@ -2802,6 +2802,86 @@ def zone_import_regression(context, base, network_mode, store, errors, restart):
     page.close()
 
 
+def port_import_regression(context, base, network_mode, store, errors, restart):
+    """Explicit port identity, parent dependency, Save/Open and source replay."""
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page, base) == network_mode
+    raw = b'Device,Label,Kind,Port,PortName,Enabled\\nSW-01,Core,switch,Gi1/0/1,Uplink,true\\n'
+    page.locator('#external-import').click()
+    page.locator('#external-files').set_input_files({
+        'name':'ports.csv','mimeType':'text/csv','buffer':raw})
+    page.locator('#external-file-choices select').first.select_option(',')
+    page.locator('#external-inspect-files').click()
+    expect(page.locator('#external-sources')).to_contain_text('Gi1/0/1')
+    for index, (role, columns) in enumerate((
+        ('device_inventory', {'node.id':'A','node.label':'B','node.kind':'C'}),
+        ('interface_inventory', {'port.nodeId':'A','port.id':'D',
+                                 'port.name':'E','port.enabled':'F'}))):
+        page.locator('#external-add-view').click()
+        mapping = page.locator('#external-views fieldset').nth(index)
+        mapping.locator('select').first.select_option('0:sheet-1')
+        mapping.locator('select').nth(1).select_option(role)
+        mapping.locator('input[placeholder^="Rubrikrad"]').fill('1')
+        mapping.locator('input[placeholder^="Valda originalrader"]').fill('2')
+        for field, column in columns.items():
+            mapping.locator('label').filter(has_text=field).locator('input').fill(column)
+        mapping.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+    with page.expect_response('**/api/import/build-candidate') as preview:
+        page.locator('#external-plan-button').click()
+    units = {unit['kind']:unit for unit in preview.value.json()['plan']['units']}
+    assert set(units) == {'node', 'port'}
+    assert units['port']['dependencies'] == [units['node']['unitId']]
+    assert units['port']['targetKey'] == '["SW-01","Gi1/0/1"]'
+    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    assert checks.count() == 2
+    checks.nth(1).check()
+    with page.expect_response('**/api/import/build-candidate') as omitted:
+        page.locator('#external-candidate-button').click()
+    assert omitted.value.json()['plan']['canApply'] is False
+    expect(page.locator('#external-apply')).to_be_disabled()
+    checks.nth(0).check()
+    with page.expect_response('**/api/import/build-candidate') as selected:
+        page.locator('#external-candidate-button').click()
+    project = selected.value.json()['plan']['proposedProject']
+    assert project['nodes'][0]['ports'] == [
+        {'id':'Gi1/0/1','name':'Uplink','enabled':True,'ipv4':None}]
+    assert project['links'] == []
+    page.locator('#external-warning').check()
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#external-apply').click()
+    expect(page.locator('[data-port-node="SW-01"]')).to_have_count(1)
+    with page.expect_download() as downloaded:
+        page.locator('#external-bundle-export').click()
+    bundle = json.loads(Path(downloaded.value.path()).read_text())
+    assert base64.b64decode(bundle['sources'][0]['contentBase64']) == raw
+    page.locator('#external-close').click()
+    page.locator('#project-filename').fill('ports-4c')
+    page.locator('#project-filename').dispatch_event('change')
+    with page.expect_response('**/api/save') as saved:
+        page.locator('#save-project').click()
+    assert saved.value.status == 200
+    disk = store / 'ports-4c.yadilab'
+    stored = json.loads(disk.read_bytes())
+    assert stored['nodes'][0]['ports'] == project['nodes'][0]['ports']
+    assert stored['links'] == []
+    receipt = stored['importEvidence']
+    restart()
+    page.reload(wait_until='domcontentloaded')
+    page.locator('#saved-projects').select_option('ports-4c')
+    page.locator('#open-project').click()
+    expect(page.locator('#import-evidence-status')).to_contain_text('BASELINE_MATCH')
+    page.locator('#external-import').click()
+    with page.expect_response('**/api/import/verify-sources') as verified:
+        page.locator('#external-bundle-file').set_input_files({
+            'name':'ports-sources.json','mimeType':'application/json',
+            'buffer':json.dumps(bundle).encode()})
+    assert verified.value.json()['sourceStatus'] == 'SOURCE_VERIFIED'
+    assert json.loads(disk.read_bytes())['importEvidence'] == receipt
+    assert not errors, errors
+    page.close()
+
+
 def run():
     with tempfile.TemporaryDirectory() as td, sync_playwright() as playwright:
         store = Path(td)
@@ -5332,6 +5412,7 @@ def run():
             import_review_page_regression(context, base, network_mode, store, errors)
             import_review_delimiters_regression(context, base, network_mode, store, errors)
             zone_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
+            port_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)
