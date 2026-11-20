@@ -1117,7 +1117,6 @@ def simulation_session_races(context, network_mode, errors):
         base = f'http://127.0.0.1:{server.server_port}/'
         try:
             def import_project(page):
-                page.on('dialog', lambda dialog: dialog.accept())
                 with page.expect_response('**/api/validate') as response:
                     page.locator('#import-file').set_input_files({
                         'name': 'layer2-race.json', 'mimeType': 'application/json',
@@ -1132,6 +1131,9 @@ def simulation_session_races(context, network_mode, errors):
             def fresh():
                 page = context.new_page()
                 page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+                # Attach once per page, not on every import/replacement.
+                # Multiple listeners otherwise attempt to accept the same dialog.
+                page.on('dialog', lambda dialog: dialog.accept())
                 assert browser_open(page, base) == network_mode
                 import_project(page)
                 return page
