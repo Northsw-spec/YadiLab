@@ -14,13 +14,15 @@ from .model import (ProjectValidationError, NODE_KINDS, _id, _name,
 FIELDS = frozenset({'node.id', 'node.label', 'node.kind', 'node.zoneId'})
 ZONE_FIELDS = frozenset({'zone.id', 'zone.label'})
 PORT_FIELDS = frozenset({'port.nodeId', 'port.id', 'port.name', 'port.enabled',
-                         'port.vlanMode', 'port.accessVlan', 'port.allowedVlans'})
+                         'port.vlanMode', 'port.accessVlan', 'port.allowedVlans', 'port.ipv4'})
+IP_FIELDS = frozenset({'ip.nodeId', 'ip.portId', 'ip.ipv4'})
 VLAN_INTEGER = re.compile(r'[1-9][0-9]{0,3}\Z')
 VLAN_LIST = re.compile(r'[1-9][0-9]{0,3}(,[1-9][0-9]{0,3})*\Z')
 ROLES = {'device_inventory': FIELDS, 'zone_inventory': ZONE_FIELDS,
-         'interface_inventory': PORT_FIELDS, 'documentation_only': frozenset()}
+         'interface_inventory': PORT_FIELDS, 'ip_plan': IP_FIELDS,
+         'documentation_only': frozenset()}
 ROLE_KIND = {'device_inventory': 'node', 'zone_inventory': 'zone',
-             'interface_inventory': 'port'}
+             'interface_inventory': 'port', 'ip_plan': 'ipBinding'}
 VIEW_KEYS = {'viewId', 'sourceId', 'tableId', 'role', 'headerRow', 'selectedRows',
              'columns', 'valueMaps', 'constants', 'expectedHeaders', 'label'}
 REQUEST_KEYS = {'contractVersion', 'projectName', 'sources', 'mappingViews',
@@ -135,6 +137,18 @@ def _typed_value(value_type, value, field, where):
     fail(where, 'unsupported or incorrectly typed user value')
 
 
+def _canonical_ipv4(value):
+    """Use the canonical project validator for explicit IPv4 interface syntax."""
+    if type(value) is not str:
+        raise ProjectValidationError('IPv4/CIDR must be text')
+    sample = {'schemaVersion': '1.3', 'name': 'Validation', 'zones': [], 'links': [],
+              'nodes': [{'id': 'Validation', 'label': 'Validation', 'kind': 'host',
+                         'x': 0, 'y': 0, 'zoneId': None,
+                         'ports': [{'id': 'Port', 'name': 'Port', 'enabled': True,
+                                    'ipv4': value}]}]}
+    return validate_project(sample)['nodes'][0]['ports'][0]['ipv4']
+
+
 def _sources(raw_sources):
     sources = bounded_list(raw_sources, 8, 'sources')
     if not sources:
@@ -216,7 +230,7 @@ def _views(raw_views, tables):
             if field == 'port.enabled' and any(b not in ('true', 'false') for b in mapping.values()):
                 fail('mappingViews', 'port.enabled valueMaps must produce exact true/false strings')
         constants = view['constants']
-        if type(constants) is not dict or set(constants) & set(columns) or not set(constants) <= (ROLES[role] - {'node.id', 'zone.id', 'port.nodeId', 'port.id'}):
+        if type(constants) is not dict or set(constants) & set(columns) or not set(constants) <= (ROLES[role] - {'node.id', 'zone.id', 'port.nodeId', 'port.id', 'ip.nodeId', 'ip.portId'}):
             fail('mappingViews', 'invalid constants or identity constant')
         for field, item in constants.items():
             object_exact(item, {'type', 'value'}, f'constant {field}')
@@ -283,9 +297,10 @@ def _decisions(value, views):
 def _claim(view, row, cells, row_values, decision_ids, transformations):
     source_id, table_id, view_id = view['sourceId'], view['tableId'], view['viewId']
     by_column = {re.match(r'[A-Z]+', c['address']).group(): c for c in cells}
-    fields, origins, issues, used = {}, {}, [], set()
+    fields, origins, issues, ip_issues, used = {}, {}, [], [], set()
     for field in sorted(set(view['columns']) | set(view['constants']) |
                         {key[2] for key in row_values if key[:2] == (view_id, row)}):
+        issue_start = len(issues)
         candidates = []
         for label in view['columns'].get(field, []):
             cell = by_column.get(label)
@@ -315,7 +330,7 @@ def _claim(view, row, cells, row_values, decision_ids, transformations):
                                          transformation['operation'], transformation['delimiter']], decision_ids)
                 candidates.append((parsed, [src, origin('user_decision', decision_id=decision)]))
                 continue
-            if field in ('node.id', 'zone.id', 'port.id', 'port.nodeId') and cell['type'] != 'text':
+            if field in ('node.id', 'zone.id', 'port.id', 'port.nodeId', 'ip.nodeId', 'ip.portId') and cell['type'] != 'text':
                 if (view_id, row, field) not in row_values:
                     issues.append(('NUMERIC_ID_REQUIRES_DECISION', 'BLOCKED', [source_ref(source_id, table_id, row, cell['address'])]))
                 continue
@@ -361,6 +376,8 @@ def _claim(view, row, cells, row_values, decision_ids, transformations):
             decision = _decision_id([view_id, row, field, item['valueType'], item['value']], decision_ids)
             candidates.append((item['value'], [origin('user_decision', decision_id=decision)]))
         if not candidates:
+            if field == 'port.ipv4':
+                ip_issues.extend(issues[issue_start:]); del issues[issue_start:]
             continue
         distinct = {canonical_json(value) for value, _ in candidates}
         all_origins = [entry for _, refs in candidates for entry in refs]
@@ -371,24 +388,49 @@ def _claim(view, row, cells, row_values, decision_ids, transformations):
                     for item in all_origins if item['kind'] == 'source_cell']
             origins[field] = sorted(all_origins, key=lambda item: canonical_json(item))
             issues.append(('FIELD_CONFLICT', 'BLOCKED', refs or [source_ref(source_id, table_id, row)]))
+            if field == 'port.ipv4':
+                ip_issues.extend(issues[issue_start:]); del issues[issue_start:]
             continue
-        fields[field] = candidates[0][0]
+        value = candidates[0][0]
+        if field in ('port.ipv4', 'ip.ipv4'):
+            try:
+                value = _canonical_ipv4(value)
+            except ProjectValidationError:
+                refs = [source_ref(ref['sourceId'], ref['tableId'], ref['row'], ref['address'])
+                        for ref in all_origins if ref['kind'] == 'source_cell']
+                issues.append(('INVALID_IPV4', 'INVALID', refs or [source_ref(source_id, table_id, row)]))
+                if field == 'port.ipv4':
+                    ip_issues.extend(issues[issue_start:]); del issues[issue_start:]
+                continue
+        fields[field] = value
         origins[field] = sorted(all_origins, key=lambda item: canonical_json(item))
+        if field == 'port.ipv4':
+            ip_issues.extend(issues[issue_start:]); del issues[issue_start:]
     target_kind = ROLE_KIND[view['role']]
-    if target_kind == 'port':
-        node_id, port_id = fields.get('port.nodeId'), fields.get('port.id')
+    if target_kind in ('port', 'ipBinding'):
+        node_id, port_id = (fields.get('port.nodeId'), fields.get('port.id')) if target_kind == 'port' else (fields.get('ip.nodeId'), fields.get('ip.portId'))
         target_key = canonical_json([node_id, port_id]).decode('utf-8') if node_id is not None and port_id is not None else None
     else:
         target_key = fields.get(target_kind + '.id')
     if target_key is None:
-        code = 'MISSING_PORT_IDENTITY' if target_kind == 'port' else 'MISSING_' + target_kind.upper() + '_ID'
+        code = 'MISSING_PORT_IDENTITY' if target_kind in ('port', 'ipBinding') else 'MISSING_' + target_kind.upper() + '_ID'
         issues.append((code, 'BLOCKED', [source_ref(source_id, table_id, row)]))
     claim_id = internal_id('cl-', [view_id, source_id, table_id, row, target_kind, target_key])
     claim = {'claimId': claim_id, 'viewId': view_id,
              'sourceRef': {'sourceId': source_id, 'tableId': table_id, 'row': row},
              'role': view['role'], 'targetKind': target_kind, 'targetKey': target_key,
              'fields': fields, 'origins': origins}
-    return claim, issues, used
+    result = [(claim, issues)]
+    if target_kind == 'port' and ('port.ipv4' in fields or ip_issues):
+        value = fields.pop('port.ipv4', None)
+        refs = origins.pop('port.ipv4', [])
+        ip_claim = {'claimId': internal_id('cl-', [view_id, source_id, table_id, row, 'ipBinding', target_key]),
+                    'viewId': view_id, 'sourceRef': claim['sourceRef'], 'role': view['role'],
+                    'targetKind': 'ipBinding', 'targetKey': target_key,
+                    'fields': {'port.ipv4': value} if value is not None else {},
+                    'origins': {'port.ipv4': refs} if value is not None else {}}
+        result.append((ip_claim, ip_issues))
+    return result, used
 
 
 def node_layout(node_ids):
@@ -431,15 +473,21 @@ def _candidate(plan, project_name):
     nodes, zones = [], []
     accepted = []
     derived = origin('derived_layout')
-    for unit in sorted(units, key=lambda item: ({'zone': 0, 'node': 1, 'port': 2}[item['kind']], item['targetKey'])):
+    for unit in sorted(units, key=lambda item: ({'zone': 0, 'node': 1, 'port': 2, 'ipBinding': 3}[item['kind']], item['targetKey'])):
         target, kind = unit['targetKey'], unit['kind']
         group = claims_by_target[(kind, target)]
         facts = {}
         provenance = {}
         for claim in group:
             for field, value in claim['fields'].items():
-                facts[field] = value
-                provenance.setdefault(field.removeprefix(kind + '.'), []).extend(claim['origins'][field])
+                if kind == 'ipBinding':
+                    if field in ('ip.nodeId', 'ip.portId'):
+                        continue
+                    facts['port.ipv4'] = value
+                    provenance.setdefault('port.ipv4', []).extend(claim['origins'][field])
+                else:
+                    facts[field] = value
+                    provenance.setdefault(field.removeprefix(kind + '.'), []).extend(claim['origins'][field])
         if kind == 'zone':
             zone = {'id': facts['zone.id'], 'label': facts['zone.label']}
             zone = validate_project({'schemaVersion': '1.3', 'name': project_name,
@@ -459,7 +507,7 @@ def _candidate(plan, project_name):
             provenance['ports'] = []
             fields = node
             nodes.append(node)
-        else:
+        elif kind == 'port':
             owner_id = facts['port.nodeId']
             owner = next(n for n in nodes if n['id'] == owner_id)
             port = {'id': facts['port.id'], 'name': facts['port.name'],
@@ -476,12 +524,21 @@ def _candidate(plan, project_name):
             owner['ports'].append(port)
             provenance['ipv4'] = []
             fields = {'nodeId': owner_id, **port}
+        else:
+            node_id, port_id = json.loads(target)
+            owner = next(n for n in nodes if n['id'] == node_id)
+            port = next(p for p in owner['ports'] if p['id'] == port_id)
+            port['ipv4'] = facts['port.ipv4']
+            fields = {'port.ipv4': facts['port.ipv4']}
+            provenance['port.ipv4'] = sorted(provenance['port.ipv4'], key=canonical_json)
         for field in (('id', 'label', 'kind') if kind == 'node' else
                       ('nodeId', 'id', 'name', 'enabled') if kind == 'port' else
-                      ('id', 'label')):
+                      ('id', 'label') if kind == 'zone' else ()):
             provenance[field] = sorted(provenance[field], key=canonical_json)
-        change_id = internal_id('c-', [unit['unitId'], 'create', '__object__'])
-        change = {'changeId': change_id, 'operation': 'create',
+        operation = 'setExplicitField' if kind == 'ipBinding' else 'create'
+        change_id = internal_id('c-', [unit['unitId'], operation,
+                                       'port.ipv4' if kind == 'ipBinding' else '__object__'])
+        change = {'changeId': change_id, 'operation': operation,
                   'targetKind': kind, 'targetKey': target,
                   'fieldValues': deepcopy(fields), 'fieldOrigins': deepcopy(provenance)}
         unit['changes'] = [change]
@@ -559,14 +616,15 @@ def build_plan(value):
                 review['viewUses'].append({'viewId': view['viewId'], 'claimIds': [],
                                            'unitIds': [], 'status': 'DOCUMENTATION_ONLY', 'reason': None})
                 continue
-            claim, issues, used = _claim(view, row, tables[key[:2]]['rows'][row],
-                                         row_value_map, decision_ids,
-                                         {(t['viewId'], t['targetField']): t for t in transformations})
-            claims.append(claim)
-            issues_by_claim[claim['claimId']] = issues
+            claim_pairs, used = _claim(view, row, tables[key[:2]]['rows'][row],
+                                       row_value_map, decision_ids,
+                                       {(t['viewId'], t['targetField']): t for t in transformations})
+            for claim, issues in claim_pairs:
+                claims.append(claim)
+                issues_by_claim[claim['claimId']] = issues
             review['unmappedAddresses'] -= used
-            review['viewUses'].append({'viewId': view['viewId'], 'claimIds': [claim['claimId']],
-                                       'unitIds': [], 'status': 'BLOCKED' if issues else 'ACTIONABLE',
+            review['viewUses'].append({'viewId': view['viewId'], 'claimIds': [c['claimId'] for c, _ in claim_pairs],
+                                       'unitIds': [], 'status': 'BLOCKED' if any(i for _, i in claim_pairs) else 'ACTIONABLE',
                                        'reason': None})
     if len(claims) > 20000:
         fail('claims', 'more than 20000 claims')
@@ -591,8 +649,11 @@ def build_plan(value):
         problems = []
         for claim in group:
             for field, item in claim['fields'].items():
-                combined.setdefault(field, []).append(item)
-                origins.setdefault(field, []).extend(claim['origins'][field])
+                canonical_field = 'port.ipv4' if kind == 'ipBinding' and field == 'ip.ipv4' else field
+                if kind == 'ipBinding' and field in ('ip.nodeId', 'ip.portId'):
+                    continue
+                combined.setdefault(canonical_field, []).append(item)
+                origins.setdefault(canonical_field, []).extend(claim['origins'][field])
             problems.extend(issues_by_claim[claim['claimId']])
         for field, values in combined.items():
             if len({canonical_json(item) for item in values}) > 1:
@@ -604,6 +665,7 @@ def build_plan(value):
         if not any(p[0] == 'FIELD_CONFLICT' for p in problems):
             for required in (('node.label', 'node.kind') if kind == 'node' else
                              ('port.nodeId', 'port.id', 'port.name', 'port.enabled') if kind == 'port' else
+                             ('port.ipv4',) if kind == 'ipBinding' else
                              ('zone.label',)):
                 if required not in combined:
                     problems.append(('MISSING_REQUIRED_FIELD', 'BLOCKED',
@@ -646,6 +708,16 @@ def build_plan(value):
                     if not valid or not switch:
                         problems.append(('INVALID_VLAN_COMBINATION' if not valid else 'VLAN_REQUIRES_SWITCH', 'BLOCKED',
                                          [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
+            if kind == 'ipBinding' and ('port', target) not in grouped:
+                problems.append(('UNDECLARED_PORT', 'BLOCKED',
+                                 [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
+            if kind == 'ipBinding':
+                try:
+                    node_id, port_id = json.loads(target)
+                    _id(node_id, 'ip.nodeId'); _id(port_id, 'ip.portId')
+                except (ValueError, TypeError, ProjectValidationError):
+                    problems.append(('INVALID_IP_IDENTITY', 'INVALID',
+                                     [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
             if kind == 'node' and combined.get('node.zoneId', [None])[0] is not None:
                 zone_key = combined['node.zoneId'][0]
                 zone_group = grouped.get(('zone', zone_key))
@@ -662,9 +734,12 @@ def build_plan(value):
             uses.append({'viewId': claim['viewId'], **ref, 'claimId': claim['claimId']})
             review_use = next(u for u in reviews[(ref['sourceId'], ref['tableId'], ref['row'])]['viewUses']
                               if u['viewId'] == claim['viewId'])
-            review_use['unitIds'] = [unit_id]
+            review_use['unitIds'] = sorted(set(review_use['unitIds']) | {unit_id})
             adds_facts = bool(set(claim['fields']) - seen_fields)
-            review_use['status'] = status if status != 'ACTIONABLE' else 'ACTIONABLE' if adds_facts else 'NO_OP'
+            if status != 'ACTIONABLE':
+                review_use['status'] = status
+            elif review_use['status'] not in ('BLOCKED', 'INVALID'):
+                review_use['status'] = 'ACTIONABLE' if adds_facts else 'NO_OP'
             seen_fields.update(claim['fields'])
         if len(uses) > 128:
             fail('units', 'more than 128 source uses for one unit')
@@ -673,11 +748,26 @@ def build_plan(value):
                         and ('zone', combined['node.zoneId'][0]) in grouped else
                         [internal_id('u-', ['node', combined['port.nodeId'][0]])]
                         if kind == 'port' and 'port.nodeId' in combined
-                        and ('node', combined['port.nodeId'][0]) in grouped else [])
+                        and ('node', combined['port.nodeId'][0]) in grouped else
+                        [internal_id('u-', ['port', target])]
+                        if kind == 'ipBinding' and ('port', target) in grouped else [])
         units.append({'unitId': unit_id, 'kind': kind, 'targetKey': target,
                       'changes': [], 'dependencies': dependencies, 'status': status,
                       'diagnostics': [d for d in diagnostics if d['unitId'] == unit_id],
                       'sourceUses': sorted(uses, key=lambda u: (u['viewId'], u['sourceId'], u['tableId'], u['row']))})
+    by_unit_id = {unit['unitId']: unit for unit in units}
+    for unit in units:
+        if unit['kind'] != 'ipBinding' or unit['status'] != 'ACTIONABLE':
+            continue
+        if any(by_unit_id[dep]['status'] != 'ACTIONABLE' for dep in unit['dependencies']):
+            item = diagnostic('UNAVAILABLE_PORT', [], unit['unitId'])
+            unit['status'] = 'BLOCKED'
+            unit['diagnostics'].append(item)
+            diagnostics.append(item)
+            for use in unit['sourceUses']:
+                review_use = next(u for u in reviews[(use['sourceId'], use['tableId'], use['row'])]['viewUses']
+                                  if u['viewId'] == use['viewId'])
+                review_use['status'] = 'BLOCKED'
     for claim in claims:
         if claim['targetKey'] is None:
             ref = claim['sourceRef']

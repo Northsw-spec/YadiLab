@@ -2804,24 +2804,29 @@ def zone_import_regression(context, base, network_mode, store, errors, restart):
     page.close()
 
 
-def port_import_regression(context, base, network_mode, store, errors, restart, vlan=False):
+def port_import_regression(context, base, network_mode, store, errors, restart, vlan=False, ipv4=False):
     """Explicit port identity, parent dependency, Save/Open and source replay."""
     page = context.new_page()
     page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
     assert browser_open(page, base) == network_mode
-    raw = (b'Device,Label,Kind,Port,PortName,Enabled,Mode,VLAN\n'
+    raw = (b'Device,Label,Kind,Port,PortName,Enabled,IPv4\n'
+           b'SERVER1,Server,host,eth0,Ethernet 0,false,192.168.10.20/24\n') if ipv4 else (
+           b'Device,Label,Kind,Port,PortName,Enabled,Mode,VLAN\n'
            b'SW-01,Core,switch,Gi1_0_1,Uplink,true,trunk,"10,20"\n') if vlan else (
            b'Device,Label,Kind,Port,PortName,Enabled\nSW-01,Core,switch,Gi1_0_1,Uplink,true\n')
     page.locator('#external-import').click()
     page.locator('#external-files').set_input_files({
-        'name':'vlan-ports.csv' if vlan else 'ports.csv','mimeType':'text/csv','buffer':raw})
+        'name':'ipv4-ports.csv' if ipv4 else 'vlan-ports.csv' if vlan else 'ports.csv','mimeType':'text/csv','buffer':raw})
     page.locator('#external-file-choices select').first.select_option(',')
     page.locator('#external-inspect-files').click()
-    expect(page.locator('#external-sources')).to_contain_text('Gi1_0_1')
-    for index, (role, columns) in enumerate((
+    expect(page.locator('#external-sources')).to_contain_text('eth0' if ipv4 else 'Gi1_0_1')
+    mappings = [
         ('device_inventory', {'node.id':'A','node.label':'B','node.kind':'C'}),
         ('interface_inventory', {'port.nodeId':'A','port.id':'D',
-                                 'port.name':'E','port.enabled':'F'}))):
+                                 'port.name':'E','port.enabled':'F'})]
+    if ipv4:
+        mappings.append(('ip_plan', {'ip.nodeId':'A','ip.portId':'D','ip.ipv4':'G'}))
+    for index, (role, columns) in enumerate(mappings):
         page.locator('#external-add-view').click()
         mapping = page.locator('#external-views fieldset').nth(index)
         mapping.locator('select').first.select_option('0:sheet-1')
@@ -2838,21 +2843,29 @@ def port_import_regression(context, base, network_mode, store, errors, restart, 
     with page.expect_response('**/api/import/build-candidate') as preview:
         page.locator('#external-plan-button').click()
     units = {unit['kind']:unit for unit in preview.value.json()['plan']['units']}
-    assert set(units) == {'node', 'port'}
+    assert set(units) == ({'node', 'port', 'ipBinding'} if ipv4 else {'node', 'port'})
     assert units['port']['dependencies'] == [units['node']['unitId']]
-    assert units['port']['targetKey'] == '["SW-01","Gi1_0_1"]'
+    assert units['port']['targetKey'] == ('["SERVER1","eth0"]' if ipv4 else '["SW-01","Gi1_0_1"]')
+    if ipv4:
+        assert units['ipBinding']['dependencies'] == [units['port']['unitId']]
     checks = page.locator('#external-plan-result input[type="checkbox"]')
-    assert checks.count() == 2
-    checks.nth(1).check()
+    assert checks.count() == (3 if ipv4 else 2)
+    checks.nth(0 if ipv4 else 1).check()
     with page.expect_response('**/api/import/build-candidate') as omitted:
         page.locator('#external-candidate-button').click()
     assert omitted.value.json()['plan']['canApply'] is False
     expect(page.locator('#external-apply')).to_be_disabled()
-    checks.nth(0).check()
+    for index in range(checks.count()):
+        checks.nth(index).check()
     with page.expect_response('**/api/import/build-candidate') as selected:
         page.locator('#external-candidate-button').click()
     project = selected.value.json()['plan']['proposedProject']
-    expected_port = {'id':'Gi1_0_1','name':'Uplink','enabled':True,'ipv4':None}
+    expected_port = ({'id':'eth0','name':'Ethernet 0','enabled':False,'ipv4':'192.168.10.20/24'}
+                     if ipv4 else {'id':'Gi1_0_1','name':'Uplink','enabled':True,'ipv4':None})
+    if ipv4:
+        binding = next(c for c in project['importEvidence']['acceptedChanges'] if c['targetKind']=='ipBinding')
+        assert binding['fieldValues'] == {'port.ipv4':'192.168.10.20/24'}
+        assert {ref['address'] for ref in binding['fieldOrigins']['port.ipv4']} == {'G2'}
     if vlan:
         expected_port['vlan'] = {'mode':'trunk','allowedVlans':[10,20]}
         port_change = next(c for c in project['importEvidence']['acceptedChanges'] if c['targetKind'] == 'port')
@@ -2864,13 +2877,13 @@ def port_import_regression(context, base, network_mode, store, errors, restart, 
     page.locator('#external-warning').check()
     page.once('dialog', lambda dialog: dialog.accept())
     page.locator('#external-apply').click()
-    expect(page.locator('[data-port-node="SW-01"]')).to_have_count(1)
+    expect(page.locator('[data-port-node="SERVER1"]' if ipv4 else '[data-port-node="SW-01"]')).to_have_count(1)
     with page.expect_download() as downloaded:
         page.locator('#external-bundle-export').click()
     bundle = json.loads(Path(downloaded.value.path()).read_text())
     assert base64.b64decode(bundle['sources'][0]['contentBase64']) == raw
     page.locator('#external-close').click()
-    project_name = 'vlan-ports-4c3' if vlan else 'ports-4c'
+    project_name = 'ipv4-ports-4c4' if ipv4 else 'vlan-ports-4c3' if vlan else 'ports-4c'
     page.locator('#project-filename').fill(project_name)
     page.locator('#project-filename').dispatch_event('change')
     with page.expect_response('**/api/save') as saved:
@@ -2892,10 +2905,11 @@ def port_import_regression(context, base, network_mode, store, errors, restart, 
             'name':'ports-sources.json','mimeType':'application/json',
             'buffer':json.dumps(bundle).encode()})
     assert verified.value.json()['sourceStatus'] == 'SOURCE_VERIFIED'
-    if vlan:
+    if vlan or ipv4:
         assert verified.value.json()['replayStatus'] == 'MATCH'
         altered = json.loads(json.dumps(bundle))
-        altered['sources'][0]['contentBase64'] = base64.b64encode(raw.replace(b'10,20', b'10,30')).decode()
+        altered_raw = raw.replace(b'192.168.10.20', b'192.168.10.30') if ipv4 else raw.replace(b'10,20', b'10,30')
+        altered['sources'][0]['contentBase64'] = base64.b64encode(altered_raw).decode()
         page.locator('#external-bundle-file').set_input_files({
             'name':'altered-sources.json','mimeType':'application/json',
             'buffer':json.dumps(altered).encode()})
@@ -5437,6 +5451,7 @@ def run():
             zone_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, vlan=True)
+            port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, ipv4=True)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)
