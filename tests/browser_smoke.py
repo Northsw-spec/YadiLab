@@ -2807,7 +2807,7 @@ def port_import_regression(context, base, network_mode, store, errors, restart):
     page = context.new_page()
     page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
     assert browser_open(page, base) == network_mode
-    raw = b'Device,Label,Kind,Port,PortName,Enabled\\nSW-01,Core,switch,Gi1/0/1,Uplink,true\\n'
+    raw = b'Device,Label,Kind,Port,PortName,Enabled\nSW-01,Core,switch,Gi1/0/1,Uplink,true\n'
     page.locator('#external-import').click()
     page.locator('#external-files').set_input_files({
         'name':'ports.csv','mimeType':'text/csv','buffer':raw})
