@@ -46,6 +46,8 @@ from test_icmp_echo import routed_reply_lab as icmp_routed_lab
 from test_icmp_investigation_lan import lan_lab as icmp_lan_lab
 from test_vlan_persistence import persisted_topology
 from test_import_plan import request as import_plan_request
+from test_import_integration_4c import corpus_a, expected_network
+from network_core.model import canonical_network_view
 
 
 def port():
@@ -3025,6 +3027,120 @@ def cable_import_regression(context, base, network_mode, store, errors, restart)
     page.close()
 
 
+def integrated_4c_regression(context, base, network_mode, store, errors, restart):
+    """Synthetic only: all 4C roles in one real multi-source browser import."""
+    req = corpus_a()
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page, base) == network_mode
+    page.locator('#external-import').click()
+    page.locator('#external-files').set_input_files([
+        {'name':s['filename'],'mimeType':'application/octet-stream',
+         'buffer':base64.b64decode(s['contentBase64'])} for s in req['sources']])
+    for delimiter in page.locator('#external-file-choices select').all():
+        delimiter.select_option(',')
+    page.locator('#external-inspect-files').click()
+    expect(page.locator('#external-sources')).to_contain_text('synthetic-only-cables.xlsx')
+    for index, mapping in enumerate(req['mappingViews']):
+        page.locator('#external-add-view').click()
+        box = page.locator('#external-views fieldset').nth(index)
+        source_index = int(mapping['sourceId'].split('-')[1])-1
+        box.locator('select').first.select_option(f'{source_index}:sheet-1')
+        box.locator('select').nth(1).select_option(mapping['role'])
+        box.locator('input[placeholder^="Rubrikrad"]').fill('1')
+        box.locator('input[placeholder^="Valda originalrader"]').fill(
+            ','.join(str(r) for r in mapping['selectedRows']))
+        for field, columns in mapping['columns'].items():
+            box.locator('label').filter(has_text=field).locator('input').fill(','.join(columns))
+        if mapping['viewId']=='view-4':
+            box.locator('select').nth(2).select_option('parse_vlan_integer')
+        if mapping['viewId']=='view-5':
+            box.locator('select').nth(3).select_option('split_vlan_integer_list')
+        box.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+    page.locator('#external-project-name').fill(req['projectName'])
+    page.locator('#external-project-name').dispatch_event('change')
+    with page.expect_response('**/api/import/build-candidate') as response:
+        page.locator('#external-plan-button').click()
+    discovery = response.value.json()['plan']
+    assert len(discovery['units'])==25
+    assert {u['kind'] for u in discovery['units']} == {
+        'zone','node','port','ipBinding','staticRoute','link'}
+    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    assert checks.count()==25
+    for index in range(checks.count()):
+        checks.nth(index).check()
+    with page.expect_response('**/api/import/build-candidate') as response:
+        page.locator('#external-candidate-button').click()
+    proposed = response.value.json()['plan']
+    assert proposed['canApply']
+    assert canonical_network_view(proposed['proposedProject']) == expected_network()
+    # A mapping edit invalidates the previously reviewed candidate and approval.
+    box = page.locator('#external-views fieldset').nth(7)
+    link_id = box.locator('label').filter(has_text='link.id').locator('input')
+    link_id.fill('B')
+    link_id.dispatch_event('change')
+    assert page.locator('#external-apply').is_disabled()
+    link_id.fill('A')
+    link_id.dispatch_event('change')
+    with page.expect_response('**/api/import/build-candidate'):
+        page.locator('#external-plan-button').click()
+    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    for index in range(checks.count()):
+        checks.nth(index).check()
+    with page.expect_response('**/api/import/build-candidate') as response:
+        page.locator('#external-candidate-button').click()
+    assert response.value.json()['plan']['canApply']
+    page.locator('#external-warning').check()
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#external-apply').click()
+    expect(page.locator('[data-node-id]')).to_have_count(5)
+    expect(page.locator('[data-link-id]')).to_have_count(4)
+    with page.expect_download() as downloaded:
+        page.locator('#external-bundle-export').click()
+    bundle = json.loads(Path(downloaded.value.path()).read_text())
+    assert [base64.b64decode(s['contentBase64']) for s in bundle['sources']] == [
+        base64.b64decode(s['contentBase64']) for s in req['sources']]
+    page.locator('#external-close').click()
+    name = 'synthetic-only-4c7'
+    disk = store / f'{name}.yadilab'
+    assert not disk.exists()
+    page.locator('#project-filename').fill(name)
+    page.locator('#project-filename').dispatch_event('change')
+    with page.expect_response('**/api/save') as saved:
+        page.locator('#save-project').click()
+    assert saved.value.status == 200
+    stored_bytes = disk.read_bytes()
+    stored = json.loads(stored_bytes)
+    assert canonical_network_view(stored) == expected_network()
+    assert stored['schemaVersion']=='1.4'
+    receipt = stored['importEvidence']
+    restart()
+    page.reload(wait_until='domcontentloaded')
+    page.locator('#saved-projects').select_option(name)
+    page.locator('#open-project').click()
+    expect(page.locator('[data-node-id]')).to_have_count(5)
+    expect(page.locator('[data-link-id]')).to_have_count(4)
+    expect(page.locator('#import-evidence-status')).to_contain_text('BASELINE_MATCH')
+    expect(page.locator('#import-evidence-status')).to_contain_text('Källfil ej ansluten')
+    page.locator('#external-import').click()
+    with page.expect_response('**/api/import/verify-sources') as verified:
+        page.locator('#external-bundle-file').set_input_files({
+            'name':'synthetic-only-sources.json','mimeType':'application/json',
+            'buffer':json.dumps(bundle).encode()})
+    assert verified.value.json()['sourceStatus']=='SOURCE_VERIFIED'
+    assert verified.value.json()['replayStatus']=='MATCH'
+    altered = json.loads(json.dumps(bundle))
+    altered['sources'][-1]['contentBase64'] = base64.b64encode(b'changed').decode()
+    page.locator('#external-bundle-file').set_input_files({
+        'name':'changed-sources.json','mimeType':'application/json',
+        'buffer':json.dumps(altered).encode()})
+    expect(page.locator('#external-status')).to_contain_text('Källfil ej ansluten')
+    assert disk.read_bytes()==stored_bytes
+    assert json.loads(disk.read_bytes())['importEvidence']==receipt
+    assert not errors, errors
+    page.close()
+
+
 def run():
     with tempfile.TemporaryDirectory() as td, sync_playwright() as playwright:
         store = Path(td)
@@ -5560,6 +5676,7 @@ def run():
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, ipv4=True)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, route=True)
             cable_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
+            integrated_4c_regression(context, base, network_mode, store, errors, restart_for_import_review)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)
