@@ -463,13 +463,25 @@ export function createImportReview({context, current, getProject, replaceProject
     if(!rows.length) { target.textContent='Välj först granskade originalrader i en MappingView.'; return; }
     const rowSelect=el('select',{},...rows.map(item=>el('option',{value:`${item.viewId}:${item.row}`},item.name)));
     const fieldSelect=el('select',{}), typeSelect=el('select',{},
-      el('option',{value:'text'},'Text'),el('option',{value:'boolean'},'Boolean'),el('option',{value:'null'},'Null'));
+      el('option',{value:'text'},'Text'),el('option',{value:'boolean'},'Boolean'),
+      el('option',{value:'null'},'Null'),el('option',{value:'integer'},'Heltal (VLAN)'),
+      el('option',{value:'integer_list'},'Heltalslista (VLAN)'));
     const input=el('input',{type:'text',placeholder:'Uttryckligt värde'});
     const reason=el('input',{type:'text',placeholder:'Motivering till exkludering'});
     const refreshFields=()=>{
       const row=rows.find(item=>`${item.viewId}:${item.row}`===rowSelect.value);
       fieldSelect.replaceChildren(...(fields[row?.role] || []).map(field=>el('option',{value:field},field)));
+      refreshTypes();
     };
+    const refreshTypes=()=>{
+      const permitted=fieldSelect.value==='port.accessVlan' ? ['integer'] :
+        fieldSelect.value==='port.allowedVlans' ? ['integer_list'] :
+        ['port.enabled','link.enabled'].includes(fieldSelect.value) ? ['boolean'] :
+        fieldSelect.value==='node.zoneId' ? ['text','null'] : ['text'];
+      for(const option of typeSelect.options) option.disabled=!permitted.includes(option.value);
+      if(!permitted.includes(typeSelect.value)) typeSelect.value=permitted[0];
+    };
+    fieldSelect.addEventListener('change',refreshTypes);
     rowSelect.addEventListener('change',refreshFields); refreshFields();
     const save=(id,items)=>{ $(id).value=JSON.stringify(items); invalidate(); renderDecisions(); };
     const add=el('button',{type:'button'},'Lägg till radbeslut');
@@ -481,6 +493,13 @@ export function createImportReview({context, current, getProject, replaceProject
         if(!['true','false'].includes(value))return showError(new Error('Boolean måste anges som true eller false.'));
         value=value==='true';
       } else if(typeSelect.value==='null') value=null;
+      else if(typeSelect.value==='integer' || typeSelect.value==='integer_list') {
+        const values=typeSelect.value==='integer_list' ? value.split(',') : [value];
+        if(values.length>64 || values.some(item=>!/^[1-9][0-9]{0,3}$/.test(item) || Number(item)>4094) ||
+            new Set(values).size!==values.length)
+          return showError(new Error('Ange 1–64 unika VLAN-heltal 1–4094 utan mellanslag eller ledande nollor.'));
+        value=typeSelect.value==='integer_list' ? values.map(Number) : Number(value);
+      }
       const next=values.filter(item=>!(item.viewId===viewId && item.row===row && item.targetField===targetField));
       next.push({viewId,row,targetField,valueType:typeSelect.value,value}); save('external-row-values',next);
     });

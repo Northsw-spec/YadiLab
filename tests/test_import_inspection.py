@@ -154,6 +154,38 @@ class WorkbookInspectionTests(unittest.TestCase):
             self.assertGreater(len(z.namelist()), 24)
         self.assertEqual(len(inspect_source(workbook_request('many.xlsx', raw))['tables']), 22)
 
+    def test_workbook_sheet_and_column_boundaries(self):
+        # Real archives at the declared limits, and one beyond, cannot be truncated.
+        for count in (32, 33):
+            sheets={f'Sheet {number}':'ID\n001\n' for number in range(count)}
+            ods_parts_for_count=ods_parts(sheets)
+            ods_parts_for_count['content.xml']=ods_parts_for_count['content.xml'].replace(b'1024',b'3')
+            for filename, raw in (
+                ('many.xlsx', xlsx_zip(workbook_parts(sheets))),
+                ('many.ods', ods_zip(ods_parts_for_count)),
+            ):
+                with self.subTest(filename=filename,count=count):
+                    if count==32:
+                        result=inspect_source(workbook_request(filename,raw))
+                        self.assertEqual(len(result['tables']),32)
+                        self.assertEqual(result['tables'][-1]['name'],'Sheet 31')
+                    else:
+                        with self.assertRaises(ProjectValidationError):
+                            inspect_source(workbook_request(filename,raw))
+        for address, accepted in (('IV2',True),('IW2',False)):
+            parts=workbook_parts({'Data':'ID\n001\n'})
+            parts['xl/worksheets/sheet1.xml']=parts['xl/worksheets/sheet1.xml'].replace(
+                b'r="A2"',f'r="{address}"'.encode())
+            raw=xlsx_zip(parts)
+            with self.subTest(address=address):
+                if accepted:
+                    table=inspect_source(workbook_request('wide.xlsx',raw))['tables'][0]
+                    self.assertEqual(table['columnCount'],256)
+                    self.assertEqual(table['previewRows'][1]['cells'][0]['address'],'IV2')
+                else:
+                    with self.assertRaises(ProjectValidationError):
+                        inspect_source(workbook_request('wide.xlsx',raw))
+
     def test_xlsx_rejects_hidden_formula_merge_external_macro_and_bad_coordinate(self):
         base = workbook_parts({'Data': 'ID\n001\n'})
         for label, path, old, new in [
