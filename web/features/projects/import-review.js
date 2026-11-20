@@ -189,11 +189,13 @@ export function createImportReview({context, current, getProject, replaceProject
       const table = el('select',{},...tableOptions());
       const role = el('select',{},el('option',{value:'device_inventory'},'device_inventory'),
         el('option',{value:'zone_inventory'},'zone_inventory'),
+        el('option',{value:'interface_inventory'},'interface_inventory'),
         el('option',{value:'documentation_only'},'documentation_only'));
       const header = el('input',{type:'number',min:'1',placeholder:'Rubrikrad, tomt = ingen'});
       const selected = el('input',{type:'text',placeholder:'Valda originalrader, t.ex. 2,3'});
       const columns = {}, columnLabels = {};
-      for (const field of ['node.id','node.label','node.kind','node.zoneId','zone.id','zone.label']) {
+      for (const field of ['node.id','node.label','node.kind','node.zoneId','zone.id','zone.label',
+        'port.nodeId','port.id','port.name','port.enabled']) {
         columns[field] = el('input',{type:'text',placeholder:'Kolumnbokstav, t.ex. A'});
         columnLabels[field] = el('label',{},field,columns[field]);
         box.append(columnLabels[field]);
@@ -219,7 +221,8 @@ export function createImportReview({context, current, getProject, replaceProject
       const showRole = () => {
         for (const [field, control] of Object.entries(columns)) {
           const supported = role.value === 'device_inventory' ? field.startsWith('node.')
-            : role.value === 'zone_inventory' && field.startsWith('zone.');
+            : role.value === 'zone_inventory' ? field.startsWith('zone.')
+            : role.value === 'interface_inventory' && field.startsWith('port.');
           columnLabels[field].hidden = !supported;
           if (!supported) control.value = '';
         }
