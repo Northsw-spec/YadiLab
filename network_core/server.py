@@ -160,6 +160,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path in ("/", "/index.html", "/app.js", "/model.js", "/canvas.js",
                           "/ui/dom.js", "/services/api.js", "/features/projects/persistence.js",
                           "/features/projects/transfer.js",
+                          "/features/projects/mapping-profiles.js",
                           "/features/projects/import-review.js",
                           "/features/diagnostics/queries.js", "/features/diagnostics/presenters.js",
                           "/features/diagnostics/icmp-investigation-panel.js",
