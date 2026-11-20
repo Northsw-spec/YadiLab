@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import hashlib
+import json
 import re
 
 from .import_plan import (canonical_json, internal_id, node_layout, object_exact, bounded_list,
@@ -22,6 +23,7 @@ UNIT_ID = re.compile(r'u-[0-9a-f]{32}\Z')
 ORIGIN_KEYS = {'kind', 'sourceId', 'tableId', 'row', 'address', 'decisionId'}
 NODE_FIELDS = {'id', 'label', 'kind', 'x', 'y', 'zoneId', 'ports'}
 ZONE_FIELDS = {'id', 'label'}
+PORT_FIELDS = {'nodeId', 'id', 'name', 'enabled', 'ipv4'}
 
 
 def _array(value, maximum, where):
@@ -164,7 +166,7 @@ def validate_evidence(value):
         uses.update((view['viewId'], row) for row in rows)
         if (type(view['columns']) is not dict or not set(view['columns']) <= ROLES[view['role']] or
                 type(view['constants']) is not dict or
-                not set(view['constants']) <= (ROLES[view['role']] - {'node.id', 'zone.id'}) or
+                not set(view['constants']) <= (ROLES[view['role']] - {'node.id', 'zone.id', 'port.nodeId', 'port.id'}) or
                 set(view['columns']) & set(view['constants']) or
                 type(view['valueMaps']) is not dict or not set(view['valueMaps']) <= set(view['columns']) or
                 type(view['label']) is not str or len(view['label']) > 240):
@@ -175,12 +177,15 @@ def validate_evidence(value):
             for label in labels:
                 if column_index(label) > table['columnCount']:
                     fail('columns', 'column out of table')
-        for mapping in view['valueMaps'].values():
-            if type(mapping) is not dict or any(type(k) is not str or type(v) is not str for k, v in mapping.items()):
+        for field, mapping in view['valueMaps'].items():
+            if type(mapping) is not dict or not mapping or any(type(k) is not str or type(v) is not str for k, v in mapping.items()):
                 fail('valueMaps', 'invalid mapping')
+            if field == 'port.enabled' and any(v not in ('true', 'false') for v in mapping.values()):
+                fail('valueMaps', 'invalid port.enabled mapping')
         for field, item in view['constants'].items():
             object_exact(item, {'type', 'value'}, 'constant')
             if not ((item['type'] == 'text' and type(item['value']) is str) or
+                    (item['type'] == 'boolean' and type(item['value']) is bool and field == 'port.enabled') or
                     (item['type'] == 'null' and item['value'] is None and field == 'node.zoneId')):
                 fail('constant', 'invalid type or value')
     if len(uses) > 20000:
@@ -206,6 +211,7 @@ def validate_evidence(value):
         if (view is None or type(item['row']) is not int or item['row'] not in view['selectedRows'] or
                 item['targetField'] not in ROLES[view['role']] or key in seen_rows or
                 not ((item['valueType'] == 'text' and type(item['value']) is str) or
+                     (item['valueType'] == 'boolean' and type(item['value']) is bool and item['targetField'] == 'port.enabled') or
                      (item['valueType'] == 'null' and item['value'] is None and item['targetField'] == 'node.zoneId'))):
             fail('rowValues', 'invalid row decision')
         seen_rows.add(key)
@@ -295,28 +301,45 @@ def validate_evidence(value):
         unit = change['unitId']
         kind = change['targetKind']
         if (type(unit) is not str or unit not in selected or unit in accepted or
-                kind not in ('node', 'zone') or type(change['targetKey']) is not str or
+                kind not in ('node', 'zone', 'port') or type(change['targetKey']) is not str or
                 internal_id('u-', [kind, change['targetKey']]) != unit):
             fail('acceptedChanges', 'invalid unit identity')
-        _id(change['targetKey'], 'acceptedChange.targetKey')
+        if kind == 'port':
+            try:
+                pair = json.loads(change['targetKey'])
+            except (TypeError, ValueError) as error:
+                fail('acceptedChanges', 'invalid port targetKey')
+            if (type(pair) is not list or len(pair) != 2 or
+                    any(type(value) is not str for value in pair) or
+                    canonical_json(pair).decode('utf-8') != change['targetKey']):
+                fail('acceptedChanges', 'noncanonical port targetKey')
+            for element in pair:
+                _id(element, 'acceptedChange.targetKey')
+        else:
+            _id(change['targetKey'], 'acceptedChange.targetKey')
         if change['changeIds'] != [internal_id('c-', [unit, 'create', '__object__'])]:
             fail('acceptedChanges', 'invalid change ID')
         fields, origins = change['fieldValues'], change['fieldOrigins']
-        object_exact(fields, NODE_FIELDS if kind == 'node' else ZONE_FIELDS, 'acceptedChange.fieldValues')
-        object_exact(origins, NODE_FIELDS if kind == 'node' else ZONE_FIELDS, 'acceptedChange.fieldOrigins')
-        if fields['id'] != change['targetKey'] or (kind == 'node' and fields['ports'] != []):
+        expected_fields = NODE_FIELDS if kind == 'node' else PORT_FIELDS if kind == 'port' else ZONE_FIELDS
+        object_exact(fields, expected_fields, 'acceptedChange.fieldValues')
+        object_exact(origins, expected_fields, 'acceptedChange.fieldOrigins')
+        if kind == 'port':
+            if (fields['nodeId'] != pair[0] or fields['id'] != pair[1] or
+                    fields['ipv4'] is not None or origins['ipv4']):
+                fail('acceptedChanges', 'port identity or absent IPv4 invalid')
+        elif fields['id'] != change['targetKey'] or (kind == 'node' and fields['ports'] != []):
             fail('acceptedChanges', 'unsupported historical fields')
         for field, refs in origins.items():
             refs = _array(refs, 128, f'fieldOrigins.{field}')
             if field in ('x', 'y') and (len(refs) != 1 or refs[0].get('kind') != 'derived_layout'):
                 fail('fieldOrigins', 'missing derived layout')
-            if field == 'ports' and refs:
+            if field in ('ports', 'ipv4') and refs:
                 fail('fieldOrigins', 'structural defaults have no source origin')
             if field == 'zoneId' and fields['zoneId'] is None and any(ref.get('kind') == 'source_cell' for ref in refs):
                 fail('fieldOrigins', 'null zone cannot be attributed to a source cell')
             if field == 'zoneId' and fields['zoneId'] is not None and not refs:
                 fail('fieldOrigins', 'declared zone needs a source or decision origin')
-            if field in ('id', 'label') or (kind == 'node' and field == 'kind'):
+            if field in ('id', 'label', 'nodeId', 'name', 'enabled') or (kind == 'node' and field == 'kind'):
                 if not refs:
                     fail('fieldOrigins', 'missing source or decision origin')
             for ref in refs:
@@ -329,8 +352,18 @@ def validate_evidence(value):
         fail('acceptedChanges', 'not sorted by selected unit ID')
     zone_changes = [c for c in changes if c['targetKind'] == 'zone']
     node_changes = [c for c in changes if c['targetKind'] == 'node']
+    port_changes = [c for c in changes if c['targetKind'] == 'port']
     zones = sorted((c['fieldValues'] for c in zone_changes), key=lambda z: z['id'])
-    nodes = sorted((c['fieldValues'] for c in node_changes), key=lambda n: n['id'])
+    nodes = sorted((deepcopy(c['fieldValues']) for c in node_changes), key=lambda n: n['id'])
+    nodes_by_id = {node['id']: node for node in nodes}
+    for change in port_changes:
+        values = change['fieldValues']
+        owner = nodes_by_id.get(values['nodeId'])
+        if owner is None:
+            fail('acceptedChanges', 'port has no selected parent node')
+        owner['ports'].append({k: deepcopy(values[k]) for k in ('id', 'name', 'enabled', 'ipv4')})
+    for node in nodes:
+        node['ports'].sort(key=lambda port: port['id'])
     if not nodes:
         fail('acceptedChanges', 'at least one selected node required')
     positions = node_layout([c['targetKey'] for c in node_changes])
