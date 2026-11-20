@@ -34,7 +34,7 @@
     </dialog>
     <dialog id="external-dialog" aria-label="Extern dokumentationsimport" style="width:min(1000px,96vw);max-height:90vh;overflow:auto">
       <h2>Extern dokumentationsimport</h2>
-      <p>Granska originalceller och välj själv vilka noduppgifter som får bli projektdata. Inga portar, kablar eller IP-adresser skapas automatiskt.</p>
+      <p>Granska originalceller och välj uttryckligen vilka uppgifter som får bli projektdata. Ingen nätverksuppgift skapas automatiskt.</p>
       <button id="external-close" type="button">Stäng</button>
       <h3>1 · Originalfiler</h3>
       <input id="external-files" type="file" accept=".csv,.xlsx,.ods" multiple>
@@ -42,6 +42,7 @@
       <button id="external-inspect-files" type="button" disabled>Inspektera valda filer</button>
       <label for="external-project-name">Projektnamn</label><input id="external-project-name" class="control" value="Dokumenterat nät" maxlength="120">
       <div id="external-sources" aria-live="polite"></div>
+      <div id="external-source-focus" role="status" aria-live="polite"></div>
       <h3>2 · Explicita mappningsvyer</h3>
       <button id="external-add-view" type="button" disabled>Lägg till MappingView</button>
       <div id="external-views"></div>
@@ -53,10 +54,14 @@
       <div id="external-profile-bindings" aria-live="polite"></div>
       <button id="external-profile-confirm" type="button" disabled>Bekräfta tabellbindningar och ersätt MappingViews</button>
       <p id="external-profile-status" aria-live="polite"></p>
-      <label for="external-row-values">Radunika användarbeslut (JSON-array enligt kontraktet, t.ex. [{"viewId":"view-1","row":2,"targetField":"node.id","valueType":"text","value":"H-01"}])</label>
-      <textarea id="external-row-values" class="control" rows="3">[]</textarea>
-      <label for="external-exclusions">Uteslutna användningar (JSON-array med viewId, row och reason)</label>
-      <textarea id="external-exclusions" class="control" rows="3">[]</textarea>
+      <h4>Radunika beslut och exkluderingar</h4>
+      <p>Välj en granskad rad i en mappningsvy. Besluten kan ändras eller tas bort före kandidatbygget.</p>
+      <div id="external-decision-editor"></div>
+      <div id="external-decision-list" aria-live="polite"></div>
+      <details><summary>Avancerad teknisk JSON-vy för radbeslut</summary>
+        <label for="external-row-values">rowValues[]</label><textarea id="external-row-values" class="control" rows="3">[]</textarea>
+        <label for="external-exclusions">excludedUses[]</label><textarea id="external-exclusions" class="control" rows="3">[]</textarea>
+      </details>
       <button id="external-plan-button" type="button" disabled>Bygg granskningsplan</button>
       <div id="external-plan-result" aria-live="polite"></div>
       <h3>3 · Vald kandidat</h3>
@@ -67,6 +72,7 @@
       <button id="external-bundle-export" type="button" disabled>Exportera separat källpaket</button>
       <h3>4 · Historisk proveniens efter Save/Open</h3>
       <p id="external-status">Inget importkvitto öppnat.</p>
+      <div id="external-history" aria-live="polite"></div>
       <label for="external-reattach-files">Återanslut alla originalfiler i historisk ordning</label>
       <input id="external-reattach-files" type="file" accept=".csv,.xlsx,.ods" multiple>
       <label for="external-bundle-file">Eller välj ett separat källpaket</label>
