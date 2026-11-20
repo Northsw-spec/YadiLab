@@ -36,6 +36,7 @@ let savedSha = null;
 let savedSnapshot = JSON.stringify(project);
 let editRevision = 0;
 let workspaceRevision = 0;
+let builderValidationGeneration = 0;
 let savePending = false;
 const diagnosticRuns = {arp: 0, route: 0, ipv4: 0, ping: 0};
 const diagnosticFields = {
@@ -1151,6 +1152,28 @@ function renderIPv4Trace() {
   output.textContent = presentation.text;
 }
 
+async function validateBuilderAttempt(attempt, {renderOnError = true} = {}) {
+  const context = {
+    workspaceRevision, editRevision, filename, project,
+    snapshot: JSON.stringify(project), generation: ++builderValidationGeneration,
+  };
+  const current = () => workspaceRevision === context.workspaceRevision &&
+    editRevision === context.editRevision && filename === context.filename &&
+    project === context.project && JSON.stringify(project) === context.snapshot &&
+    builderValidationGeneration === context.generation;
+  const stale = () => notify('Valideringen avbröts: arbetsytan ändrades eller ett nyare försök startades. Försök igen.', true);
+  try {
+    const normalized = await api('/api/validate', attempt);
+    if (!current()) return stale();
+    project = normalized.project;
+    changed();
+  } catch (error) {
+    if (!current()) return stale();
+    notify(error.message, true);
+    if (renderOnError) renderInspector();
+  }
+}
+
 function renderInspector() {
   const box = $('inspector');
   box.replaceChildren();
@@ -1218,11 +1241,7 @@ function renderInspector() {
           const attempt = copy(project);
           const portCopy = attempt.nodes.find(n => n.id === value.id).ports.find(p => p.id === port.id);
           portCopy.ipv4 = next.trim() || null;
-          try {
-            const normalized = await api('/api/validate', attempt);
-            project = normalized.project;
-            changed();
-          } catch (error) { notify(error.message, true); renderInspector(); }
+          await validateBuilderAttempt(attempt);
         }, {dataset:{portIpv4:port.id},placeholder:'192.0.2.1/24'})),
         value.kind === 'switch' ? null : field('MAC-adress (valfri, explicit)', input(port.mac || '', async next => {
           const attempt = copy(project);
@@ -1230,11 +1249,7 @@ function renderInspector() {
           if (attempt.schemaVersion !== '1.4') attempt.schemaVersion = '1.3';
           const portCopy = attempt.nodes.find(n => n.id === value.id).ports.find(p => p.id === port.id);
           portCopy.mac = next.trim() || null;
-          try {
-            const normalized = await api('/api/validate', attempt);
-            project = normalized.project;
-            changed();
-          } catch (error) { notify(error.message, true); renderInspector(); }
+          await validateBuilderAttempt(attempt);
         }, {dataset:{portMac:port.id},placeholder:'02:00:00:00:00:0A'})),
         value.kind !== 'switch' ? null : field('VLAN (access:10 eller trunk:10,20)', input(
           port.vlan?.mode === 'access' ? `access:${port.vlan.vlan}` :
@@ -1257,11 +1272,7 @@ function renderInspector() {
               delete portCopy.vlan;
             }
             if (attempt.schemaVersion !== '1.4') attempt.schemaVersion = '1.3';
-            try {
-              const normalized = await api('/api/validate', attempt);
-              project = normalized.project;
-              changed();
-            } catch (error) { notify(error.message, true); renderInspector(); }
+            await validateBuilderAttempt(attempt);
           }, {dataset:{portVlan:port.id},placeholder:'access:10 eller trunk:10,20'})),
         check('Port aktiverad', port.enabled, enabled => { port.enabled = enabled; changed(); }),
         button('Ta bort port', () => {
@@ -1296,10 +1307,7 @@ function renderInspector() {
         const route = attempt.nodes.find(n => n.id === value.id)
           .staticRoutes.find(r => r.id === routeId);
         route[fieldName] = newValue;
-        try {
-          const normalized = await api('/api/validate', attempt);
-          project = normalized.project; changed();
-        } catch (error) { notify(error.message, true); renderInspector(); }
+        await validateBuilderAttempt(attempt);
       };
       for (const route of staticRoutes) {
         box.append(el('div', {className:'port-card', dataset:{routeCard:route.id}},
@@ -1318,10 +1326,7 @@ function renderInspector() {
             if (attempt.schemaVersion !== '1.4') attempt.schemaVersion = '1.3';
             const node = attempt.nodes.find(n => n.id === value.id);
             node.staticRoutes = node.staticRoutes.filter(r => r.id !== route.id);
-            try {
-              const normalized = await api('/api/validate', attempt);
-              project = normalized.project; changed();
-            } catch (error) { notify(error.message, true); renderInspector(); }
+            await validateBuilderAttempt(attempt);
           }, 'btn-outline danger', {dataset:{deleteRoute:route.id}})));
       }
       const destination = el('input', {className:'control',id:'new-route-destination',
@@ -1344,10 +1349,7 @@ function renderInspector() {
           nextHop: nextHop.value.trim(),
           outPort: outPort.value,
         });
-        try {
-          const normalized = await api('/api/validate', attempt);
-          project = normalized.project; changed();
-        } catch (error) { notify(error.message, true); }
+        await validateBuilderAttempt(attempt, {renderOnError: false});
       }, 'btn-soft', {id:'add-static-route'});
       box.append(field('Nytt destinationsprefix', destination),
         field('Next-hop', nextHop),

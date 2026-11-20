@@ -3417,6 +3417,186 @@ def schema14_builder_edit_matrix(context, base, network_mode, store, errors, res
     page.close()
 
 
+def builder_validation_races(context, base, network_mode, store, errors, restart):
+    """Real delayed HTTP replies must never replace newer Builder work."""
+    path = store / 'synthetic-only-4c7.yadilab'
+    original_bytes = path.read_bytes()
+    original = json.loads(original_bytes)
+
+    def opened(slug='synthetic-only-4c7'):
+        page = context.new_page()
+        page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+        assert browser_open(page, base) == network_mode
+        page.locator('#saved-projects').select_option(slug)
+        page.locator('#open-project').click()
+        expect(page.locator('[data-node-id="R1"]')).to_have_count(1)
+        return page
+
+    def select(page, node):
+        page.locator(f'[data-item-type="node"][data-item-id="{node}"]').click()
+
+    def newer_label(page, label):
+        select(page, 'R2')
+        page.locator('#node-label').fill(label)
+        page.locator('#node-label').dispatch_event('change')
+
+    def ipv4(page, value='192.168.10.22/24'):
+        select(page, 'H1')
+        page.locator('[data-port-ipv4="eth0"]').fill(value)
+        page.locator('[data-port-ipv4="eth0"]').dispatch_event('change')
+
+    def mac(page):
+        select(page, 'H1')
+        page.locator('[data-port-mac="eth0"]').fill('02:00:00:00:00:21')
+        page.locator('[data-port-mac="eth0"]').dispatch_event('change')
+
+    def vlan(page):
+        select(page, 'SW1')
+        page.locator('[data-port-vlan="g2"]').fill('access:20')
+        page.locator('[data-port-vlan="g2"]').dispatch_event('change')
+
+    def edit_route(page):
+        select(page, 'R1')
+        page.locator('[data-route-destination="route1"]').fill('192.168.40.0/24')
+        page.locator('[data-route-destination="route1"]').dispatch_event('change')
+
+    def delete_route(page):
+        select(page, 'R1')
+        page.locator('[data-delete-route="route1"]').click()
+
+    def add_route(page):
+        select(page, 'R1')
+        page.locator('#new-route-destination').fill('198.51.100.0/24')
+        page.locator('#new-route-next-hop').fill('10.0.0.2')
+        page.locator('#new-route-out-port').select_option('eth0')
+        page.locator('#add-static-route').click()
+
+    # All six current responses still apply through the same canonical validator.
+    ProjectStore(store).save('builder-race-positive', original, None)
+    page = opened('builder-race-positive')
+    for action, check in (
+        (ipv4, lambda: expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value('192.168.10.22/24')),
+        (mac, lambda: expect(page.locator('[data-port-mac="eth0"]')).to_have_value('02:00:00:00:00:21')),
+        (vlan, lambda: expect(page.locator('[data-port-vlan="g2"]')).to_have_value('access:20')),
+        (edit_route, lambda: expect(page.locator('[data-route-destination="route1"]')).to_have_value('192.168.40.0/24')),
+        (delete_route, lambda: expect(page.locator('[data-delete-route="route1"]')).to_have_count(0)),
+        (add_route, lambda: expect(page.locator('[data-route-card]')).to_have_count(1)),
+    ):
+        with page.expect_response('**/api/validate') as accepted: action(page)
+        assert accepted.value.status == 200
+        check()
+        expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+    with page.expect_response('**/api/validate') as rejected: ipv4(page, 'not-an-ipv4-address')
+    assert rejected.value.status == 422
+    expect(page.locator('#toast')).to_contain_text('IPv4')
+    expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value('192.168.10.22/24')
+    with page.expect_response('**/api/save') as saved: page.locator('#save-project').click()
+    assert saved.value.status == 200
+    positive = json.loads((store / 'builder-race-positive.yadilab').read_bytes())
+    assert positive['schemaVersion'] == '1.4' and positive['importEvidence'] == original['importEvidence']
+    assert next(n for n in positive['nodes'] if n['id'] == 'H1')['ports'][0]['ipv4'] == '192.168.10.22/24'
+    assert len(next(n for n in positive['nodes'] if n['id'] == 'R1')['staticRoutes']) == 1
+    page.close()
+
+    for name, action in (('IPv4', ipv4), ('MAC', mac), ('VLAN', vlan),
+                         ('route edit', edit_route), ('route delete', delete_route),
+                         ('route add', add_route)):
+        page = opened()
+        hold_http_reply(page, '/api/validate')
+        action(page)
+        page.wait_for_function('window.__heldReply')
+        newer_label(page, 'Nyare användarändring')
+        release_http_reply(page)
+        expect(page.locator('#toast')).to_contain_text('Valideringen avbröts')
+        expect(page.locator('#node-label')).to_have_value('Nyare användarändring')
+        expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+        assert path.read_bytes() == original_bytes, name
+        page.close()
+
+    # A later request from the same original snapshot wins even if A replies last.
+    for second in ('192.168.10.23/24', 'MAC'):
+        page = opened()
+        hold_http_reply(page, '/api/validate', first_only=True)
+        ipv4(page)
+        page.wait_for_function('window.__heldReply')
+        if second == 'MAC':
+            with page.expect_response('**/api/validate') as accepted: mac(page)
+        else:
+            with page.expect_response('**/api/validate') as accepted: ipv4(page, second)
+        assert accepted.value.status == 200
+        if second == 'MAC':
+            expect(page.locator('[data-port-mac="eth0"]')).to_have_value('02:00:00:00:00:21')
+        else:
+            expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value(second)
+        release_http_reply(page)
+        expect(page.locator('#toast')).to_contain_text('Valideringen avbröts')
+        if second == 'MAC':
+            expect(page.locator('[data-port-mac="eth0"]')).to_have_value('02:00:00:00:00:21')
+        else:
+            expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value(second)
+        page.close()
+
+    # A late 422 describes an old input, not the new Inspector or Save state.
+    page = opened()
+    hold_http_reply(page, '/api/validate')
+    ipv4(page, 'not-an-ipv4-address')
+    page.wait_for_function('window.__heldReply')
+    newer_label(page, 'Nyare efter fel')
+    release_http_reply(page)
+    expect(page.locator('#toast')).to_contain_text('Valideringen avbröts')
+    expect(page.locator('#node-label')).to_have_value('Nyare efter fel')
+    expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+    page.close()
+
+    # A completed response for project A cannot change project B's exact export.
+    page = opened()
+    hold_http_reply(page, '/api/validate', first_only=True)
+    ipv4(page)
+    page.wait_for_function('window.__heldReply')
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#new-project').click()
+    page.locator('#load-example').click()
+    expect(page.locator('[data-node-id="pc-1"]')).to_have_count(1)
+    with page.expect_download() as before_download: page.locator('#export-project').click()
+    export_before = Path(before_download.value.path()).read_bytes()
+    release_http_reply(page)
+    expect(page.locator('#toast')).to_contain_text('Valideringen avbröts')
+    with page.expect_download() as after_download: page.locator('#export-project').click()
+    assert Path(after_download.value.path()).read_bytes() == export_before
+    expect(page.locator('[data-node-id="pc-1"]')).to_have_count(1)
+    expect(page.locator('[data-node-id="R1"]')).to_have_count(0)
+    page.close()
+
+    # The newer edit survives a real Save/Open and a full server restart.
+    ProjectStore(store).save('builder-race-preserved', original, None)
+    page = opened('builder-race-preserved')
+    hold_http_reply(page, '/api/validate')
+    ipv4(page)
+    page.wait_for_function('window.__heldReply')
+    newer_label(page, 'Beständig nyare ändring')
+    release_http_reply(page)
+    expect(page.locator('#toast')).to_contain_text('Valideringen avbröts')
+    with page.expect_response('**/api/save') as saved: page.locator('#save-project').click()
+    assert saved.value.status == 200
+    persisted = store / 'builder-race-preserved.yadilab'
+    document = json.loads(persisted.read_bytes())
+    assert document['schemaVersion'] == '1.4'
+    assert document['importEvidence'] == original['importEvidence']
+    assert next(n for n in document['nodes'] if n['id'] == 'R2')['label'] == 'Beständig nyare ändring'
+    assert next(n for n in document['nodes'] if n['id'] == 'H1')['ports'][0]['ipv4'] == '192.168.10.20/24'
+    before = persisted.read_bytes()
+    restart()
+    page.reload(wait_until='domcontentloaded')
+    page.locator('#saved-projects').select_option('builder-race-preserved')
+    page.locator('#open-project').click()
+    assert persisted.read_bytes() == before
+    select(page, 'R2')
+    expect(page.locator('#node-label')).to_have_value('Beständig nyare ändring')
+    assert path.read_bytes() == original_bytes
+    assert not errors, errors
+    page.close()
+
+
 def mapping_profile_regression(context, base, network_mode, store, errors, restart):
     """Real profile download and reuse against a new inspected CSV source."""
     page = context.new_page()
@@ -6149,6 +6329,7 @@ def run():
             cable_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             integrated_4c_regression(context, base, network_mode, store, errors, restart_for_import_review)
             schema14_builder_edit_matrix(context, base, network_mode, store, errors, restart_for_import_review)
+            builder_validation_races(context, base, network_mode, store, errors, restart_for_import_review)
             mapping_profile_regression(context, base, network_mode, store, errors, restart_for_import_review)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
