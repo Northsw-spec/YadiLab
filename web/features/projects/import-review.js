@@ -195,28 +195,37 @@ export function createImportReview({context, current, getProject, replaceProject
       const selected = el('input',{type:'text',placeholder:'Valda originalrader, t.ex. 2,3'});
       const columns = {}, columnLabels = {};
       for (const field of ['node.id','node.label','node.kind','node.zoneId','zone.id','zone.label',
-        'port.nodeId','port.id','port.name','port.enabled']) {
+        'port.nodeId','port.id','port.name','port.enabled','port.vlanMode','port.accessVlan','port.allowedVlans']) {
         columns[field] = el('input',{type:'text',placeholder:'Kolumnbokstav, t.ex. A'});
         columnLabels[field] = el('label',{},field,columns[field]);
         box.append(columnLabels[field]);
       }
       const maps = el('textarea',{rows:'2',placeholder:'valueMaps JSON, t.ex. {"node.kind":{"Server":"host"}}'},'{}');
+      const accessTransform = el('select',{},el('option',{value:''},'Ingen'),
+        el('option',{value:'parse_vlan_integer'},'parse_vlan_integer → heltal'));
+      const trunkTransform = el('select',{},el('option',{value:''},'Ingen'),
+        el('option',{value:'split_vlan_integer_list'},'split_vlan_integer_list → heltalslista'));
       const constants = el('textarea',{rows:'2',placeholder:'constants JSON'},'{}');
       const label = el('input',{type:'text',placeholder:'Beskriv denna vy'});
       const remove = el('button',{type:'button'},'Ta bort vy');
-      const controls = [table,role,header,selected,...Object.values(columns),maps,constants,label];
+      const controls = [table,role,header,selected,...Object.values(columns),accessTransform,trunkTransform,maps,constants,label];
       const update = () => { view.data = {table:table.value,role:role.value,header:header.value,
         selected:selected.value, columns:Object.fromEntries(Object.entries(columns).map(([key,value])=>[key,value.value])),
-        maps:maps.value,constants:constants.value,label:label.value}; invalidate(); };
+        maps:maps.value,constants:constants.value,label:label.value,
+        accessTransform:accessTransform.value,trunkTransform:trunkTransform.value}; invalidate(); };
       box.prepend(el('label',{},'Källa och blad',table),el('label',{},'Roll',role),
         el('label',{},'Rubrikrad',header),el('label',{},'Valda originalrader',selected));
       box.append(el('label',{},'valueMaps',maps),el('label',{},'constants',constants),
+        el('label',{},'port.accessVlan: källtext → JSON-heltal',accessTransform),
+        el('label',{},'port.allowedVlans: källtext → JSON-heltalslista',trunkTransform),
         el('label',{},'Vynamn',label),remove);
       if (view.data) {
         table.value=view.data.table; role.value=view.data.role; header.value=view.data.header;
         selected.value=view.data.selected; label.value=view.data.label;
         for (const [key,value] of Object.entries(view.data.columns)) columns[key].value=value;
         maps.value=view.data.maps; constants.value=view.data.constants;
+        accessTransform.value=view.data.accessTransform || '';
+        trunkTransform.value=view.data.trunkTransform || '';
       } else update();
       const showRole = () => {
         for (const [field, control] of Object.entries(columns)) {
@@ -254,7 +263,11 @@ export function createImportReview({context, current, getProject, replaceProject
         expectedHeaders:headerCells?.map(c=>c.value) ?? [],label:data.label};
     });
     return {contractVersion:'1',projectName:$('external-project-name').value,
-      sources:sourceRequest(),mappingViews,transformations:[],
+      sources:sourceRequest(),mappingViews,
+      transformations:views.flatMap((view,index) => [
+        view.data.accessTransform && {viewId:`view-${index+1}`,targetField:'port.accessVlan',operation:view.data.accessTransform,delimiter:null},
+        view.data.trunkTransform && {viewId:`view-${index+1}`,targetField:'port.allowedVlans',operation:view.data.trunkTransform,delimiter:','},
+      ].filter(Boolean)),
       rowValues:JSON.parse($('external-row-values').value),
       excludedUses:JSON.parse($('external-exclusions').value),selectedUnitIds};
   }
@@ -262,6 +275,7 @@ export function createImportReview({context, current, getProject, replaceProject
     const target=$('external-plan-result'); target.replaceChildren();
     target.append(el('p',{},`Fingerprint: ${value.fingerprint}`),
       el('p',{},`Rapport: ${JSON.stringify(value.report)}`),
+      el('h4',{},'Valda typade transformationer'),el('pre',{},JSON.stringify(value.transformations,null,2)),
       el('h4',{},'SourceClaims'),el('pre',{},JSON.stringify(value.claims,null,2)),
       el('h4',{},'Konflikter och diagnostik'),el('pre',{},JSON.stringify(value.diagnostics,null,2)),
       el('h4',{},'Originalrader och omappade celler'),el('pre',{},JSON.stringify(value.recordReviews,null,2)),

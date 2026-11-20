@@ -2804,15 +2804,17 @@ def zone_import_regression(context, base, network_mode, store, errors, restart):
     page.close()
 
 
-def port_import_regression(context, base, network_mode, store, errors, restart):
+def port_import_regression(context, base, network_mode, store, errors, restart, vlan=False):
     """Explicit port identity, parent dependency, Save/Open and source replay."""
     page = context.new_page()
     page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
     assert browser_open(page, base) == network_mode
-    raw = b'Device,Label,Kind,Port,PortName,Enabled\nSW-01,Core,switch,Gi1_0_1,Uplink,true\n'
+    raw = (b'Device,Label,Kind,Port,PortName,Enabled,Mode,VLAN\n'
+           b'SW-01,Core,switch,Gi1_0_1,Uplink,true,trunk,"10,20"\n') if vlan else (
+           b'Device,Label,Kind,Port,PortName,Enabled\nSW-01,Core,switch,Gi1_0_1,Uplink,true\n')
     page.locator('#external-import').click()
     page.locator('#external-files').set_input_files({
-        'name':'ports.csv','mimeType':'text/csv','buffer':raw})
+        'name':'vlan-ports.csv' if vlan else 'ports.csv','mimeType':'text/csv','buffer':raw})
     page.locator('#external-file-choices select').first.select_option(',')
     page.locator('#external-inspect-files').click()
     expect(page.locator('#external-sources')).to_contain_text('Gi1_0_1')
@@ -2828,6 +2830,10 @@ def port_import_regression(context, base, network_mode, store, errors, restart):
         mapping.locator('input[placeholder^="Valda originalrader"]').fill('2')
         for field, column in columns.items():
             mapping.locator('label').filter(has_text=field).locator('input').fill(column)
+        if vlan and role == 'interface_inventory':
+            mapping.locator('label').filter(has_text='port.vlanMode').locator('input').fill('G')
+            mapping.locator('label').filter(has_text='port.allowedVlans').locator('input').fill('H')
+            mapping.locator('label').filter(has_text='port.allowedVlans: källtext').locator('select').select_option('split_vlan_integer_list')
         mapping.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
     with page.expect_response('**/api/import/build-candidate') as preview:
         page.locator('#external-plan-button').click()
@@ -2846,8 +2852,14 @@ def port_import_regression(context, base, network_mode, store, errors, restart):
     with page.expect_response('**/api/import/build-candidate') as selected:
         page.locator('#external-candidate-button').click()
     project = selected.value.json()['plan']['proposedProject']
-    assert project['nodes'][0]['ports'] == [
-        {'id':'Gi1_0_1','name':'Uplink','enabled':True,'ipv4':None}]
+    expected_port = {'id':'Gi1_0_1','name':'Uplink','enabled':True,'ipv4':None}
+    if vlan:
+        expected_port['vlan'] = {'mode':'trunk','allowedVlans':[10,20]}
+        port_change = next(c for c in project['importEvidence']['acceptedChanges'] if c['targetKind'] == 'port')
+        assert {ref['kind'] for ref in port_change['fieldOrigins']['vlan']} == {'source_cell','user_decision'}
+        assert selected.value.json()['plan']['transformations'] == [
+            {'viewId':'view-2','targetField':'port.allowedVlans','operation':'split_vlan_integer_list','delimiter':','}]
+    assert project['nodes'][0]['ports'] == [expected_port]
     assert project['links'] == []
     page.locator('#external-warning').check()
     page.once('dialog', lambda dialog: dialog.accept())
@@ -2858,19 +2870,20 @@ def port_import_regression(context, base, network_mode, store, errors, restart):
     bundle = json.loads(Path(downloaded.value.path()).read_text())
     assert base64.b64decode(bundle['sources'][0]['contentBase64']) == raw
     page.locator('#external-close').click()
-    page.locator('#project-filename').fill('ports-4c')
+    project_name = 'vlan-ports-4c3' if vlan else 'ports-4c'
+    page.locator('#project-filename').fill(project_name)
     page.locator('#project-filename').dispatch_event('change')
     with page.expect_response('**/api/save') as saved:
         page.locator('#save-project').click()
     assert saved.value.status == 200
-    disk = store / 'ports-4c.yadilab'
+    disk = store / f'{project_name}.yadilab'
     stored = json.loads(disk.read_bytes())
     assert stored['nodes'][0]['ports'] == project['nodes'][0]['ports']
     assert stored['links'] == []
     receipt = stored['importEvidence']
     restart()
     page.reload(wait_until='domcontentloaded')
-    page.locator('#saved-projects').select_option('ports-4c')
+    page.locator('#saved-projects').select_option(project_name)
     page.locator('#open-project').click()
     expect(page.locator('#import-evidence-status')).to_contain_text('BASELINE_MATCH')
     page.locator('#external-import').click()
@@ -2879,6 +2892,14 @@ def port_import_regression(context, base, network_mode, store, errors, restart):
             'name':'ports-sources.json','mimeType':'application/json',
             'buffer':json.dumps(bundle).encode()})
     assert verified.value.json()['sourceStatus'] == 'SOURCE_VERIFIED'
+    if vlan:
+        assert verified.value.json()['replayStatus'] == 'MATCH'
+        altered = json.loads(json.dumps(bundle))
+        altered['sources'][0]['contentBase64'] = base64.b64encode(raw.replace(b'10,20', b'10,30')).decode()
+        page.locator('#external-bundle-file').set_input_files({
+            'name':'altered-sources.json','mimeType':'application/json',
+            'buffer':json.dumps(altered).encode()})
+        expect(page.locator('#external-status')).to_contain_text('Källfil ej ansluten')
     assert json.loads(disk.read_bytes())['importEvidence'] == receipt
     assert not errors, errors
     page.close()
@@ -5415,6 +5436,7 @@ def run():
             import_review_delimiters_regression(context, base, network_mode, store, errors)
             zone_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
+            port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, vlan=True)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)
