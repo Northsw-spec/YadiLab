@@ -3157,6 +3157,9 @@ def mapping_profile_regression(context, base, network_mode, store, errors, resta
         page.locator('#external-inspect-files').click()
         expect(page.locator('#external-sources')).to_contain_text(filename)
     page.locator('#external-import').click()
+    page.locator('#external-profile-file').set_input_files({
+        'name':'no-source.json','mimeType':'application/json','buffer':b'{"profileVersion":"1","views":[]}'})
+    expect(page.locator('#external-profile-status')).to_contain_text('Inspektera aktuella originalfiler')
     inspect(old,'synthetic-only-old.csv')
     for index, (role, columns) in enumerate((
         ('device_inventory', {'node.id':'A','node.label':'B','node.kind':'C'}),
@@ -3200,6 +3203,7 @@ def mapping_profile_regression(context, base, network_mode, store, errors, resta
     assert page.locator('#external-views fieldset').count()==0
     assert page.locator('[data-node-id]').count()==0
     for filename, data, message in (
+        ('empty.json', b'', '256 KiB'),
         ('invalid.json', b'{broken', 'JSON'),
         ('invalid-utf8.json', b'\xff', 'giltig UTF-8'),
         ('source-bundle.json', b'{"sourceBundleVersion":"1","sources":[]}', 'profil'),
@@ -3209,6 +3213,11 @@ def mapping_profile_regression(context, base, network_mode, store, errors, resta
             'name':filename,'mimeType':'application/json','buffer':data})
         expect(page.locator('#external-profile-status')).to_contain_text(message)
         assert page.locator('#external-views fieldset').count()==0
+    import_profile()
+    page.locator('#external-add-view').click()
+    assert page.locator('#external-profile-confirm').is_disabled()
+    page.locator('#external-views fieldset').last.get_by_text('Ta bort vy').click()
+    assert page.locator('#external-views fieldset').count()==0
     page.evaluate("""() => {
       window.__originalProfileRead = File.prototype.arrayBuffer;
       File.prototype.arrayBuffer = function() {

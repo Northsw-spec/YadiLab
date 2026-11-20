@@ -128,3 +128,21 @@ test('invalid bytes, boundaries and multi-view failure never produce bound views
     [{viewId:'view-2',targetField:'port.accessVlan',operation:'parse_vlan_integer',delimiter:null}]),
   /saknar aktuell MappingView/);
 });
+
+test('historical metadata, malformed columns, maps and constants are rejected', () => {
+  for (const extra of ['viewId','selectedUnitIds','rowValues','excludedUses','planFingerprint',
+    'claimId','unitId','changeId','sourceManifest','originalBytes','acceptedChanges','importEvidence']) {
+    const p=profile();p.views[0][extra]='old source';rejects(p,/Ogiltiga fält/);
+  }
+  for (const field of ['node.id','node.label']) {
+    const p=profile();p.views[0].columns[field]=['a'];rejects(p,/kolumn/);
+  }
+  const badMap=profile();badMap.views[0].valueMaps['node.kind']={'Router':1};rejects(badMap,/valueMap/);
+  const badType=profile();badType.views[0].constants['node.zoneId']={type:'boolean',value:'true'};
+  rejects(badType,/constant/);
+  const missingHeader=profile();missingHeader.views[0].expectedHeaders.pop();
+  assert.throws(() => bindMappingProfile(missingHeader,[{sourceIndex:0,tableId:'sheet-1'}],sources()),
+    /kolumn D/);
+  const special=profile();special.views[0].valueMaps['node.kind']=JSON.parse('{"constructor":"host"}');
+  rejects(special,/valueMap/);
+});
