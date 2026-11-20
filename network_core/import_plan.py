@@ -203,6 +203,8 @@ def _views(raw_views, tables):
         for field, mapping in maps.items():
             if type(mapping) is not dict or not mapping or any(type(a) is not str or type(b) is not str for a, b in mapping.items()):
                 fail('mappingViews', f'invalid valueMap for {field}')
+            if field == 'port.enabled' and any(b not in ('true', 'false') for b in mapping.values()):
+                fail('mappingViews', 'port.enabled valueMaps must produce exact true/false strings')
         constants = view['constants']
         if type(constants) is not dict or set(constants) & set(columns) or not set(constants) <= (ROLES[role] - {'node.id', 'zone.id', 'port.nodeId', 'port.id'}):
             fail('mappingViews', 'invalid constants or identity constant')
@@ -332,7 +334,8 @@ def _claim(view, row, cells, row_values, decision_ids):
     else:
         target_key = fields.get(target_kind + '.id')
     if target_key is None:
-        issues.append(('MISSING_' + target_kind.upper() + '_IDENTITY', 'BLOCKED', [source_ref(source_id, table_id, row)]))
+        code = 'MISSING_PORT_IDENTITY' if target_kind == 'port' else 'MISSING_' + target_kind.upper() + '_ID'
+        issues.append((code, 'BLOCKED', [source_ref(source_id, table_id, row)]))
     claim_id = internal_id('cl-', [view_id, source_id, table_id, row, target_kind, target_key])
     claim = {'claimId': claim_id, 'viewId': view_id,
              'sourceRef': {'sourceId': source_id, 'tableId': table_id, 'row': row},
