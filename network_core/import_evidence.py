@@ -11,7 +11,7 @@ import json
 import re
 
 from .import_plan import (canonical_json, internal_id, node_layout, object_exact, bounded_list,
-                          column_index, fail, FIELDS, ROLES, VIEW_KEYS)
+                          column_index, fail, FIELDS, ROLES, VIEW_KEYS, _transformations, _typed_value)
 from .model import _id, _name, validate_project, canonical_network_view
 
 EVIDENCE_KEYS = {'evidenceVersion', 'contractVersion', 'projectNameAtImport',
@@ -24,6 +24,7 @@ ORIGIN_KEYS = {'kind', 'sourceId', 'tableId', 'row', 'address', 'decisionId'}
 NODE_FIELDS = {'id', 'label', 'kind', 'x', 'y', 'zoneId', 'ports'}
 ZONE_FIELDS = {'id', 'label'}
 PORT_FIELDS = {'nodeId', 'id', 'name', 'enabled', 'ipv4'}
+VLAN_FIELDS = {'vlanMode', 'accessVlan', 'allowedVlans'}
 
 
 def _array(value, maximum, where):
@@ -70,7 +71,9 @@ def _origin(item, tables, decisions, where, *, field=None, views=(), unit=None,
                          item['row'] in view['selectedRows'] and
                          unit in historical_units.get((key[0], key[1], item['row'], view['viewId']), []) and
                          address[:len(address.rstrip('0123456789'))] in
-                         view['columns'].get(target_kind + '.' + field, [])
+                         (sum((view['columns'].get('port.' + name, []) for name in VLAN_FIELDS), [])
+                          if target_kind == 'port' and field == 'vlan' else
+                          view['columns'].get(target_kind + '.' + field, []))
                          for view in views)
             if not mapped:
                 fail(where, 'source cell was not mapped to this field')
@@ -79,7 +82,8 @@ def _origin(item, tables, decisions, where, *, field=None, views=(), unit=None,
                 type(item['decisionId']) is not str or
                 item['decisionId'] not in decisions or
                 decisions[item['decisionId']][0] != kind or
-                (field is not None and decisions[item['decisionId']][1] != field) or
+                (field is not None and decisions[item['decisionId']][1] not in
+                 (VLAN_FIELDS if target_kind == 'port' and field == 'vlan' else {field})) or
                 not any(unit in units and view_id == decisions[item['decisionId']][3] and
                         (decisions[item['decisionId']][4] is None or row == decisions[item['decisionId']][4])
                         for (_, _, row, view_id), units in historical_units.items())):
@@ -184,15 +188,13 @@ def validate_evidence(value):
                 fail('valueMaps', 'invalid port.enabled mapping')
         for field, item in view['constants'].items():
             object_exact(item, {'type', 'value'}, 'constant')
-            if not ((item['type'] == 'text' and type(item['value']) is str) or
-                    (item['type'] == 'boolean' and type(item['value']) is bool and field == 'port.enabled') or
-                    (item['type'] == 'null' and item['value'] is None and field == 'node.zoneId')):
-                fail('constant', 'invalid type or value')
+            _typed_value(item['type'], item['value'], field, 'constant')
     if len(uses) > 20000:
         fail('mappingViews', 'too many uses')
 
-    if _array(value['transformations'], 64, 'transformations'):
-        fail('transformations', 'not supported for these roles')
+    transformations = _transformations(value['transformations'], views)
+    if value['transformations'] != transformations:
+        fail('transformations', 'not sorted')
     row_values = _array(value['rowValues'], 10000, 'rowValues')
     decision_ids = {}
     for view in views:
@@ -203,17 +205,19 @@ def validate_evidence(value):
         for field, item in view['constants'].items():
             _remember_decision(decision_ids, [view['viewId'], 'constant', field,
                                               item['type'], item['value']], 'user_constant', field)
+    for item in transformations:
+        _remember_decision(decision_ids, [item['viewId'], 'transformation', item['targetField'],
+                                          item['operation'], item['delimiter']],
+                           'user_decision', item['targetField'])
     seen_rows = set()
     for item in row_values:
         object_exact(item, {'viewId', 'row', 'targetField', 'valueType', 'value'}, 'rowValue')
         view = view_by_id.get(item['viewId'])
         key = (item['viewId'], item['row'], item['targetField'])
         if (view is None or type(item['row']) is not int or item['row'] not in view['selectedRows'] or
-                item['targetField'] not in ROLES[view['role']] or key in seen_rows or
-                not ((item['valueType'] == 'text' and type(item['value']) is str) or
-                     (item['valueType'] == 'boolean' and type(item['value']) is bool and item['targetField'] == 'port.enabled') or
-                     (item['valueType'] == 'null' and item['value'] is None and item['targetField'] == 'node.zoneId'))):
+                item['targetField'] not in ROLES[view['role']] or key in seen_rows):
             fail('rowValues', 'invalid row decision')
+        _typed_value(item['valueType'], item['value'], item['targetField'], 'rowValue')
         seen_rows.add(key)
         _remember_decision(decision_ids, [item['viewId'], item['row'], item['targetField'],
                                           item['valueType'], item['value']],
@@ -241,7 +245,7 @@ def validate_evidence(value):
     fingerprint_input = {'contractVersion': '1', 'projectName': name,
                          'validatorVersion': '1.4',
                          'sources': [{k: s[k] for k in ('sourceId', 'sha256', 'csvDelimiter')} for s in sources],
-                         'mappingViews': views, 'transformations': [], 'rowValues': row_values,
+                         'mappingViews': views, 'transformations': transformations, 'rowValues': row_values,
                          'excludedUses': excluded, 'selectedUnitIds': selected}
     if hashlib.sha256(canonical_json(fingerprint_input)).hexdigest() != value['planFingerprint']:
         fail('planFingerprint', 'does not match historical inputs')
@@ -321,6 +325,8 @@ def validate_evidence(value):
             fail('acceptedChanges', 'invalid change ID')
         fields, origins = change['fieldValues'], change['fieldOrigins']
         expected_fields = NODE_FIELDS if kind == 'node' else PORT_FIELDS if kind == 'port' else ZONE_FIELDS
+        if kind == 'port' and 'vlan' in fields:
+            expected_fields = expected_fields | {'vlan'}
         object_exact(fields, expected_fields, 'acceptedChange.fieldValues')
         object_exact(origins, expected_fields, 'acceptedChange.fieldOrigins')
         if kind == 'port':
@@ -342,6 +348,8 @@ def validate_evidence(value):
             if field in ('id', 'label', 'nodeId', 'name', 'enabled') or (kind == 'node' and field == 'kind'):
                 if not refs:
                     fail('fieldOrigins', 'missing source or decision origin')
+            if kind == 'port' and field == 'vlan' and not refs:
+                fail('fieldOrigins', 'VLAN needs explicit origins')
             for ref in refs:
                 _origin(ref, tables, decision_ids, f'fieldOrigins.{field}',
                         field=field,
@@ -361,7 +369,7 @@ def validate_evidence(value):
         owner = nodes_by_id.get(values['nodeId'])
         if owner is None:
             fail('acceptedChanges', 'port has no selected parent node')
-        owner['ports'].append({k: deepcopy(values[k]) for k in ('id', 'name', 'enabled', 'ipv4')})
+        owner['ports'].append({k: deepcopy(values[k]) for k in ('id', 'name', 'enabled', 'ipv4', 'vlan') if k in values})
     for node in nodes:
         node['ports'].sort(key=lambda port: port['id'])
     if not nodes:

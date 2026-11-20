@@ -13,7 +13,10 @@ from .model import (ProjectValidationError, NODE_KINDS, _id, _name,
 
 FIELDS = frozenset({'node.id', 'node.label', 'node.kind', 'node.zoneId'})
 ZONE_FIELDS = frozenset({'zone.id', 'zone.label'})
-PORT_FIELDS = frozenset({'port.nodeId', 'port.id', 'port.name', 'port.enabled'})
+PORT_FIELDS = frozenset({'port.nodeId', 'port.id', 'port.name', 'port.enabled',
+                         'port.vlanMode', 'port.accessVlan', 'port.allowedVlans'})
+VLAN_INTEGER = re.compile(r'[1-9][0-9]{0,3}\Z')
+VLAN_LIST = re.compile(r'[1-9][0-9]{0,3}(,[1-9][0-9]{0,3})*\Z')
 ROLES = {'device_inventory': FIELDS, 'zone_inventory': ZONE_FIELDS,
          'interface_inventory': PORT_FIELDS, 'documentation_only': frozenset()}
 ROLE_KIND = {'device_inventory': 'node', 'zone_inventory': 'zone',
@@ -116,12 +119,19 @@ def diagnostic(code, refs, unit_id=None, severity='ERROR'):
 
 
 def _typed_value(value_type, value, field, where):
-    if value_type == 'text' and type(value) is str:
+    if value_type == 'text' and type(value) is str and field not in ('port.accessVlan', 'port.allowedVlans'):
         return value
     if value_type == 'boolean' and type(value) is bool and field == 'port.enabled':
         return value
     if value_type == 'null' and value is None and field == 'node.zoneId':
         return None
+    if value_type == 'integer' and field == 'port.accessVlan' and type(value) is int and 1 <= value <= 4094:
+        return value
+    if (value_type == 'integer_list' and field == 'port.allowedVlans' and
+            type(value) is list and 1 <= len(value) <= 64 and
+            all(type(item) is int and 1 <= item <= 4094 for item in value) and
+            len(set(value)) == len(value)):
+        return value
     fail(where, 'unsupported or incorrectly typed user value')
 
 
@@ -216,6 +226,25 @@ def _views(raw_views, tables):
     return views
 
 
+def _transformations(raw, views):
+    by_view = {view['viewId']: view for view in views}
+    result, seen = [], set()
+    for item in bounded_list(raw, 64, 'transformations'):
+        object_exact(item, {'viewId', 'targetField', 'operation', 'delimiter'}, 'transformation')
+        view = by_view.get(item['viewId']) if type(item['viewId']) is str else None
+        field = item['targetField']
+        expected = {'port.accessVlan': ('parse_vlan_integer', None),
+                    'port.allowedVlans': ('split_vlan_integer_list', ',')}.get(field) if type(field) is str else None
+        key = (item['viewId'], field)
+        if (view is None or expected != (item['operation'], item['delimiter']) or
+                field not in view['columns'] or len(view['columns'][field]) != 1 or
+                field in view['valueMaps'] or key in seen):
+            fail('transformations', 'invalid, overlapping or duplicate VLAN transformation')
+        seen.add(key)
+        result.append(item)
+    return sorted(result, key=lambda item: (item['viewId'], item['targetField']))
+
+
 def _decisions(value, views):
     view_by_id = {v['viewId']: v for v in views}
     row_values = bounded_list(value['rowValues'], 10000, 'rowValues')
@@ -243,16 +272,15 @@ def _decisions(value, views):
                 type(item['reason']) is not str or not 1 <= len(item['reason']) <= 240):
             fail('excludedUses', 'invalid or duplicate excluded use')
         seen.add(key)
-    if bounded_list(value['transformations'], 64, 'transformations'):
-        fail('transformations', 'no supported transformation for the implemented roles')
+    transformations = _transformations(value['transformations'], views)
     selected = bounded_list(value['selectedUnitIds'], 10000, 'selectedUnitIds')
     if any(type(x) is not str for x in selected) or selected != sorted(set(selected)):
         fail('selectedUnitIds', 'expected sorted unique unit IDs')
     return (sorted(row_values, key=lambda r: (r['viewId'], r['row'], r['targetField'])),
-            sorted(excluded, key=lambda e: (e['viewId'], e['row'])), selected)
+            sorted(excluded, key=lambda e: (e['viewId'], e['row'])), selected, transformations)
 
 
-def _claim(view, row, cells, row_values, decision_ids):
+def _claim(view, row, cells, row_values, decision_ids, transformations):
     source_id, table_id, view_id = view['sourceId'], view['tableId'], view['viewId']
     by_column = {re.match(r'[A-Z]+', c['address']).group(): c for c in cells}
     fields, origins, issues, used = {}, {}, [], set()
@@ -268,6 +296,25 @@ def _claim(view, row, cells, row_values, decision_ids):
                          row=row, address=cell['address'])
             raw = cell['value']
             mapped = view['valueMaps'].get(field)
+            transformation = transformations.get((view_id, field))
+            if field in ('port.accessVlan', 'port.allowedVlans'):
+                if transformation is None:
+                    issues.append(('VLAN_TRANSFORMATION_REQUIRED', 'BLOCKED', [source_ref(source_id, table_id, row, cell['address'])]))
+                    continue
+                pattern = VLAN_INTEGER if field == 'port.accessVlan' else VLAN_LIST
+                if cell['type'] not in ('text', 'number') or not pattern.fullmatch(raw):
+                    issues.append(('INVALID_VLAN_SYNTAX', 'BLOCKED', [source_ref(source_id, table_id, row, cell['address'])]))
+                    continue
+                parsed = int(raw) if field == 'port.accessVlan' else [int(part) for part in raw.split(',')]
+                try:
+                    _typed_value('integer' if field == 'port.accessVlan' else 'integer_list', parsed, field, 'VLAN')
+                except ProjectValidationError:
+                    issues.append(('INVALID_VLAN_VALUE', 'BLOCKED', [source_ref(source_id, table_id, row, cell['address'])]))
+                    continue
+                decision = _decision_id([view_id, 'transformation', field,
+                                         transformation['operation'], transformation['delimiter']], decision_ids)
+                candidates.append((parsed, [src, origin('user_decision', decision_id=decision)]))
+                continue
             if field in ('node.id', 'zone.id', 'port.id', 'port.nodeId') and cell['type'] != 'text':
                 if (view_id, row, field) not in row_values:
                     issues.append(('NUMERIC_ID_REQUIRES_DECISION', 'BLOCKED', [source_ref(source_id, table_id, row, cell['address'])]))
@@ -417,6 +464,15 @@ def _candidate(plan, project_name):
             owner = next(n for n in nodes if n['id'] == owner_id)
             port = {'id': facts['port.id'], 'name': facts['port.name'],
                     'enabled': facts['port.enabled'], 'ipv4': None}
+            vlan_fields = {'port.vlanMode', 'port.accessVlan', 'port.allowedVlans'}
+            if vlan_fields & facts.keys():
+                mode = facts['port.vlanMode']
+                port['vlan'] = ({'mode': 'access', 'vlan': facts['port.accessVlan']}
+                                if mode == 'access' else
+                                {'mode': 'trunk', 'allowedVlans': facts['port.allowedVlans']})
+                provenance['vlan'] = sorted((ref for key in vlan_fields
+                                             for ref in provenance.pop(key.removeprefix('port.'), [])),
+                                            key=canonical_json)
             owner['ports'].append(port)
             provenance['ipv4'] = []
             fields = {'nodeId': owner_id, **port}
@@ -472,14 +528,14 @@ def build_plan(value):
         fail('request', 'PAYLOAD_LIMIT: JSON request exceeds 8 MiB')
     manifest, tables = _sources(value['sources'])
     views = _views(value['mappingViews'], tables)
-    row_values, excluded, selected = _decisions(value, views)
+    row_values, excluded, selected, transformations = _decisions(value, views)
     row_value_map = {(r['viewId'], r['row'], r['targetField']): r for r in row_values}
     exclusions = {(e['viewId'], e['row']): e['reason'] for e in excluded}
     fingerprint_input = {'contractVersion': '1', 'projectName': project_name,
                          'validatorVersion': '1.4',
                          'sources': [{'sourceId': s['sourceId'], 'sha256': s['sha256'],
                                       'csvDelimiter': s['csvDelimiter']} for s in manifest],
-                         'mappingViews': views, 'transformations': [],
+                         'mappingViews': views, 'transformations': transformations,
                          'rowValues': row_values, 'excludedUses': excluded,
                          'selectedUnitIds': selected}
     fingerprint = hashlib.sha256(canonical_json(fingerprint_input)).hexdigest()
@@ -504,7 +560,8 @@ def build_plan(value):
                                            'unitIds': [], 'status': 'DOCUMENTATION_ONLY', 'reason': None})
                 continue
             claim, issues, used = _claim(view, row, tables[key[:2]]['rows'][row],
-                                         row_value_map, decision_ids)
+                                         row_value_map, decision_ids,
+                                         {(t['viewId'], t['targetField']): t for t in transformations})
             claims.append(claim)
             issues_by_claim[claim['claimId']] = issues
             review['unmappedAddresses'] -= used
@@ -579,6 +636,16 @@ def build_plan(value):
                 if ('node', owner) not in grouped:
                     problems.append(('UNDECLARED_NODE', 'BLOCKED',
                                      [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
+                vlan_fields = {'port.vlanMode', 'port.accessVlan', 'port.allowedVlans'}
+                if vlan_fields & combined.keys():
+                    mode = combined.get('port.vlanMode', [None])[0]
+                    valid = ((mode == 'access' and 'port.accessVlan' in combined and 'port.allowedVlans' not in combined) or
+                             (mode == 'trunk' and 'port.allowedVlans' in combined and 'port.accessVlan' not in combined))
+                    owner_claims = grouped.get(('node', owner), [])
+                    switch = any(c['fields'].get('node.kind') == 'switch' for c in owner_claims)
+                    if not valid or not switch:
+                        problems.append(('INVALID_VLAN_COMBINATION' if not valid else 'VLAN_REQUIRES_SWITCH', 'BLOCKED',
+                                         [source_ref(c['sourceRef']['sourceId'], c['sourceRef']['tableId'], c['sourceRef']['row']) for c in group]))
             if kind == 'node' and combined.get('node.zoneId', [None])[0] is not None:
                 zone_key = combined['node.zoneId'][0]
                 zone_group = grouped.get(('zone', zone_key))
@@ -642,7 +709,7 @@ def build_plan(value):
               'ports': sum(u['kind'] == 'port' and u['status'] == 'ACTIONABLE' for u in units),
               'links': 0, 'zones': sum(u['kind'] == 'zone' and u['status'] == 'ACTIONABLE' for u in units), 'routes': 0}
     plan = {'planVersion': '1', 'fingerprint': fingerprint, 'sourceManifest': manifest,
-            'mappingViews': views, 'transformations': [], 'rowValues': row_values,
+            'mappingViews': views, 'transformations': transformations, 'rowValues': row_values,
             'excludedUses': excluded, 'selectedUnitIds': selected, 'claims': claims,
             'units': units, 'recordReviews': review_list, 'diagnostics': diagnostics,
             'report': report, 'proposedProject': None, 'canApply': False}
