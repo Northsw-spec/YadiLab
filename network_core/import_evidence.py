@@ -11,7 +11,8 @@ import json
 import re
 
 from .import_plan import (canonical_json, internal_id, node_layout, object_exact, bounded_list,
-                          column_index, fail, FIELDS, ROLES, VIEW_KEYS, _transformations, _typed_value)
+                          column_index, fail, FIELDS, ROLES, VIEW_KEYS, _transformations, _typed_value,
+                          _canonical_ipv4)
 from .model import _id, _name, validate_project, canonical_network_view
 
 EVIDENCE_KEYS = {'evidenceVersion', 'contractVersion', 'projectNameAtImport',
@@ -71,7 +72,9 @@ def _origin(item, tables, decisions, where, *, field=None, views=(), unit=None,
                          item['row'] in view['selectedRows'] and
                          unit in historical_units.get((key[0], key[1], item['row'], view['viewId']), []) and
                          address[:len(address.rstrip('0123456789'))] in
-                         (sum((view['columns'].get('port.' + name, []) for name in VLAN_FIELDS), [])
+                         (view['columns'].get('ip.ipv4', []) + view['columns'].get('port.ipv4', [])
+                          if target_kind == 'ipBinding' and field == 'port.ipv4' else
+                          sum((view['columns'].get('port.' + name, []) for name in VLAN_FIELDS), [])
                           if target_kind == 'port' and field == 'vlan' else
                           view['columns'].get(target_kind + '.' + field, []))
                          for view in views)
@@ -83,7 +86,8 @@ def _origin(item, tables, decisions, where, *, field=None, views=(), unit=None,
                 item['decisionId'] not in decisions or
                 decisions[item['decisionId']][0] != kind or
                 (field is not None and decisions[item['decisionId']][1] not in
-                 (VLAN_FIELDS if target_kind == 'port' and field == 'vlan' else {field})) or
+                 (VLAN_FIELDS if target_kind == 'port' and field == 'vlan' else
+                  {'ipv4'} if target_kind == 'ipBinding' else {field})) or
                 not any(unit in units and view_id == decisions[item['decisionId']][3] and
                         (decisions[item['decisionId']][4] is None or row == decisions[item['decisionId']][4])
                         for (_, _, row, view_id), units in historical_units.items())):
@@ -170,7 +174,7 @@ def validate_evidence(value):
         uses.update((view['viewId'], row) for row in rows)
         if (type(view['columns']) is not dict or not set(view['columns']) <= ROLES[view['role']] or
                 type(view['constants']) is not dict or
-                not set(view['constants']) <= (ROLES[view['role']] - {'node.id', 'zone.id', 'port.nodeId', 'port.id'}) or
+                not set(view['constants']) <= (ROLES[view['role']] - {'node.id', 'zone.id', 'port.nodeId', 'port.id', 'ip.nodeId', 'ip.portId'}) or
                 set(view['columns']) & set(view['constants']) or
                 type(view['valueMaps']) is not dict or not set(view['valueMaps']) <= set(view['columns']) or
                 type(view['label']) is not str or len(view['label']) > 240):
@@ -305,10 +309,10 @@ def validate_evidence(value):
         unit = change['unitId']
         kind = change['targetKind']
         if (type(unit) is not str or unit not in selected or unit in accepted or
-                kind not in ('node', 'zone', 'port') or type(change['targetKey']) is not str or
+                kind not in ('node', 'zone', 'port', 'ipBinding') or type(change['targetKey']) is not str or
                 internal_id('u-', [kind, change['targetKey']]) != unit):
             fail('acceptedChanges', 'invalid unit identity')
-        if kind == 'port':
+        if kind in ('port', 'ipBinding'):
             try:
                 pair = json.loads(change['targetKey'])
             except (TypeError, ValueError) as error:
@@ -321,10 +325,13 @@ def validate_evidence(value):
                 _id(element, 'acceptedChange.targetKey')
         else:
             _id(change['targetKey'], 'acceptedChange.targetKey')
-        if change['changeIds'] != [internal_id('c-', [unit, 'create', '__object__'])]:
+        if change['changeIds'] != [internal_id('c-', [unit,
+                'setExplicitField' if kind == 'ipBinding' else 'create',
+                'port.ipv4' if kind == 'ipBinding' else '__object__'])]:
             fail('acceptedChanges', 'invalid change ID')
         fields, origins = change['fieldValues'], change['fieldOrigins']
-        expected_fields = NODE_FIELDS if kind == 'node' else PORT_FIELDS if kind == 'port' else ZONE_FIELDS
+        expected_fields = (NODE_FIELDS if kind == 'node' else PORT_FIELDS if kind == 'port'
+                           else {'port.ipv4'} if kind == 'ipBinding' else ZONE_FIELDS)
         if kind == 'port' and 'vlan' in fields:
             expected_fields = expected_fields | {'vlan'}
         object_exact(fields, expected_fields, 'acceptedChange.fieldValues')
@@ -333,6 +340,9 @@ def validate_evidence(value):
             if (fields['nodeId'] != pair[0] or fields['id'] != pair[1] or
                     fields['ipv4'] is not None or origins['ipv4']):
                 fail('acceptedChanges', 'port identity or absent IPv4 invalid')
+        elif kind == 'ipBinding':
+            if _canonical_ipv4(fields['port.ipv4']) != fields['port.ipv4'] or not origins['port.ipv4']:
+                fail('acceptedChanges', 'invalid explicit IPv4 binding')
         elif fields['id'] != change['targetKey'] or (kind == 'node' and fields['ports'] != []):
             fail('acceptedChanges', 'unsupported historical fields')
         for field, refs in origins.items():
@@ -348,7 +358,8 @@ def validate_evidence(value):
             if field in ('id', 'label', 'nodeId', 'name', 'enabled') or (kind == 'node' and field == 'kind'):
                 if not refs:
                     fail('fieldOrigins', 'missing source or decision origin')
-            if kind == 'port' and field == 'vlan' and not refs:
+            if ((kind == 'port' and field == 'vlan') or
+                    (kind == 'ipBinding' and field == 'port.ipv4')) and not refs:
                 fail('fieldOrigins', 'VLAN needs explicit origins')
             for ref in refs:
                 _origin(ref, tables, decision_ids, f'fieldOrigins.{field}',
@@ -361,6 +372,7 @@ def validate_evidence(value):
     zone_changes = [c for c in changes if c['targetKind'] == 'zone']
     node_changes = [c for c in changes if c['targetKind'] == 'node']
     port_changes = [c for c in changes if c['targetKind'] == 'port']
+    binding_changes = [c for c in changes if c['targetKind'] == 'ipBinding']
     zones = sorted((c['fieldValues'] for c in zone_changes), key=lambda z: z['id'])
     nodes = sorted((deepcopy(c['fieldValues']) for c in node_changes), key=lambda n: n['id'])
     nodes_by_id = {node['id']: node for node in nodes}
@@ -370,6 +382,13 @@ def validate_evidence(value):
         if owner is None:
             fail('acceptedChanges', 'port has no selected parent node')
         owner['ports'].append({k: deepcopy(values[k]) for k in ('id', 'name', 'enabled', 'ipv4', 'vlan') if k in values})
+    selected_ports = {c['targetKey'] for c in port_changes}
+    for change in binding_changes:
+        if change['targetKey'] not in selected_ports:
+            fail('acceptedChanges', 'IPv4 binding has no selected port')
+        node_id, port_id = json.loads(change['targetKey'])
+        owner = nodes_by_id[node_id]
+        next(port for port in owner['ports'] if port['id'] == port_id)['ipv4'] = change['fieldValues']['port.ipv4']
     for node in nodes:
         node['ports'].sort(key=lambda port: port['id'])
     if not nodes:
