@@ -358,6 +358,42 @@ class CandidateTests(unittest.TestCase):
                 server.server_close()
                 worker.join(timeout=5)
 
+    def test_real_http_body_limit_at_exact_boundary(self):
+        """C16: HTTP accepts a complete 8-MiB JSON body, rejects the next byte."""
+        from network_core.server import MAX_BODY
+        with tempfile.TemporaryDirectory() as directory:
+            store=ProjectStore(Path(directory))
+            server=LabHTTPServer(('127.0.0.1',0),store)
+            worker=threading.Thread(target=server.serve_forever,daemon=True)
+            worker.start()
+            try:
+                minimal=json.dumps(request(),separators=(',',':')).encode()
+                for size,expected in ((MAX_BODY,200),(MAX_BODY+1,422)):
+                    connection=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=15)
+                    if size==MAX_BODY:
+                        body=minimal+b' '*(size-len(minimal))
+                        connection.request('POST','/api/import/build-candidate',body=body,
+                            headers={'Content-Type':'application/json',
+                                     'Host':f'127.0.0.1:{server.server_port}'})
+                    else:
+                        # The server rejects Content-Length before reading the body.
+                        connection.putrequest('POST','/api/import/build-candidate')
+                        connection.putheader('Content-Type','application/json')
+                        connection.putheader('Content-Length',str(size))
+                        connection.endheaders()
+                    response=connection.getresponse()
+                    result=json.loads(response.read())
+                    connection.close()
+                    self.assertEqual(response.status,expected)
+                    if expected==200:
+                        self.assertEqual(set(result),{'plan'})
+                    else:
+                        self.assertEqual(result['error'],'INVALID_PROJECT')
+                        self.assertIn('body',result['message'].lower())
+                self.assertEqual(store.list(),[])
+            finally:
+                server.shutdown();server.server_close();worker.join(timeout=5)
+
 
 if __name__ == '__main__':
     unittest.main()

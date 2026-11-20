@@ -40,6 +40,96 @@ def select_all(req):
 
 
 class CableImportTests(unittest.TestCase):
+    def test_boolean_type_and_origin_matrix_for_ports_and_links(self):
+        """C18: both enabled fields stay real booleans through claims and disk."""
+        for kind, column, view_index in (('port', 'F', 1), ('link', 'L', 2)):
+            field = f'{kind}.enabled'
+            for raw_value, expected in (('true', True), ('false', False)):
+                req = cable_request()
+                cells = req['sources'][0]['contentBase64']
+                import base64
+                raw = base64.b64decode(cells).decode()
+                rows = raw.splitlines()
+                values = rows[1].split(',')
+                values[ord(column)-ord('A')] = raw_value
+                rows[1] = ','.join(values)
+                req['sources'] = [source(('\n'.join(rows)+'\n').encode())]
+                plan = select_all(req)
+                self.assertTrue(plan['canApply'])
+                claim = next(c for c in plan['claims'] if c['targetKind'] == kind
+                             and c['sourceRef']['row'] == 2)
+                self.assertIs(type(claim['fields'][field]), bool)
+                change = next(c for c in plan['proposedProject']['importEvidence']['acceptedChanges']
+                              if c['targetKind'] == kind and c['fieldValues']['enabled'] is expected)
+                self.assertIs(type(change['fieldValues']['enabled']), bool)
+                target = (plan['proposedProject']['links'][0] if kind == 'link' else
+                          next(n for n in plan['proposedProject']['nodes'] if n['id'] == 'SW1')['ports'][0])
+                self.assertIs(target['enabled'], expected)
+                with tempfile.TemporaryDirectory() as directory:
+                    store = ProjectStore(Path(directory))
+                    store.save('boolean-matrix', plan['proposedProject'], None)
+                    saved = store.read('boolean-matrix')['project']
+                    self.assertEqual(saved['importEvidence'], plan['proposedProject']['importEvidence'])
+                    self.assertEqual(verify_sources({'project': saved, 'sources': req['sources']})['sourceStatus'],
+                                     'SOURCE_VERIFIED')
+
+            for invalid in ('TRUE', ' true', '1', 'yes'):
+                req = cable_request(invalid if kind == 'link' else 'true')
+                if kind == 'port':
+                    import base64
+                    raw = base64.b64decode(req['sources'][0]['contentBase64']).replace(
+                        b'p1,Port 1,true,', f'p1,Port 1,{invalid},'.encode())
+                    req['sources'] = [source(raw)]
+                plan = build_plan(req)['plan']
+                self.assertEqual(next(u for u in plan['units'] if u['kind'] == kind
+                                      and (kind == 'link' or 'SW1' in u['targetKey']))['status'], 'BLOCKED')
+
+            req = cable_request('yes' if kind == 'link' else 'true')
+            if kind == 'port':
+                import base64
+                raw = base64.b64decode(req['sources'][0]['contentBase64']).replace(
+                    b'p1,Port 1,true,', b'p1,Port 1,yes,')
+                req['sources'] = [source(raw)]
+            req['mappingViews'][view_index]['valueMaps'] = {
+                field: {'yes': 'false', **({'true': 'true'} if kind == 'port' else {})}}
+            mapped = select_all(req)
+            self.assertTrue(mapped['canApply'])
+            mapped_claim = next(c for c in mapped['claims'] if c['targetKind'] == kind
+                                and c['sourceRef']['row'] == 2)
+            self.assertIs(mapped_claim['fields'][field], False)
+            origins = mapped_claim['origins'][field]
+            self.assertEqual({o['kind'] for o in origins}, {'source_cell', 'user_decision'})
+            decision_id = next(o['decisionId'] for o in origins if o['kind'] == 'user_decision')
+            self.assertTrue(decision_id.startswith('d-'))
+            self.assertEqual(verify_sources({'project': mapped['proposedProject'],
+                                             'sources': req['sources']})['sourceStatus'], 'SOURCE_VERIFIED')
+            req['mappingViews'][view_index]['valueMaps'][field]['yes'] = 'true'
+            self.assertNotEqual(select_all(req)['fingerprint'], mapped['fingerprint'])
+
+            headers = list(HEADERS)
+            headers[ord(column)-ord('A')] = 'enabled'
+            csv = ','.join(headers) + '\n' + (
+                'SW1,Switch,switch,p1,Port 1,true,CABLE-001,SW1,p1,H1,eth0,false\n'
+                'H1,Host,host,eth0,Ethernet 0,true,,,,,,\n')
+            for filename, raw in (
+                ('booleans.xlsx', make_workbook({'Cables': csv})),
+                ('booleans.ods', ods_zip({**ods_parts({'Cables': csv}),
+                    'content.xml': ods_parts({'Cables': csv})['content.xml'].replace(b'1024', b'12')})),
+            ):
+                with self.subTest(kind=kind, filename=filename):
+                    req = cable_request()
+                    req['sources'] = [source(raw, filename)]
+                    for mapping in req['mappingViews']:
+                        mapping['expectedHeaders'] = headers
+                    plan = select_all(req)
+                    self.assertTrue(plan['canApply'])
+                    claim = next(c for c in plan['claims'] if c['targetKind'] == kind
+                                 and c['sourceRef']['row'] == 2)
+                    self.assertIs(type(claim['fields'][field]), bool)
+                    self.assertEqual(verify_sources({'project': plan['proposedProject'],
+                                                     'sources': req['sources']})['sourceStatus'],
+                                     'SOURCE_VERIFIED')
+
     def test_native_spreadsheet_booleans_and_numeric_rejection(self):
         headers = HEADERS[:-1] + ('enabled',)
         csv = (','.join(headers) + '\n' +

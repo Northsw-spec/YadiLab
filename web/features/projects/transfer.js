@@ -129,7 +129,7 @@ export async function readSourceBundle(bundle) {
         !/^[0-9a-f]{64}$/.test(item.sha256) ||
         (item.kind === 'csv' ? ![',',';'].includes(item.csvDelimiter) : item.csvDelimiter !== null) ||
         typeof item.contentBase64 !== 'string' ||
-        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(item.contentBase64)) {
+        item.contentBase64.length > 4 * Math.ceil((4 * 1024 * 1024) / 3)) {
       throw new Error('Felaktig eller duplicerad källpost i paketet.');
     }
     let raw;

@@ -47,7 +47,7 @@ from test_icmp_investigation_lan import lan_lab as icmp_lan_lab
 from test_vlan_persistence import persisted_topology
 from test_import_plan import request as import_plan_request
 from test_import_integration_4c import corpus_a, expected_network
-from network_core.model import canonical_network_view
+from network_core.model import canonical_network_view, validate_project
 
 
 def port():
@@ -2507,6 +2507,14 @@ def import_review_regression(context, base, network_mode, store, errors, restart
     page.locator('#external-bundle-file').set_input_files({'name':'tampered.json','mimeType':'application/json',
         'buffer':json.dumps(changed_bundle).encode()})
     expect(page.locator('#external-status')).to_contain_text('Källfil ej ansluten')
+    too_large = json.loads(json.dumps(bundle))
+    oversized_raw = b'X' * (4 * 1024 * 1024 + 1)
+    too_large['sources'][0]['contentBase64'] = base64.b64encode(oversized_raw).decode()
+    too_large['sources'][0]['sha256'] = hashlib.sha256(oversized_raw).hexdigest()
+    page.locator('#external-bundle-file').set_input_files({'name':'oversized.json',
+        'mimeType':'application/json','buffer':json.dumps(too_large).encode()})
+    expect(page.locator('#toast')).to_contain_text('överstiger 4 MiB')
+    expect(page.locator('#external-status')).to_contain_text('Källfil ej ansluten')
     assert hashlib.sha256(disk_file.read_bytes()).hexdigest() == saved.value.json()['sha256']
     page.locator('#external-close').click()
     page.locator('[data-item-type="node"][data-item-id="A"]').click()
@@ -2585,6 +2593,9 @@ def import_review_ui_regression(context, base, network_mode, store, errors, rest
     second.locator('.row-picker label').filter(has_text='Rad 2').locator('input').check()
     assert first.locator('input[placeholder^="Valda originalrader"]').input_value()=='2,3'
     editor=page.locator('#external-decision-editor')
+    # Typed VLAN row decisions must be offered without editing raw JSON.
+    expect(editor.locator('select').nth(2).locator('option[value="integer"]')).to_have_count(1)
+    expect(editor.locator('select').nth(2).locator('option[value="integer_list"]')).to_have_count(1)
     editor.locator('select').first.select_option('view-1:2')
     editor.locator('select').nth(1).select_option('node.id')
     editor.locator('input[placeholder="Uttryckligt värde"]').fill('H-01')
@@ -2628,6 +2639,123 @@ def import_review_ui_regression(context, base, network_mode, store, errors, rest
     page.locator('#external-reattach-files').set_input_files({'name':'ui.csv','mimeType':'text/csv','buffer':raw})
     expect(page.locator('#external-history')).to_contain_text('SOURCE_VERIFIED')
     assert json.loads((store/'review-ui-4d2.yadilab').read_bytes())['importEvidence']==receipt
+    assert not errors,errors
+    page.close()
+
+
+def import_review_vlan_row_controls(context, base, network_mode, errors):
+    """4D3: typed VLAN decisions use the existing rowValues request, without raw JSON."""
+    page=context.new_page()
+    page.on('pageerror',lambda error:errors.append(getattr(error,'stack',str(error))))
+    assert browser_open(page,base)==network_mode
+    page.locator('#external-import').click()
+    page.locator('#external-files').set_input_files({'name':'ports.csv','mimeType':'text/csv',
+        'buffer':b'Node,Port,Name,Enabled\nSW1,g1,Gi1,true\n'})
+    page.locator('#external-file-choices select').select_option(',')
+    page.locator('#external-inspect-files').click()
+    page.locator('#external-add-view').click()
+    view=page.locator('#external-views fieldset').first
+    view.locator('select').nth(1).select_option('interface_inventory')
+    view.locator('.row-picker label').filter(has_text='Rad 2').locator('input').check()
+    editor=page.locator('#external-decision-editor')
+    field=editor.locator('select').nth(1)
+    kind=editor.locator('select').nth(2)
+    entry=editor.locator('input[placeholder="Uttryckligt värde"]')
+    field.select_option('port.accessVlan')
+    assert kind.input_value()=='integer'
+    entry.fill('010')
+    editor.get_by_text('Lägg till radbeslut').click()
+    expect(page.locator('#toast')).to_contain_text('ledande nollor')
+    assert page.locator('#external-row-values').input_value()=='[]'
+    entry.fill('10')
+    editor.get_by_text('Lägg till radbeslut').click()
+    field.select_option('port.allowedVlans')
+    assert kind.input_value()=='integer_list'
+    entry.fill('10,20')
+    editor.get_by_text('Lägg till radbeslut').click()
+    with page.expect_response('**/api/import/build-candidate') as response:
+        page.locator('#external-plan-button').click()
+    assert response.value.status==200
+    decisions=json.loads(response.value.request.post_data)['rowValues']
+    assert decisions==[
+        {'viewId':'view-1','row':2,'targetField':'port.accessVlan','valueType':'integer','value':10},
+        {'viewId':'view-1','row':2,'targetField':'port.allowedVlans','valueType':'integer_list','value':[10,20]},
+    ]
+    assert not errors,errors
+    page.close()
+
+
+def import_transport_projection_regression(context, base, network_mode, errors):
+    """C07: actual browser HTTP strips a valid near-2-MiB historical receipt."""
+    row_count=3900
+    raw=b'ID,Label,Kind\nSW-01,Core,switch\n'+b''.join(
+        f'X{number:04d},Note,host\n'.encode() for number in range(2,row_count+1))
+    req=import_plan_request(raw)
+    for number in range(2,6):
+        req['mappingViews'].append({
+            'viewId':f'view-{number}','sourceId':'src-1','tableId':'sheet-1',
+            'role':'documentation_only','headerRow':1,
+            'selectedRows':list(range(2,row_count+2)),'columns':{},'valueMaps':{},
+            'constants':{},'expectedHeaders':['ID','Label','Kind'],'label':'synthetic only',
+        })
+    req['selectedUnitIds']=[build_plan(req)['plan']['units'][0]['unitId']]
+    receipt=build_plan(req)['plan']['proposedProject']['importEvidence']
+    receipt_bytes=len(json.dumps(receipt,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode())
+    assert 2_000_000 < receipt_bytes < 2*1024*1024
+    lan=icmp_lan_lab()
+    large=validate_project({**lan,'schemaVersion':'1.4','importEvidence':receipt})
+    baseline=canonical_network_view(large)
+    assert baseline==lan
+    page=context.new_page()
+    page.on('pageerror',lambda error:errors.append(getattr(error,'stack',str(error))))
+    assert browser_open(page,base)==network_mode
+    posted=[]
+    page.on('request',lambda request: posted.append((request.url,request.post_data)) if
+        request.url.startswith(base+'api/') and request.post_data else None)
+    cases=[
+        ('/api/routing/connected',{'nodeId':'a','destinationIpv4':'192.168.10.20'}),
+        ('/api/diagnostics/arp',{'sourceNode':'a','sourcePort':'eth0','targetIpv4':'192.168.10.20'}),
+        ('/api/ipv4/trace',{'sourceNode':'a','sourcePort':'eth0','destinationIpv4':'192.168.10.20','ttl':16}),
+        ('/api/icmp/echo',{'sourceNode':'a','sourcePort':'eth0','destinationIpv4':'192.168.10.20',
+                           'ttl':16,'identifier':7,'sequence':1}),
+    ]
+    for path,fields in cases:
+        result14=page.evaluate('''async ([path,project,fields]) => {
+          const {api}=await import('/services/api.js'); return api(path,{project,...fields});
+        }''',[path,large,fields])
+        result13=page.evaluate('''async ([path,project,fields]) => {
+          const {api}=await import('/services/api.js'); return api(path,{project,...fields});
+        }''',[path,baseline,fields])
+        assert result14==result13,path
+    dhcp=dhcp_topology()
+    dhcp_large=validate_project({**dhcp,'schemaVersion':'1.4','importEvidence':receipt})
+    dora={'clientNode':'client','clientPort':'eth0','serverNode':'server','serverPort':'eth0',
+          'poolStart':'192.0.2.70','poolEnd':'192.0.2.75','transactionId':17,'leaseSeconds':3600}
+    result14=page.evaluate('''async ([project,fields]) => {
+      const {api}=await import('/services/api.js'); return api('/api/dhcp/dora',{project,...fields});
+    }''',[dhcp_large,dora])
+    result13=page.evaluate('''async ([project,fields]) => {
+      const {api}=await import('/services/api.js'); return api('/api/dhcp/dora',{project,...fields});
+    }''',[dhcp,dora])
+    assert result14==result13
+    for path,project,fields in (
+        ('/api/simulation/start',large,{}),
+        ('/api/dhcp/session/start',dhcp_large,{'serverNode':'server','serverPort':'eth0',
+            'poolStart':'192.0.2.70','poolEnd':'192.0.2.75'}),
+    ):
+        session=page.evaluate('''async ([path,project,fields]) => {
+          const {api}=await import('/services/api.js'); return api(path,{project,...fields});
+        }''',[path,project,fields])
+        assert session.get('sessionId')
+    tested=[(url,body) for url,body in posted if any(url.endswith(path) for path,_ in cases) or
+            url.endswith('/api/dhcp/dora') or url.endswith('/api/simulation/start') or
+            url.endswith('/api/dhcp/session/start')]
+    assert len(tested)==12
+    for url,body in tested:
+        parsed=json.loads(body)
+        assert parsed['project']['schemaVersion']=='1.3',url
+        assert 'importEvidence' not in body,url
+        assert len(body.encode())<10_000,url
     assert not errors,errors
     page.close()
 
@@ -3223,6 +3351,69 @@ def integrated_4c_regression(context, base, network_mode, store, errors, restart
     assert disk.read_bytes()==stored_bytes
     assert json.loads(disk.read_bytes())['importEvidence']==receipt
     assert not errors, errors
+    page.close()
+
+
+def schema14_builder_edit_matrix(context, base, network_mode, store, errors, restart):
+    """C01: every major Builder edit family keeps immutable imported history."""
+    original=json.loads((store/'synthetic-only-4c7.yadilab').read_bytes())
+    receipt=original['importEvidence']
+    ProjectStore(store).save('schema14-edit-matrix',original,None)
+    page=context.new_page()
+    page.on('pageerror',lambda error:errors.append(getattr(error,'stack',str(error))))
+    assert browser_open(page,base)==network_mode
+    page.locator('#saved-projects').select_option('schema14-edit-matrix')
+    page.locator('#open-project').click()
+    page.locator('[data-item-type="zone"][data-item-id="LAN"]').click()
+    page.locator('#zone-label').fill('Renamed LAN')
+    page.locator('#zone-label').dispatch_event('change')
+    page.locator('[data-item-type="node"][data-item-id="R1"]').click()
+    page.locator('#node-label').fill('Renamed R1')
+    page.locator('#node-label').dispatch_event('change')
+    page.locator('[data-port-mac="eth0"]').fill('02:00:00:00:00:01')
+    with page.expect_response('**/api/validate') as mac:
+        page.locator('[data-port-mac="eth0"]').dispatch_event('change')
+    assert mac.value.json()['project']['schemaVersion']=='1.4'
+    page.locator('[data-route-destination="route1"]').fill('192.168.40.0/24')
+    with page.expect_response('**/api/validate') as route:
+        page.locator('[data-route-destination="route1"]').dispatch_event('change')
+    assert route.value.json()['project']['schemaVersion']=='1.4'
+    page.locator('[data-item-type="node"][data-item-id="SW1"]').click()
+    page.locator('[data-port-vlan="g1"]').fill('access:20')
+    with page.expect_response('**/api/validate') as vlan:
+        page.locator('[data-port-vlan="g1"]').dispatch_event('change')
+    assert vlan.value.json()['project']['schemaVersion']=='1.4'
+    page.locator('[data-item-type="node"][data-item-id="H1"]').click()
+    page.locator('[data-port-ipv4="eth0"]').fill('192.168.10.22/24')
+    with page.expect_response('**/api/validate') as ipv4:
+        page.locator('[data-port-ipv4="eth0"]').dispatch_event('change')
+    assert ipv4.value.json()['project']['schemaVersion']=='1.4'
+    page.locator('[data-item-type="link"][data-item-id="L4"]').click()
+    page.locator('#inspector label.check-line input').check()
+    page.once('dialog',lambda dialog:dialog.accept())
+    page.locator('#delete-link').click()
+    page.locator('[data-item-type="node"][data-item-id="H2"]').click()
+    page.locator('[data-delete-port="eth0"]').click()
+    page.once('dialog',lambda dialog:dialog.accept())
+    page.locator('#delete-node').click()
+    page.locator('[data-item-type="zone"][data-item-id="WAN"]').click()
+    page.once('dialog',lambda dialog:dialog.accept())
+    page.locator('#inspector button').filter(has_text='Ta bort zon').click()
+    expect(page.locator('#import-evidence-status')).to_contain_text('CHANGED_SINCE_IMPORT')
+    with page.expect_response('**/api/save') as saved: page.locator('#save-project').click()
+    assert saved.value.status==200
+    path=store/'schema14-edit-matrix.yadilab'
+    edited=json.loads(path.read_bytes())
+    assert edited['schemaVersion']=='1.4' and edited['importEvidence']==receipt
+    assert len(edited['links'])==3 and len(edited['nodes'])==4 and len(edited['zones'])==1
+    assert next(node for node in edited['nodes'] if node['id']=='SW1')['ports'][0]['vlan']=={'mode':'access','vlan':20}
+    before=path.read_bytes()
+    restart();page.reload(wait_until='domcontentloaded')
+    page.locator('#saved-projects').select_option('schema14-edit-matrix')
+    page.locator('#open-project').click()
+    assert path.read_bytes()==before
+    expect(page.locator('#import-evidence-status')).to_contain_text('CHANGED_SINCE_IMPORT')
+    assert not errors,errors
     page.close()
 
 
@@ -5946,6 +6137,8 @@ def run():
             import_candidate_regression(context, base, network_mode, store, errors)
             import_review_regression(context, base, network_mode, store, errors, restart_for_import_review)
             import_review_ui_regression(context, base, network_mode, store, errors, restart_for_import_review)
+            import_review_vlan_row_controls(context, base, network_mode, errors)
+            import_transport_projection_regression(context, base, network_mode, errors)
             import_review_page_regression(context, base, network_mode, store, errors)
             import_review_delimiters_regression(context, base, network_mode, store, errors)
             zone_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
@@ -5955,6 +6148,7 @@ def run():
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, route=True)
             cable_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             integrated_4c_regression(context, base, network_mode, store, errors, restart_for_import_review)
+            schema14_builder_edit_matrix(context, base, network_mode, store, errors, restart_for_import_review)
             mapping_profile_regression(context, base, network_mode, store, errors, restart_for_import_review)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
