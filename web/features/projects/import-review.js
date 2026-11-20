@@ -192,6 +192,7 @@ export function createImportReview({context, current, getProject, replaceProject
         el('option',{value:'interface_inventory'},'interface_inventory'),
         el('option',{value:'ip_plan'},'ip_plan'),
         el('option',{value:'static_route_register'},'static_route_register'),
+        el('option',{value:'cable_register'},'cable_register'),
         el('option',{value:'documentation_only'},'documentation_only'));
       const header = el('input',{type:'number',min:'1',placeholder:'Rubrikrad, tomt = ingen'});
       const selected = el('input',{type:'text',placeholder:'Valda originalrader, t.ex. 2,3'});
@@ -199,7 +200,8 @@ export function createImportReview({context, current, getProject, replaceProject
       for (const field of ['node.id','node.label','node.kind','node.zoneId','zone.id','zone.label',
         'port.nodeId','port.id','port.name','port.enabled','port.vlanMode','port.accessVlan','port.allowedVlans','port.ipv4',
         'ip.nodeId','ip.portId','ip.ipv4',
-        'route.nodeId','route.id','route.destination','route.nextHop','route.outPort']) {
+        'route.nodeId','route.id','route.destination','route.nextHop','route.outPort',
+        'link.id','link.aNode','link.aPort','link.bNode','link.bPort','link.enabled']) {
         columns[field] = el('input',{type:'text',placeholder:'Kolumnbokstav, t.ex. A'});
         columnLabels[field] = el('label',{},field,columns[field]);
         box.append(columnLabels[field]);
@@ -237,7 +239,8 @@ export function createImportReview({context, current, getProject, replaceProject
             : role.value === 'zone_inventory' ? field.startsWith('zone.')
             : role.value === 'interface_inventory' ? field.startsWith('port.')
             : role.value === 'ip_plan' ? field.startsWith('ip.')
-            : role.value === 'static_route_register' && field.startsWith('route.');
+            : role.value === 'static_route_register' ? field.startsWith('route.')
+            : role.value === 'cable_register' && field.startsWith('link.');
           columnLabels[field].hidden = !supported;
           if (!supported) control.value = '';
         }
@@ -317,7 +320,9 @@ export function createImportReview({context, current, getProject, replaceProject
       $('external-candidate-result').replaceChildren(el('p',{},`Fingerprint: ${candidate.fingerprint}`),
         el('p',{},`Tillämpbar: ${candidate.canApply}`),
         el('p',{},`Föreslaget projekt: ${candidate.proposedProject?.nodes.length ?? 0} noder, ${candidate.proposedProject?.zones.length ?? 0} zoner`),
-        el('pre',{},JSON.stringify(candidate.proposedProject?.nodes ?? candidate.diagnostics,null,2)));
+        el('pre',{},JSON.stringify(candidate.proposedProject ? {
+          nodes:candidate.proposedProject.nodes, links:candidate.proposedProject.links
+        } : candidate.diagnostics,null,2)));
       $('external-apply').disabled=!candidate.canApply || !$('external-warning').checked;
     } catch(error) { if (valid(token)) showError(error); }
   }

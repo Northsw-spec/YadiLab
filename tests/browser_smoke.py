@@ -2936,6 +2936,95 @@ def port_import_regression(context, base, network_mode, store, errors, restart, 
     page.close()
 
 
+def cable_import_regression(context, base, network_mode, store, errors, restart):
+    """Source backed cable, explicit endpoints, disk Save/Open and replay."""
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page, base) == network_mode
+    raw = (b'Node,Label,Kind,Port,PortName,PortEnabled,Link,ANode,APort,BNode,BPort,LinkEnabled\n'
+           b'SW1,Switch,switch,p1,Port 1,true,CABLE-001,SW1,p1,H1,eth0,true\n'
+           b'H1,Host,host,eth0,Ethernet 0,true,,,,,,\n')
+    page.locator('#external-import').click()
+    page.locator('#external-files').set_input_files({'name':'cables.csv','mimeType':'text/csv','buffer':raw})
+    page.locator('#external-file-choices select').first.select_option(',')
+    page.locator('#external-inspect-files').click()
+    expect(page.locator('#external-sources')).to_contain_text('CABLE-001')
+    mappings = [
+        ('device_inventory', {'node.id':'A','node.label':'B','node.kind':'C'}, '2,3'),
+        ('interface_inventory', {'port.nodeId':'A','port.id':'D','port.name':'E','port.enabled':'F'}, '2,3'),
+        ('cable_register', {'link.id':'G','link.aNode':'H','link.aPort':'I',
+                            'link.bNode':'J','link.bPort':'K','link.enabled':'L'}, '2'),
+    ]
+    for index, (role, columns, rows) in enumerate(mappings):
+        page.locator('#external-add-view').click()
+        mapping = page.locator('#external-views fieldset').nth(index)
+        mapping.locator('select').first.select_option('0:sheet-1')
+        mapping.locator('select').nth(1).select_option(role)
+        mapping.locator('input[placeholder^="Rubrikrad"]').fill('1')
+        mapping.locator('input[placeholder^="Valda originalrader"]').fill(rows)
+        for field, column in columns.items():
+            mapping.locator('label').filter(has_text=field).locator('input').fill(column)
+        mapping.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+    with page.expect_response('**/api/import/build-candidate') as preview:
+        page.locator('#external-plan-button').click()
+    discovery = preview.value.json()['plan']
+    link_unit = next(u for u in discovery['units'] if u['kind']=='link')
+    assert link_unit['status'] == 'ACTIONABLE'
+    assert link_unit['dependencies'] == sorted(u['unitId'] for u in discovery['units'] if u['kind']=='port')
+    assert len(discovery['recordReviews']) == 3
+    checks = page.locator('#external-plan-result input[type="checkbox"]')
+    assert checks.count() == 5
+    for index in range(checks.count()):
+        checks.nth(index).check()
+    with page.expect_response('**/api/import/build-candidate') as selected:
+        page.locator('#external-candidate-button').click()
+    project = selected.value.json()['plan']['proposedProject']
+    expected = {'id':'CABLE-001','a':{'node':'SW1','port':'p1'},
+                'b':{'node':'H1','port':'eth0'},'enabled':True}
+    assert project['links'] == [expected]
+    page.locator('#external-warning').check()
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.locator('#external-apply').click()
+    expect(page.locator('[data-link-id="CABLE-001"]')).to_have_count(1)
+    with page.expect_download() as downloaded:
+        page.locator('#external-bundle-export').click()
+    bundle = json.loads(Path(downloaded.value.path()).read_text())
+    assert base64.b64decode(bundle['sources'][0]['contentBase64']) == raw
+    page.locator('#external-close').click()
+    name = 'cables-4c6'
+    disk = store / f'{name}.yadilab'
+    assert not disk.exists()
+    page.locator('#project-filename').fill(name)
+    page.locator('#project-filename').dispatch_event('change')
+    with page.expect_response('**/api/save') as saved:
+        page.locator('#save-project').click()
+    assert saved.value.status == 200
+    stored = json.loads(disk.read_bytes())
+    assert stored['links'] == [expected]
+    assert stored['schemaVersion'] == '1.4'
+    receipt = stored['importEvidence']
+    restart()
+    page.reload(wait_until='domcontentloaded')
+    page.locator('#saved-projects').select_option(name)
+    page.locator('#open-project').click()
+    expect(page.locator('[data-link-id="CABLE-001"]')).to_have_count(1)
+    expect(page.locator('#import-evidence-status')).to_contain_text('BASELINE_MATCH')
+    page.locator('#external-import').click()
+    with page.expect_response('**/api/import/verify-sources') as verified:
+        page.locator('#external-bundle-file').set_input_files({'name':'cable-sources.json',
+            'mimeType':'application/json','buffer':json.dumps(bundle).encode()})
+    assert verified.value.json()['sourceStatus'] == 'SOURCE_VERIFIED'
+    assert verified.value.json()['replayStatus'] == 'MATCH'
+    altered = json.loads(json.dumps(bundle))
+    altered['sources'][0]['contentBase64'] = base64.b64encode(raw.replace(b'CABLE-001', b'CABLE-002')).decode()
+    page.locator('#external-bundle-file').set_input_files({'name':'changed-cable-sources.json',
+        'mimeType':'application/json','buffer':json.dumps(altered).encode()})
+    expect(page.locator('#external-status')).to_contain_text('Källfil ej ansluten')
+    assert json.loads(disk.read_bytes())['importEvidence'] == receipt
+    assert not errors, errors
+    page.close()
+
+
 def run():
     with tempfile.TemporaryDirectory() as td, sync_playwright() as playwright:
         store = Path(td)
@@ -5470,6 +5559,7 @@ def run():
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, vlan=True)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, ipv4=True)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, route=True)
+            cable_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)
             diagnostic_races(context, base, network_mode, errors)
