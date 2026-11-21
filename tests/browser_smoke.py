@@ -3084,6 +3084,9 @@ def port_import_regression(context, base, network_mode, store, errors, restart, 
     with page.expect_response('**/api/import/build-candidate') as selected:
         page.locator('#external-candidate-button').click()
     project = selected.value.json()['plan']['proposedProject']
+    vlan_count = page.locator('#external-candidate-result dt').filter(
+        has_text='VLAN-konfigurationer').evaluate('dt => Number(dt.nextElementSibling.textContent)')
+    assert vlan_count == (1 if vlan else 0), (vlan_count, [port.get('vlan') for node in project['nodes'] for port in node['ports']])
     expected_port = ({'id':'eth0','name':'Ethernet 0','enabled':False,'ipv4':'10.0.0.1/30'} if route else
                      {'id':'eth0','name':'Ethernet 0','enabled':False,'ipv4':'192.168.10.20/24'}
                      if ipv4 else {'id':'Gi1_0_1','name':'Uplink','enabled':True,'ipv4':None})
@@ -3149,6 +3152,71 @@ def port_import_regression(context, base, network_mode, store, errors, restart, 
     assert json.loads(disk.read_bytes())['importEvidence'] == receipt
     assert not errors, errors
     page.close()
+
+
+def vlan_candidate_metrics_regression(context, base, network_mode, errors):
+    """Actual imported candidates show the canonical VLAN count in Chromium."""
+    headers = b'Device,Label,Kind,Port,PortName,Enabled,Mode,Access,Allowed\n'
+    access = b'SW1,Switch,switch,g1,Gigabit 1,true,access,10,\n'
+    trunk = b'SW1,Switch,switch,g2,Gigabit 2,true,trunk,,"10,20"\n'
+    for name, rows, expected_vlans in (
+        ('absent', access, []),
+        ('access', access, [{'mode': 'access', 'vlan': 10}]),
+        ('trunk', trunk, [{'mode': 'trunk', 'allowedVlans': [10, 20]}]),
+        ('mixed', access + trunk, [{'mode': 'access', 'vlan': 10},
+                                    {'mode': 'trunk', 'allowedVlans': [10, 20]}]),
+    ):
+        page = context.new_page()
+        page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+        assert browser_open(page, base) == network_mode
+        page.locator('#external-import').click()
+        page.locator('#external-files').set_input_files({
+            'name': f'vlan-metrics-{name}.csv', 'mimeType': 'text/csv', 'buffer': headers + rows})
+        page.locator('#external-file-choices select').first.select_option(',')
+        page.locator('#external-inspect-files').click()
+        expect(page.locator('#external-sources')).to_contain_text('SW1')
+        selected_rows = '2,3' if name == 'mixed' else '2'
+        for index, (role, columns) in enumerate((
+            ('device_inventory', {'node.id': 'A', 'node.label': 'B', 'node.kind': 'C'}),
+            ('interface_inventory', {'port.nodeId': 'A', 'port.id': 'D',
+                                     'port.name': 'E', 'port.enabled': 'F'}),
+        )):
+            page.locator('#external-add-view').click()
+            mapping = page.locator('#external-views fieldset').nth(index)
+            mapping.locator('select').first.select_option('0:sheet-1')
+            mapping.locator('select').nth(1).select_option(role)
+            mapping.locator('input[placeholder^="Rubrikrad"]').fill('1')
+            mapping.locator('input[placeholder^="Valda originalrader"]').fill(selected_rows)
+            for field, column in columns.items():
+                mapping.locator('label').filter(has_text=field).locator('input').fill(column)
+            if index == 1 and name != 'absent':
+                for field, column in (('port.vlanMode', 'G'), ('port.accessVlan', 'H'),
+                                      ('port.allowedVlans', 'I')):
+                    mapping.locator('label').filter(has_text=field).locator('input').fill(column)
+                mapping.locator('label').filter(has_text='port.accessVlan: källtext').locator('select').select_option('parse_vlan_integer')
+                mapping.locator('label').filter(has_text='port.allowedVlans: källtext').locator('select').select_option('split_vlan_integer_list')
+            mapping.locator('input[placeholder^="Valda originalrader"]').dispatch_event('change')
+        with page.expect_response('**/api/import/build-candidate') as preview:
+            page.locator('#external-plan-button').click()
+        assert preview.value.status == 200
+        for choice in page.locator('#external-plan-result .unit-choice').all():
+            choice.check()
+        with page.expect_response('**/api/import/build-candidate') as candidate:
+            page.locator('#external-candidate-button').click()
+        plan = candidate.value.json()['plan']
+        assert plan['canApply']
+        project = plan['proposedProject']
+        assert project['schemaVersion'] == '1.4' and project['importEvidence']
+        actual_ports = [port for node in project['nodes'] for port in node['ports']]
+        assert [port['vlan'] for port in actual_ports if 'vlan' in port] == expected_vlans
+        if name == 'absent':
+            assert all('vlan' not in port for port in actual_ports)
+        expected_count = len(expected_vlans)
+        ui_count = page.locator('#external-candidate-result dt').filter(
+            has_text='VLAN-konfigurationer').evaluate('dt => Number(dt.nextElementSibling.textContent)')
+        assert ui_count == expected_count, (name, ui_count, expected_count, actual_ports)
+        assert not errors, errors
+        page.close()
 
 
 def cable_import_regression(context, base, network_mode, store, errors, restart):
@@ -6433,6 +6501,7 @@ def run():
             zone_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, vlan=True)
+            vlan_candidate_metrics_regression(context, base, network_mode, errors)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, ipv4=True)
             port_import_regression(context, base, network_mode, store, errors, restart_for_import_review, route=True)
             cable_import_regression(context, base, network_mode, store, errors, restart_for_import_review)
