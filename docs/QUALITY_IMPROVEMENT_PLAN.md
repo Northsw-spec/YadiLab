@@ -163,7 +163,19 @@ Redan korrigerade fel: PR #76 (importacceptans), #77 (stale Builder HTTP-svar), 
 
 **6D Användarflöde:** observera verkliga mappningsbeslut och begriplighet. En förenkling får aldrig ersätta källfakta med gissningar.
 
-**Acceptans:** importerad kandidat innehåller exakt uttryckligen valda och verifierbara fakta; oklarheter avvisas eller presenteras som olösta. Ingen tyst datatapp; proveniens kan återverifieras.
+### Obligatorisk acceptansgrind: ingen import av bristfällig topologi
+
+**Applikationen ska inte acceptera ett nätverksprojekt som saknar de uppgifter som krävs för att programmet ska kunna arbeta korrekt med det.**
+
+- Read-only inspektion av ofullständiga källor är tillåten men får inte räknas som lyckad projektimport.
+- Projektets explicit avsedda nätverksstruktur måste vara komplett enligt den kanoniska modellen och de funktioner som ska användas; kabel kräver två verifierbart uttryckligen angivna portändpunkter.
+- Relevanta olösta/konflikterande källfakta får inte tyst exkluderas för att ge ett falskt lyckat delprojekt.
+- Utan nödvändiga data: blockerad tillämpning, källpositionsbundet fel, ingen förändring av arbetsyta eller sparat projekt.
+- Efter uttryckliga användarkorrigeringar krävs helt ny validering och separat bekräftelse samt Save. Irrelevanta valfria protokollfält, exempelvis IPv4 i ett enbart Layer 2-labb, ska inte krävas.
+- Obligatoriska negativa end-to-end-tester av ofullständiga kablar, bortvalda blockerade relationer, verklig komplettering, ren L2-topologi, atomärt arbetsytebyte och Save/Open. **Befintlig implementation uppfyller inte automatiskt regeln bara för att texten införs.**
+
+
+**Acceptans:** importerad kandidat innehåller exakt uttryckligen valda och verifierbara fakta; olösta nödvändiga källuppgifter blockerar projekttillämpning. Enbart läsbar dokumentation eller en vald delmängd som döljer kända nödvändiga relationer får inte godkännas som fungerande nätverksprojekt. Ingen tyst datatapp; proveniens kan återverifieras.
 
 ## 11. QUALITY-007 – Prestanda, skalbarhet och resursgränser
 

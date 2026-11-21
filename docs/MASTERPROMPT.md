@@ -136,6 +136,14 @@ Nu finns verifierade strikta CSV-, XLSX-, ODS-, JSON- och projektvägar med expl
 
 Alla importer och framtida adaptrar ska använda samma kanoniska projektvalidering och bevara referensidentiteter. Inga antaganden om fysiska länkar, enheter, portbindningar, topologi eller nätverksreachability tillåts. Okänd, tvetydig eller icke representerbar källdata får inte tyst kastas bort. Fullständig validering och uttryckligt arbetsytegodkännande föregår ändring; Save är separat.
 
+### Oförhandlingsbar importgrind: fullständiga projekt, aldrig en maskerad deltopologi
+
+**Applikationen ska inte acceptera ett nätverksprojekt som saknar de uppgifter som krävs för att programmet ska kunna arbeta korrekt med det.**
+
+Källfiler får inspekteras även när de är ofullständiga; **projekttillämpning är en annan operation**. Om en avsedd topologi innehåller en relation med saknade obligatoriska portändpunkter, motsägelsefulla beroenden eller andra nödvändiga uppgifter ska tillämpning blockeras. Skapa inte en ”godkänd” resttopologi genom att automatiskt exkludera blockerade källrader eller välja bort kända relationer; skapa inte provisoriska eller påhittade länkar. Ange exakt vilka källfakta som saknas, tillåt endast uttrycklig spårbar komplettering och bygg/validera hela nätverksprojektet igen före användargodkännande. Inga ändringar i arbetsytan eller disk vid blockerande fel. Kräv inte frivilliga IP-/route-/VLAN-fält för ett projekt eller arbetsflöde som inte behöver dem.
+
+**Normativ detaljspecifikation:** [IMPORT_SOURCE_CONTRACT.md](IMPORT_SOURCE_CONTRACT.md), ”Bindande huvudregel för extern nätverksprojektimport”. Eventuella äldre tillstånd att skapa partiella inventeringar gäller endast läsning/granskning, inte att godkänna ett bristfälligt simulerbart nätverksprojekt. Koduppfyllelse är **NOT_VERIFIED** tills negativa integrationstester visar det.
+
 ## 10. Beständig Save/Open och formatmigration
 
 Spara riktiga filer endast på användarens uttryckliga Save. Verifiera skrivna bytes, SHA-256 och konfliktkontroll före överskrivning. Öppna efter fullständig applikationsomstart och verifiera exakt bevarade ID:n, länkar, portar, dokumentationsvärden och scenariodata som ingår i formatet.

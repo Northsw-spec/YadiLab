@@ -17,6 +17,16 @@ Den enda aktuella etappindelade kvalitetsfärdplanen finns i [docs/QUALITY_IMPRO
 
 - **Produktnamn:** `APP_NAME` i `network_core/config.py` är den enda deklarationen av appens visningsnamn. Repositorynamnet är inte appnamnet. HTML, fönstertitel, loggar, hälsosvar och terminal måste härleda namnet härifrån. Alla klass-, funktions-, paket- och filnamn måste vara generiska. Ingen gammal produktidentitet får förekomma i källtext, dokumentation eller testfixturer utöver den bibehållna, tekniska filändelsen för projektformatet. `tests/test_naming_contract.py` måste passera.
 
+## Bindande importgrind: inga bristfälliga nätverksprojekt
+
+**Applikationen ska inte acceptera ett nätverksprojekt som saknar de uppgifter som krävs för att programmet ska kunna arbeta korrekt med det.**
+
+- **Källgranskning är inte projektimport.** Inspektion får visa saknade/inkonsekventa fakta men aldrig automatiskt skapa ett delvis användbart projekt.
+- **Inga antagna anslutningar.** För varje fysisk kabel krävs båda explicita nod-/portändpunkterna. Saknas de, eller andra data som är nödvändiga för den deklarerade topologin och avsedda stödda funktionerna, ska projekttillämpning blockeras. Importera inte en vald delmängd som döljer kända relevanta fel.
+- **Ingen övervalidering av frivilliga protokollfält.** En topologi avsedd enbart för Layer 2 behöver inte IPv4 eller routes; kraven styrs av faktisk modell och avsett arbete.
+- **Fail-closed och atomärt.** Redovisa källposition och saknad uppgift, låt användaren komplettera uttryckligen, validera om hela valda projektet, tillämpa först efter explicit godkännande och spara endast efter separat Save. Vid blockerare ändras varken arbetsyta eller disk.
+- **Regleringen är ett målkontrakt, inte ett påstående att dagens kod redan uppfyller det.** Inga smygändringar i importkod; implementering och negativa end-to-end-tester krävs separat. Detaljer: [docs/IMPORT_SOURCE_CONTRACT.md](docs/IMPORT_SOURCE_CONTRACT.md), avsnittet ”Bindande huvudregel för extern nätverksprojektimport”.
+
 ## Oförhandlingsbara funktionella invariants
 
 1. **Inga implicita länkar:** IP-adresser, default gateways, geografisk zon, nodposition och liknande får aldrig skapa en kabel, router eller enhet.
