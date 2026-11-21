@@ -50,7 +50,7 @@ Läsning och import ska ha fem åtskilda ansvar:
 4. **Kanonisk validering:** Det slutliga projektet valideras av `validate_project()`; ingen adapter kan kringgå dess regler.
 5. **Förhandsvisning och godkännande:** UI visar importerbara fakta, blockerande fel och alla olösta källfält före någon projektförändring. En liten projektbunden proveniensmanifest följer med när användaren sparar, men originalfilbytes lagras inte automatiskt i projektet. En separat uttrycklig källexport gör full source-retention möjlig. Save förblir separat.
 
-Källfakta, härledda presentationskoordinater och faktisk simulering är olika kategorier. En lyckad import betyder att ett avgränsat datakontrakt uppfyllts – inte att nätverket observerats, är komplett eller har verifierad reachability.
+Källfakta, härledda presentationskoordinater och faktisk simulering är olika kategorier. En lyckad **källinspektion** säger inte att ett nätverksprojekt får tillämpas. En godkänd **projekttillämpning** kräver fullständiga obligatoriska fakta för hela det uttryckligen deklarerade projektet och dess avsedda funktioner; den innebär fortfarande inte att verklig nätverksreachability har observerats.
 
 ## 4. Etapp 4A – exakt nästa kodleverans
 
@@ -184,7 +184,7 @@ Inga externa projekt har körts i denna granskning; referenserna belägger inspe
 
 Skilj mellan (a) *källans utsaga*, (b) *användarens uttryckliga tolkning eller komplettering*, (c) *härledd visuell layout*, (d) *observation från en verklig nätverksenhet* och (e) *simuleringsresultat*. Import ger enbart a–c. Den får aldrig framställa något som d–e utan annan befintlig verifieringsfunktion.
 
-Partiell inventering utan kablar är tillåten. Ett saknat kabelregister betyder **okänd kabeldragning**, inte ett bevis om ett kabelfritt verkligt nät. Från management-IP, VLAN, default gateway, portbeskrivning, LLDP-rad, zon, diagramposition eller liknande får ingen fysisk kabel skapas.
+Partiell inventering utan kablar får **läsas och granskas**, men får inte tillämpas som ett fungerande nätverksprojekt när de avsedda fysiska förbindelserna saknar obligatoriska portuppgifter. Ett saknat kabelregister betyder **okänd kabeldragning**, inte ett bevis om ett kabelfritt verkligt nät. Ett uttryckligen definierat, helt isolerat L2-projekt utan avsedda kablar är ett annat giltigt scenario och ska inte sammanblandas med en ofullständigt dokumenterad topologi. Från management-IP, VLAN, default gateway, portbeskrivning, LLDP-rad, zon, diagramposition eller liknande får ingen fysisk kabel skapas.
 
 ## 6. Källvyer, typade källpåståenden och flervärdesmappning
 
@@ -588,7 +588,7 @@ UI måste särskilja **historisk importproveniens** från användarens senare ma
 - Två oberoende syntetiska inventeringar med olika rubriker och column order ger samma kanoniska expected device efter explicit mapping; ingen rubrikheuristik.
 - **En rad, två device_inventory-vyer** från samma blad, med var sin uttryckligt angiven text-ID-kolumn, ger två separata nodclaims utan att källraden dupliceras. **Två rader, ett targetKey** ger en enda nod med två källursprung vid lika fält. En uttrycklig `rowValues[]`-identitet tillåts endast om användaren angivit den själv och den ingår i fingerprint; en motstridig radunik användardeklaration ska blockeras.
 - Två motstridiga celler på samma target field ger BLOCKED och ingen skapad enhet.
-- En nod utan ports/links är giltigt **partiellt** projekt, inte ett fullständigt observerat nät.
+- En nod utan ports/links kan vara ett giltigt objekt vid **källgranskning** eller ingå i ett uttryckligen komplett, isolerat projekt. Den gör inte en ofullständigt dokumenterad större topologi importerbar. Kända relevanta saknade kabel-/portrelationer måste blockera projekttillämpning enligt den bindande huvudregeln.
 - Felaktigt typed ID, okänd node.kind, saknad användardeklaration, plan-ID-kollision, obefintlig källcell, EXCLUDED som beroende, ändrad source hash och stale UI-respons hindrar projektbyte.
 - importEvidence återläses exakt efter Save/Open och omstart; råa källceller är inte i .yadilab. Efter omstart visas korrekt "källan ej ansluten". Import av rätt källpaket återställer förmågan att granska celler; fel SHA blockeras. **Redigera därefter en port/IP/route och spara på riktigt:** projektet ska fortfarande vara schema 1.4, proveniensmanifestet oförändrat, `CHANGED_SINCE_IMPORT` synligt och alla simulatoranrop fria från importEvidence. Återställ exakt nätverksinnehåll och verifiera BASELINE_MATCH utan falskt SOURCE_VERIFIED.
 - Bytebevis för ursprungliga filer och v1.0–1.3-filer utan Save; full DIRECT_HTTP Chromium och samtliga befintliga protokolltester.
