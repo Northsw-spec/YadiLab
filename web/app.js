@@ -1,5 +1,5 @@
 import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';
-import {TopologyCanvas} from './canvas.js';
+import {TopologyCanvas, packetJourneyFrames} from './canvas.js';
 import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';
 import {api} from './services/api.js';
 import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';
@@ -29,6 +29,7 @@ let doraBusy = false;
 let routeLookup = null;
 let ipv4Diagnostic = null;
 let pingDiagnostic = null;
+let lastJourney = null;
 let troubleDiagnostic = null;
 let filename = 'lab';
 let savedName = null;
@@ -80,6 +81,7 @@ const canvas = new TopologyCanvas($('topology'), {
       ipv4Diagnostic = null;
       pingDiagnostic = null;
       troubleDiagnostic = null;
+      forgetJourney();
       invalidateDhcpDiagnostics();
       invalidateDoraDiagnostics();
       invalidateDoraSession();
@@ -131,6 +133,7 @@ function invalidateDoraSession() {
   doraSession.invalidate();
 }
 function changed({keepTrace = false} = {}) {
+  forgetJourney();
   editRevision += 1;
   importReview.onEdit();
   previewGeneration += 1;
@@ -1114,6 +1117,66 @@ function renderTroubleshooting() {
   ].join('\n\n');
 }
 
+function forgetJourney() {
+  canvas.stopJourney({quiet: true});
+  lastJourney = null;
+  $('probe-replay').disabled = true;
+  $('probe-status').textContent = 'Ingen aktuell paketresa.';
+}
+
+function replayJourney() {
+  if (!lastJourney || lastJourney.snapshot !== JSON.stringify(project)) {
+    forgetJourney();
+    return;
+  }
+  const journey = lastJourney;
+  try {
+    canvas.playJourney(journey.frames, {
+      onFrame(frame, index, total) {
+        $('probe-status').textContent =
+          `${index + 1}/${total} · ${frame.stage} · ${frame.from.node}/${frame.from.port}` +
+          ` → ${frame.to.node}/${frame.to.port} (kabel ${frame.linkId})`;
+      },
+      onDone() {
+        $('probe-status').textContent =
+          `Motorns resultat: ${journey.status}. Uppspelningen visar loggade kabelöverföringar, inte verklig RTT.`;
+      },
+      onCancel() {
+        $('probe-status').textContent =
+          'Paketresan avbröts när topologivyn ändrades. Spela upp igen vid behov.';
+      },
+    });
+  } catch (error) {
+    forgetJourney();
+    $('probe-status').textContent = 'Ingen paketanimation: ' + error.message;
+  }
+}
+
+function presentJourney(result, snapshot) {
+  canvas.stopJourney({quiet: true});
+  lastJourney = null;
+  $('probe-replay').disabled = true;
+  if (!result || result.error) {
+    $('probe-status').textContent = 'Probe avvisad: ' + (result?.error || 'okänt fel');
+    return;
+  }
+  let frames;
+  try {
+    frames = packetJourneyFrames(project, result);
+  } catch (error) {
+    $('probe-status').textContent = 'Osäkert motorresultat – ingen animation: ' + error.message;
+    return;
+  }
+  if (!frames.length) {
+    $('probe-status').textContent =
+      `Motorns resultat: ${result.status}. Inga faktiska kabeltransmissioner rapporterades.`;
+    return;
+  }
+  lastJourney = {frames, status: result.status, snapshot};
+  $('probe-replay').disabled = false;
+  replayJourney();
+}
+
 function renderPing() {
   const selector = $('ping-source');
   const previous = selector.value;
@@ -1125,6 +1188,18 @@ function renderPing() {
   selector.replaceChildren(...sources.map(s => el('option',{value:s.value},s.label)));
   if (sources.some(s => s.value === previous)) selector.value = previous;
   $('run-ping').disabled = !sources.length;
+
+  // The quick-probe selector lists only configured, explicit IPv4/MAC ports.
+  const probeSelector = $('probe-source');
+  const probePrevious = probeSelector.value;
+  const probes = project.nodes.filter(n => n.kind !== 'switch')
+    .flatMap(n => n.ports.filter(p => p.enabled && p.ipv4 && p.mac).map(p => ({
+      value: JSON.stringify([n.id, p.id]),
+      label: `${n.label} / ${p.name} (${n.id}/${p.id})`,
+    })));
+  probeSelector.replaceChildren(...probes.map(p => el('option', {value: p.value}, p.label)));
+  if (probes.some(p => p.value === probePrevious)) probeSelector.value = probePrevious;
+  $('probe-send').disabled = !probes.length;
 
   const output = $('ping-result');
   const presentation = presentPing(pingDiagnostic);
@@ -1405,6 +1480,7 @@ function render() {
   rendering = true;
   try {
   if (getSelected() === null) selection = null;
+  if (lastJourney && lastJourney.snapshot !== JSON.stringify(project)) forgetJourney();
   $('breadcrumb').textContent = project.name;
   $('count-nodes').textContent = String(project.nodes.length);
   $('count-links').textContent = String(project.links.length);
@@ -1416,7 +1492,7 @@ function render() {
   renderList($('zone-list'), project.zones, 'zone', 'Inga zoner');
   $('empty-state').hidden = project.nodes.length > 0;
   $('canvas-hint').textContent = pendingPort ? `Vald port: ${pendingPort.node}/${pendingPort.port}. Klicka en andra ledig port eller samma port för att avbryta.`
-    : 'Dra enheter för att placera dem. Klicka två lediga portcirklar för att skapa en länk.';
+    : 'Mittenknapp: panorera · Mushjul: zooma · Vänsterdrag: flytta enhet · Klicka två lediga portar: kabel.';
   const sessionView = simulationSession.getState();
   canvas.setData(project, selection, pendingPort,
     sessionView.diagnostic?.data ? sessionView.highlightedLinks :
@@ -1854,15 +1930,15 @@ async function runDhcp() {
 function diagnosticInputs(kind) {
   return diagnosticFields[kind].map(id => $(id).value.trim());
 }
-function beginDiagnostic(kind) {
+function beginDiagnostic(kind, readInputs = () => diagnosticInputs(kind)) {
   return {kind, run: ++diagnosticRuns[kind], workspaceRevision, editRevision,
-    snapshot: JSON.stringify(project), inputs: diagnosticInputs(kind)};
+    snapshot: JSON.stringify(project), inputs: readInputs(), readInputs};
 }
 function diagnosticCurrent(context) {
   return diagnosticRuns[context.kind] === context.run &&
     workspaceRevision === context.workspaceRevision && editRevision === context.editRevision &&
     JSON.stringify(project) === context.snapshot &&
-    JSON.stringify(diagnosticInputs(context.kind)) === JSON.stringify(context.inputs);
+    JSON.stringify(context.readInputs()) === JSON.stringify(context.inputs);
 }
 function clearDiagnostic(kind) {
   diagnosticRuns[kind] += 1;
@@ -2046,10 +2122,18 @@ async function runTroubleshooting() {
   renderTroubleshooting();
 }
 
-async function runPing() {
-  const [selected, destinationIpv4, rawTtl, rawIdentifier, rawSequence] = diagnosticInputs('ping');
+async function runPing({quick = false} = {}) {
+  const readInputs = quick
+    ? () => [$('probe-source').value, $('probe-destination').value.trim(),
+        $('probe-ttl').value.trim(), '1', '1']
+    : () => diagnosticInputs('ping');
+  const [selected, destinationIpv4, rawTtl, rawIdentifier, rawSequence] = readInputs();
   if (!selected) return;
-  const context = beginDiagnostic('ping');
+  const context = beginDiagnostic('ping', readInputs);
+  canvas.stopJourney({quiet: true});
+  lastJourney = null;
+  $('probe-replay').disabled = true;
+  $('probe-status').textContent = 'ICMP-probe körs i den faktiska simuleringsmotorn…';
   const [sourceNode, sourcePort] = JSON.parse(selected);
   const number = value => /^[0-9]+$/.test(value) ? Number(value) : NaN;
   const ttl = number(rawTtl), identifier = number(rawIdentifier), sequence = number(rawSequence);
@@ -2058,6 +2142,7 @@ async function runPing() {
       !Number.isInteger(sequence) || sequence < 0 || sequence > 65535) {
     pingDiagnostic = {error:'Ange mål-IP, TTL 1–255, identifierare och sekvens 0–65535.'};
     renderPing();
+    presentJourney(pingDiagnostic, context.snapshot);
     return;
   }
   try {
@@ -2067,9 +2152,10 @@ async function runPing() {
     pingDiagnostic = result;
   } catch (error) {
     if (!diagnosticCurrent(context)) return;
-    pingDiagnostic = {error:error.message};
+    pingDiagnostic = {error: error.message};
   }
   renderPing();
+  presentJourney(pingDiagnostic, context.snapshot);
 }
 
 async function runIPv4Trace() {
@@ -2229,7 +2315,20 @@ $('export-ods').addEventListener('click', () => exportSpreadsheet('ods'));
 $('run-trace').addEventListener('click', runTrace);
 $('run-route-lookup').addEventListener('click', runRouteLookup);
 $('run-ipv4-trace').addEventListener('click', runIPv4Trace);
-$('run-ping').addEventListener('click', runPing);
+$('run-ping').addEventListener('click', () => { void runPing(); });
+$('probe-toggle').addEventListener('click', () => {
+  const panel = $('probe-panel');
+  panel.hidden = !panel.hidden;
+  $('probe-toggle').setAttribute('aria-expanded', String(!panel.hidden));
+});
+$('probe-send').addEventListener('click', () => { void runPing({quick: true}); });
+$('probe-replay').addEventListener('click', replayJourney);
+for (const id of ['probe-source', 'probe-destination', 'probe-ttl']) {
+  $(id).addEventListener(id === 'probe-source' ? 'change' : 'input', () => {
+    diagnosticRuns.ping += 1;
+    forgetJourney();
+  });
+}
 $('icmp-investigation-start').addEventListener('click', startIcmpInvestigation);
 $('icmp-investigation-stop').addEventListener('click', stopIcmpInvestigation);
 $('icmp-investigation-measure').addEventListener('click', measureIcmpInvestigation);

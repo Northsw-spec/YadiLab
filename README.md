@@ -24,6 +24,13 @@ python3 -m network_core --data-dir ~/NetworkProjects --no-browser --port 8765
 
 Öppna därefter `http://127.0.0.1:8765/`. Avsluta servern med `Ctrl+C`.
 
+## Topologi och ICMP-paketresa
+
+- Panorera topologin med **musens mittenknapp** (håll ned och dra), även över noder. Vänsterknappen panorerar inte; vänsterdrag flyttar valda enheter och vänsterklick på portpunkter används för uttryckliga kablar. Mushjulet zoomar.
+- Klicka **Skicka probe · Paketresa** ovanför topologin. Välj ett dokumenterat, aktiverat källgränssnitt med IPv4 och MAC, skriv in destinations-IPv4, ange TTL och klicka **Skicka ICMP-probe**. **Spela upp igen** återger samma motorresultat utan en ny simuleringskörning.
+- Animationen visar bara kabelöverföringar från det faktiska, avgränsade ICMP/IPv4/ARP/Ethernet-resultatet. Varje animerad kabel måste matcha båda deklarerade portändpunkterna; vid avvikelse stoppas animationen. Rörelsen är **inte** simulerad tid, mätt RTT eller verklig nätverkstrafik. Vid motorfel syns status i stället för en påhittad lyckad leverans.
+- Ingen visualisering ändrar nätverksmodellen, sparade projekt eller dokumentationsfakta. Efter byte eller ändring av projektet upphör tidigare uppspelning.
+
 ## Fungerar i första versionen
 
 - Skapa, redigera, flytta och ta bort dokumenterade hosts, switchar, routrar och brandväggar.

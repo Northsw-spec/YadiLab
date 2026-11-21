@@ -118,10 +118,25 @@
       <main class="canvas-column" aria-label="Topologiarbetsyta">
         <div class="canvas-toolbar">
           <div class="canvas-tab"><span class="tab-indicator"></span> Topologi <span class="tab-caption">/ dokumenterad graf</span></div>
-          <div class="canvas-tools"><span id="canvas-mode">REDIGERING</span><button id="zoom-out" title="Zooma ut" aria-label="Zooma ut" class="icon-button" type="button">−</button><button id="zoom-in" title="Zooma in" aria-label="Zooma in" class="icon-button" type="button">+</button><button id="zoom-fit" class="btn btn-small btn-ghost" type="button">Anpassa</button></div>
+          <div class="canvas-tools"><button id="probe-toggle" class="btn btn-small btn-soft" type="button" aria-controls="probe-panel" aria-expanded="false">Skicka probe · Paketresa</button><span id="canvas-mode">REDIGERING</span><button id="zoom-out" title="Zooma ut" aria-label="Zooma ut" class="icon-button" type="button">−</button><button id="zoom-in" title="Zooma in" aria-label="Zooma in" class="icon-button" type="button">+</button><button id="zoom-fit" class="btn btn-small btn-ghost" type="button">Anpassa</button></div>
         </div>
         <div class="canvas-container">
-          <svg id="topology" aria-label="Nätverkstopologi med verkliga deklarerade länkar" role="img" tabindex="0"></svg>
+          <section id="probe-panel" class="probe-panel" aria-label="Skicka ICMP-probe och spela upp paketresa" hidden>
+            <h3>ICMP-probe · paketresa</h3>
+            <p>Visar endast kabelöverföringar som den simulerade nätverksmotorn faktiskt rapporterar. Tidsförloppet är en visualisering, inte mätt RTT.</p>
+            <label for="probe-source">Källgränssnitt</label>
+            <select id="probe-source" class="control"></select>
+            <label for="probe-destination">Destination IPv4</label>
+            <input id="probe-destination" class="control" type="text" autocomplete="off" placeholder="192.0.2.20">
+            <label for="probe-ttl">TTL (1–255)</label>
+            <input id="probe-ttl" class="control" type="number" min="1" max="255" step="1" value="8">
+            <div class="probe-actions">
+              <button id="probe-send" class="btn btn-soft" type="button" disabled>Skicka ICMP-probe</button>
+              <button id="probe-replay" class="btn btn-outline" type="button" disabled>Spela upp igen</button>
+            </div>
+            <p id="probe-status" role="status" aria-live="polite">Ingen aktuell paketresa.</p>
+          </section>
+          <svg id="topology" aria-label="Nätverkstopologi med verkliga deklarerade länkar. Panorera med musens mittenknapp." role="img" tabindex="0"></svg>
           <div id="empty-state" class="empty-state">
             <div class="empty-illustration"><span class="empty-node">▣</span><span class="empty-line"></span><span class="empty-node">▣</span></div>
             <h2>Ett nätverk börjar med en enhet</h2>
@@ -129,7 +144,7 @@
             <button id="empty-add" class="btn btn-primary" type="button">+ Skapa första enheten</button>
             <button id="load-example" class="btn btn-ghost" type="button">Öppna märkt demoexempel</button>
           </div>
-          <div class="canvas-bottom"><span id="canvas-hint">Dra enheter för att placera dem. Klicka två portar för att skapa en fysisk länk.</span><span class="chip" id="scale-label">100 %</span></div>
+          <div class="canvas-bottom"><span id="canvas-hint">Mittenknapp: panorera. Vänsterdrag: flytta enhet. Klicka två portar för kabel.</span><span class="chip" id="scale-label">100 %</span></div>
         </div>
         <div class="canvas-footer"><span>Visualisering: dokumenterade fakta, aldrig antagen uppkoppling.</span><span>{{APP_NAME}} · Lokal version</span></div>
       </main>

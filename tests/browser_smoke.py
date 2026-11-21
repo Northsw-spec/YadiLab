@@ -159,7 +159,7 @@ def browser_open(page, base):
     simulation_session = simulation_session.replace("import {api} from '../../services/api.js';", '').replace('export ', '')
     app = (ROOT / 'web/app.js').read_text(encoding='utf8')
     app = app.replace("import {blank, copy, newNode, newZone, addPort, connect, used, nextId, exampleProject, KINDS} from './model.js';", '')
-    app = app.replace("import {TopologyCanvas} from './canvas.js';", '')
+    app = app.replace("import {TopologyCanvas, packetJourneyFrames} from './canvas.js';", '')
     app = app.replace("import {$, el, field, heading, small, button, input, dropdown, check} from './ui/dom.js';", '')
     app = app.replace("import {api} from './services/api.js';", '')
     app = app.replace("import {prepareSave, saveSnapshot, listSavedProjects, readSavedProject} from './features/projects/persistence.js';", '')
@@ -3964,6 +3964,113 @@ def mapping_profile_regression(context, base, network_mode, store, errors, resta
     page.close()
 
 
+def probe_canvas_regression(context, base, network_mode, store, errors):
+    """True pointer interactions and engine-origin ICMP packet replay in Chromium."""
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    before_files = {f.name: hashlib.sha256(f.read_bytes()).hexdigest()
+                    for f in store.glob('*.yadilab')}
+    try:
+        assert browser_open(page, base) == network_mode
+        page.on('dialog', lambda dialog: dialog.accept())
+        project = icmp_routed_lab()
+        with page.expect_response('**/api/validate') as imported:
+            page.locator('#import-file').set_input_files({
+                'name': 'packet-journey.json', 'mimeType': 'application/json',
+                'buffer': json.dumps(project).encode('utf-8'),
+            })
+        assert imported.value.status == 200
+        svg = page.locator('#topology')
+        bbox = svg.bounding_box()
+        assert bbox and bbox['width'] > 100 and bbox['height'] > 100
+        # A regression in desktop grid sizing previously made the SVG about
+        # 9500 px tall in a 900 px browser. Off-screen mouse input then silently
+        # missed the canvas and produced an incorrect pan failure.
+        viewport = page.viewport_size
+        assert viewport and bbox['y'] >= 0
+        assert bbox['y'] + bbox['height'] <= viewport['height'] + 1, (
+            'topology SVG is outside the visible desktop viewport', bbox, viewport)
+        assert page.locator('.right-panel').evaluate(
+            '(element) => element.scrollHeight > element.clientHeight')
+        x = bbox['x'] + bbox['width'] - 45
+        y = bbox['y'] + bbox['height'] - 85
+
+        # Left mouse drag on the background is not panning.
+        old_view = svg.get_attribute('viewBox')
+        page.mouse.move(x, y)
+        page.mouse.down(button='left')
+        page.mouse.move(x - 75, y - 35, steps=4)
+        page.mouse.up(button='left')
+        assert svg.get_attribute('viewBox') == old_view
+
+        # Middle mouse drag works even when started on a real node, without
+        # selecting that node or creating a cable.
+        heading = page.locator('#inspector-heading').inner_text()
+        target = page.locator('[data-node-id="a"]').bounding_box()
+        assert target
+        x = target['x'] + min(35, target['width'] / 3)
+        y = target['y'] + min(25, target['height'] / 3)
+        assert bbox['x'] <= x < bbox['x'] + bbox['width']
+        assert bbox['y'] <= y < bbox['y'] + bbox['height']
+        assert 0 <= y < viewport['height'], ('node lies off-screen', target, viewport)
+        # Verify the point can reach the SVG, not an inspector/toolbar overlay.
+        assert page.evaluate("""coords => {
+            const el = document.elementFromPoint(coords[0], coords[1]);
+            return el === document.querySelector('#topology') ||
+                document.querySelector('#topology').contains(el);
+        }""", [x, y]), ('middle drag target is obstructed', target)
+        page.mouse.move(x, y)
+        page.mouse.down(button='middle')
+        page.mouse.move(x + 80, y + 45, steps=4)
+        assert 'middle-panning' in (svg.get_attribute('class') or '')
+        page.mouse.up(button='middle')
+        assert svg.get_attribute('viewBox') != old_view
+        assert 'middle-panning' not in (svg.get_attribute('class') or '')
+        assert page.locator('#inspector-heading').inner_text() == heading
+
+        # The visible probe control calls actual ICMP HTTP, not graph tracing.
+        page.locator('#probe-toggle').click()
+        expect(page.locator('#probe-panel')).to_be_visible()
+        page.locator('#probe-source').select_option('["a","eth0"]')
+        page.locator('#probe-destination').fill('203.0.113.20')
+        page.locator('#probe-ttl').fill('5')
+        with page.expect_response('**/api/icmp/echo') as response:
+            page.locator('#probe-send').click()
+        assert response.value.status == 200
+        data = response.value.json()
+        assert data['status'] == 'REPLIED'
+        expect(page.locator('#probe-replay')).to_be_enabled()
+        expect(page.locator('.packet-marker')).to_have_count(1, timeout=5000)
+        active = page.locator('.packet-marker').get_attribute('data-link-id')
+        recorded = [t['linkId'] for trace in (data['request'], data['reply'])
+                    for step in trace['steps']
+                    for t in (step['arp']['requestTransmissions'] +
+                              step['arp']['replyTransmissions'] +
+                              step['ipv4Transmissions'])]
+        assert active in recorded
+        expect(page.locator('#probe-status')).to_contain_text(
+            'Motorns resultat: REPLIED', timeout=30000)
+        assert page.locator('.packet-marker').count() == 0
+
+        page.locator('#probe-replay').click()
+        expect(page.locator('.packet-marker')).to_have_count(1, timeout=5000)
+        page.locator('#probe-destination').fill('203.0.113.199')
+        expect(page.locator('#probe-replay')).to_be_disabled()
+        assert page.locator('.packet-marker').count() == 0
+        with page.expect_response('**/api/icmp/echo') as failed:
+            page.locator('#probe-send').click()
+        assert failed.value.status == 200
+        assert failed.value.json()['status'] != 'REPLIED'
+        expect(page.locator('#probe-status')).not_to_contain_text(
+            'Motorns resultat: REPLIED')
+        assert not errors, errors
+    finally:
+        page.close()
+    after_files = {f.name: hashlib.sha256(f.read_bytes()).hexdigest()
+                   for f in store.glob('*.yadilab')}
+    assert after_files == before_files, 'Probe changed durable project files'
+
+
 def run():
     with tempfile.TemporaryDirectory() as td, sync_playwright() as playwright:
         store = Path(td)
@@ -6519,6 +6626,7 @@ def run():
             icmp_panel_integration(context, network_mode, errors)
             dora_session_races(context, network_mode, errors)
             simulation_session_races(context, network_mode, errors)
+            probe_canvas_regression(context, base, network_mode, store, errors)
             assert not errors, errors
             print(f'Browser HTTP mode: {network_mode}')
             print('PASS real Chromium: canonical graph, explicit ports, fault injection,')
