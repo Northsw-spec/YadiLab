@@ -1,8 +1,8 @@
-# YadiLab – Masterplan för källkodskvalitet 10/10
+# Masterplan för källkodskvalitet 10/10
 
 **Dokumentversion:** 1.0  
 **Datum:** 2026-11-21 (ISO)  
-**Repository:** https://github.com/Northsw-spec/YadiLab  
+**Repository:** [Repositoryts rot](../)  
 **Verifierad bascommit:** `32bcefdf3eff25bc6a4f7986a7d88c05f704214c`  
 **Mål:** Högsta möjliga verifierbara källkodskvalitet inom appens uttryckligen stödda omfattning.  
 **Status:** QUALITY-001 integrerad; QUALITY-002 konfigurerad men inte negativt enforcement-testad; QUALITY-003–011 planerade.
@@ -11,7 +11,7 @@
 
 ## 1. Syfte och kvalitetsprinciper
 
-YadiLab ska gå från en användbar simulator till en kodbas vars korrekthet, underhållbarhet och tillförlitlighet kan bedömas oberoende. 10/10 är ett **krävande revisionsmål**, aldrig något som deklareras därför att CI är grön eller en viss mängd kod levererats. Det kräver inte stöd för alla nätverksprotokoll eller operativsystem. En smal, korrekt modell är bättre än ett brett system med falska resultat.
+Applikationen ska gå från en användbar simulator till en kodbas vars korrekthet, underhållbarhet och tillförlitlighet kan bedömas oberoende. 10/10 är ett **krävande revisionsmål**, aldrig något som deklareras därför att CI är grön eller en viss mängd kod levererats. Det kräver inte stöd för alla nätverksprotokoll eller operativsystem. En smal, korrekt modell är bättre än ett brett system med falska resultat.
 
 Bindande invariants:
 
@@ -33,7 +33,7 @@ Bindande invariants:
 | Kontroll | Verifierat läge |
 |---|---|
 | `main` | `32bcefdf3eff25bc6a4f7986a7d88c05f704214c` |
-| Senaste main-CI | [#44904476735](https://github.com/Northsw-spec/YadiLab/actions/runs/44904476735): SUCCESS på exakt commit |
+| Senaste main-CI | [#44904476735](../actions/runs/44904476735): SUCCESS på exakt commit |
 | Öppna PR:er | 0 vid planens verifiering |
 | Python | 636 tester PASS i verifierad CI |
 | JavaScript | 10 Node-tester PASS, `npm run check` ingår i CI |
@@ -103,7 +103,7 @@ Redan korrigerade fel: PR #76 (importacceptans), #77 (stale Builder HTTP-svar), 
 
 ## 7. QUALITY-003 – Oberoende protokollverifiering
 
-**Prioritet: KRITISK.** Referensmatrisen ska fastställa förväntat utfall **före** YadiLab-körning. Förväntade svar får inte genereras av testad produktionskod.
+**Prioritet: KRITISK.** Referensmatrisen ska fastställa förväntat utfall **före** den granskade motorns körning. Förväntade svar får inte genereras av testad produktionskod.
 
 **3A Ethernet / Layer 2:** source-MAC-inlärning, known/unknown unicast, flooding, broadcast, tabeller, kabel-/portfel, alternativa vägar och explicita loop-/STP-begränsningar. Visuella koordinater får aldrig ändra forwarding.
 
@@ -307,6 +307,6 @@ Inga hypotetiska PASS, inga uppfunna täckningssiffror, inga påståenden att en
 
 ## 20. Slutdirektiv
 
-**YadiLab ska inte bli 10/10 genom att bli större.** Målet är verifierbart korrekt, deterministisk, begriplig, användbar, databevarande och lättunderhållen kod inom ärligt stödda gränser.
+**Applikationen ska inte bli 10/10 genom att bli större.** Målet är verifierbart korrekt, deterministisk, begriplig, användbar, databevarande och lättunderhållen kod inom ärligt stödda gränser.
 
 Endast faktisk evidens, negativ testning och kritisk oberoende revision kan motivera högsta betyg. Ett känt fel får aldrig döljas för att höja resultatet.
