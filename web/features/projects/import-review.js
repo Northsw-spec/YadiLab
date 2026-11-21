@@ -18,6 +18,7 @@ export const displayKey = unit => {
   try { const parts=JSON.parse(unit.targetKey); return Array.isArray(parts) ? parts.join('/') : unit.targetKey; }
   catch { return unit.targetKey; }
 };
+export const countCandidateVlans = ports => ports.filter(port=>port.vlan != null).length;
 const diagnosticHelp = {
   FIELD_CONFLICT:'Motstridiga uttryckliga källvärden. Kontrollera de angivna originalcellerna och korrigera mappningen eller källdokumentet.',
   MISSING_REQUIRED_FIELD:'Ett obligatoriskt fält saknas. Kontrollera kolumnmappning och uttryckliga radbeslut.',
@@ -702,7 +703,7 @@ export function createImportReview({context, current, getProject, replaceProject
       const project=candidate.proposedProject;
       const ports=project?.nodes.flatMap(node=>node.ports) || [];
       const metrics={Zoner:project?.zones.length || 0,Noder:project?.nodes.length || 0,
-        Portar:ports.length,'VLAN-konfigurationer':ports.filter(port=>port.vlanMode!=null).length,
+        Portar:ports.length,'VLAN-konfigurationer':countCandidateVlans(ports),
         'IPv4-bindningar':ports.filter(port=>port.ipv4!=null).length,
         'Statiska routes':project?.nodes.reduce((sum,node)=>sum+(node.staticRoutes?.length || 0),0) || 0,
         Kablar:project?.links.length || 0,'Inaktiva kablar':project?.links.filter(link=>!link.enabled).length || 0};

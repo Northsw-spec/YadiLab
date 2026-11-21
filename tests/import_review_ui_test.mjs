@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {letter, displayKey, validateReviewPage} from '../web/features/projects/import-review.js';
+import {letter, displayKey, validateReviewPage, countCandidateVlans} from '../web/features/projects/import-review.js';
+
+test('candidate VLAN metrics count only configured canonical port VLANs', () => {
+  const access={vlan:{mode:'access',vlan:10}};
+  const trunk={vlan:{mode:'trunk',allowedVlans:[10,20]}};
+  assert.equal(countCandidateVlans([]),0);
+  assert.equal(countCandidateVlans([{}]),0);
+  assert.equal(countCandidateVlans([{vlan:null}]),0);
+  assert.equal(countCandidateVlans([{vlanMode:'access'}]),0);
+  assert.equal(countCandidateVlans([access]),1);
+  assert.equal(countCandidateVlans([trunk]),1);
+  assert.equal(countCandidateVlans([access,trunk,{vlan:null},{}]),2);
+});
 
 test('source column labels and composite identities retain canonical keys', () => {
   assert.deepEqual([0,25,26,51,52,255].map(letter),['A','Z','AA','AZ','BA','IV']);

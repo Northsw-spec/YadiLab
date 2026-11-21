@@ -15,11 +15,8 @@ jobs:
           node-version: '22'
       - name: Model, storage and HTTP functional tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Browser module syntax
-        run: |
-          node --check web/model.js
-          node --check web/canvas.js
-          node --check web/app.js
+      - name: Full JavaScript syntax and functional tests
+        run: npm run check
       - name: Browser acceptance prerequisites
         run: |
           python3 -m pip install playwright==1.57.0
