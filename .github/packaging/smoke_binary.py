@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 
 PROGRAM = pathlib.Path("dist/NetworkLab").resolve()
-PROJECT = {"schemaVersion":"1.4","name":"Compiled application smoke","zones":[],"nodes":[],"links":[]}
+PROJECT = {"schemaVersion":"1.3","name":"Compiled application smoke","zones":[],"nodes":[],"links":[]}
 
 def request(port, path, body=None):
     url = f"http://127.0.0.1:{port}{path}"
