@@ -1,0 +1,29 @@
+Network Lab – fryst Linux x86-64-binär från YadiLab
+==================================================
+KÄLLA: https://github.com/Northsw-spec/YadiLab
+EXAKT MAIN-COMMIT: 32bcefdf3eff25bc6a4f7986a7d88c05f704214c
+PLATTFORM: Linux x86-64, byggd på Ubuntu 22.04 med Python 3.13 och PyInstaller.
+INNEHÅLL: Linux-körbar ELF med paketerad Python-runtime och webbresurser.
+OBSERVERA: Detta är en PyInstaller-fryst binär (Python-bytecode + inbäddad interpreter), inte native C-omskriven app.
+Beroenden: en modern kompatibel Linuxdistribution, en installerad webbläsare.
+Inget npm eller separat Python krävs för att starta appen.
+
+1. Extrahera .tar.gz.
+2. Öppna terminal i den extraherade katalogen.
+3. Starta:
+   ./NetworkLab
+4. Webbläsaren öppnas normalt på http://127.0.0.1:8765/
+   Om den inte öppnas, starta med:
+   ./NetworkLab --no-browser
+   och navigera manuellt till http://127.0.0.1:8765/
+
+Egna inställningar:
+   ./NetworkLab --no-browser --port 8765 --data-dir ~/NetworkProjects
+
+Stoppa med Ctrl+C.
+Standardkatalog för projekt: ~/.local/share/network-projects/
+Projektfiler sparas endast när du aktivt väljer Spara.
+
+VIKTIGT: Ladda endast ned om GitHub Actions-jobbet visar PASS för compiled binary smoke.
+Byggt från ovanstående commit utan ändring av network_core/ eller web/.
+Build-verifiering: HTTP/health, frontend, validering, verklig Save/Open och omstart.

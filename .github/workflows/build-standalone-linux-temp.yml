@@ -1,0 +1,51 @@
+name: Temporary standalone Linux build from verified main
+on:
+  push:
+    branches:
+      - artifact/build-main-32bcefdf-linux
+permissions:
+  contents: read
+jobs:
+  package-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify all application source is exact main
+        run: |
+          test "$(git rev-parse HEAD:network_core)" = "$(git rev-parse 32bcefdf3eff25bc6a4f7986a7d88c05f704214c:network_core)"
+          test "$(git rev-parse HEAD:web)" = "$(git rev-parse 32bcefdf3eff25bc6a4f7986a7d88c05f704214c:web)"
+          git diff --exit-code 32bcefdf3eff25bc6a4f7986a7d88c05f704214c -- network_core web
+      - name: Install frozen-binary packager
+        run: python -m pip install --disable-pip-version-check "pyinstaller==6.16.0"
+      - name: Build frozen Linux x86-64 executable
+        run: |
+          python -m PyInstaller --clean --noconfirm --onefile --name NetworkLab --add-data "web:web" --paths . .github/packaging/standalone_launcher.py
+          test -x dist/NetworkLab
+          file dist/NetworkLab
+      - name: Smoke compiled binary including disk persistence and restart
+        run: python .github/packaging/smoke_binary.py
+      - name: Create release archive with preserved executable mode
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib, tarfile
+          output=pathlib.Path('NetworkLab-linux-x86_64-32bcefdf.tar.gz')
+          with tarfile.open(output, 'w:gz') as tar:
+              tar.add('dist/NetworkLab', arcname='NetworkLab')
+              tar.add('.github/packaging/STARTA.txt', arcname='STARTA.txt')
+          digest=hashlib.sha256(output.read_bytes()).hexdigest()
+          pathlib.Path('SHA256SUMS.txt').write_text(f'{digest}  {output.name}\n',encoding='utf-8')
+          print('SHA256',digest,'bytes',output.stat().st_size)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NetworkLab-linux-x86_64-main-32bcefdf
+          path: |
+            NetworkLab-linux-x86_64-32bcefdf.tar.gz
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
