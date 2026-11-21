@@ -42,6 +42,62 @@ function route(a, b) {
   return `M ${a.x} ${a.y} L ${outA} ${a.y} L ${outA} ${middleY} L ${outB} ${middleY} L ${outB} ${b.y} L ${b.x} ${b.y}`;
 }
 
+
+const sameWireEnd = (a, b) => Boolean(a && b && a.node === b.node && a.port === b.port);
+const MAX_JOURNEY_FRAMES = 600;
+
+// Every animated hop must be a directionally exact engine transmission
+// over a declared link. Never infer a route from topology geometry.
+export function packetJourneyFrames(project, result) {
+  if (!project || !Array.isArray(project.links) || !result ||
+      !result.request || !Array.isArray(result.request.steps)) {
+    throw new Error('Ingen verifierbar ICMP-request med nätverkssteg.');
+  }
+  const links = new Map(project.links.map(link => [link.id, link]));
+  const frames = [];
+  const add = (wire, stage) => {
+    if (!wire || typeof wire.linkId !== 'string' || !wire.from || !wire.to) {
+      throw new Error('Motorns kabelspår saknar explicit identitet eller ändpunkter.');
+    }
+    const link = links.get(wire.linkId);
+    if (!link || link.enabled !== true) {
+      throw new Error('Motorns kabelspår hänvisar till en okänd eller avstängd kabel.');
+    }
+    const forward = sameWireEnd(link.a, wire.from) && sameWireEnd(link.b, wire.to);
+    const reverse = sameWireEnd(link.b, wire.from) && sameWireEnd(link.a, wire.to);
+    if (!forward && !reverse) {
+      throw new Error('Motorns kabelspår matchar inte kabelns deklarerade portar.');
+    }
+    if (frames.length >= MAX_JOURNEY_FRAMES) {
+      throw new Error('För många verkliga kabelöverföringar för denna uppspelning (max 600).');
+    }
+    frames.push({linkId: link.id, from: wire.from, to: wire.to, stage, reverse});
+  };
+  const appendTrace = (trace, label) => {
+    if (!trace) return;
+    if (!Array.isArray(trace.steps)) throw new Error('Motorns IPv4-spår saknar steg.');
+    for (const step of trace.steps) {
+      if (!step || !step.arp) throw new Error('Motorns IPv4-steg saknar ARP-resultat.');
+      for (const [field, stage] of [
+        ['requestTransmissions', 'ARP Request'],
+        ['replyTransmissions', 'ARP Reply'],
+      ]) {
+        const wires = step.arp[field];
+        if (!Array.isArray(wires)) throw new Error('Motorns ARP-spår är ofullständigt.');
+        for (const wire of wires) add(wire, stage);
+      }
+      if (!Array.isArray(step.ipv4Transmissions)) {
+        throw new Error('Motorns IPv4-transmissioner saknas.');
+      }
+      for (const wire of step.ipv4Transmissions) add(wire, label);
+    }
+  };
+  appendTrace(result.request, 'ICMP Echo Request');
+  appendTrace(result.reply, 'ICMP Echo Reply');
+  if (result.icmpError?.trace) appendTrace(result.icmpError.trace, 'ICMP routerfel');
+  return frames;
+}
+
 export class TopologyCanvas {
   constructor(svg, {onSelect, onPort, onMove, onEndMove, onScale}) {
     this.svg = svg;
@@ -52,10 +108,19 @@ export class TopologyCanvas {
     this.pending = null;
     this.highlight = [];
     this.interaction = null;
+    this.playback = null;
     this.setView();
+    // Middle drag pans even over ports/nodes/cables; no left-button panning.
+    svg.addEventListener('pointerdown', event => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (this.interaction) return;
+      this.capture(event, {kind: 'pan', x: event.clientX, y: event.clientY, start: {...this.view}});
+      svg.classList.add('middle-panning');
+    }, true);
     svg.addEventListener('pointerdown', event => {
       if (event.button !== 0 || event.target !== svg) return;
-      this.capture(event, {kind: 'pan', x: event.clientX, y: event.clientY, start: {...this.view}});
       onSelect(null);
     });
     svg.addEventListener('pointermove', event => {
@@ -81,11 +146,24 @@ export class TopologyCanvas {
     const finish = event => {
       if (!this.interaction || this.interaction.pointerId !== event.pointerId) return;
       if (this.interaction.kind === 'node') onEndMove();
+      svg.classList.remove('middle-panning');
       this.interaction = null;
       try { if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId); } catch (_) { /* browser already released */ }
     };
     svg.addEventListener('pointerup', finish);
     svg.addEventListener('pointercancel', finish);
+    svg.addEventListener('lostpointercapture', event => {
+      if (this.interaction?.pointerId !== event.pointerId) return;
+      const wasNode = this.interaction.kind === 'node';
+      this.interaction = null;
+      svg.classList.remove('middle-panning');
+      if (wasNode) onEndMove();
+    });
+    for (const name of ['mousedown', 'auxclick']) {
+      svg.addEventListener(name, event => {
+        if (event.button === 1) event.preventDefault();
+      }, true);
+    }
     svg.addEventListener('wheel', event => {
       event.preventDefault();
       this.zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
@@ -95,6 +173,68 @@ export class TopologyCanvas {
   capture(event, state) {
     this.interaction = {...state, pointerId: event.pointerId};
     this.svg.setPointerCapture(event.pointerId);
+  }
+
+  stopJourney({quiet = false} = {}) {
+    if (!this.playback) return;
+    const current = this.playback;
+    this.playback = null;
+    cancelAnimationFrame(current.raf);
+    current.marker.remove();
+    if (!quiet) current.onCancel();
+  }
+
+  // Schematic sequential replay of engine wire records: not measured timing.
+  playJourney(frames, {onFrame, onDone, onCancel} = {}) {
+    this.stopJourney();
+    if (!Array.isArray(frames) || !frames.length) {
+      onDone?.();
+      return;
+    }
+    const paths = new Map([...this.svg.querySelectorAll('path.network-edge')]
+      .map(path => [path.dataset.linkId, path]));
+    const lengths = new Map();
+    for (const frame of frames) {
+      const path = paths.get(frame.linkId);
+      if (!path) throw new Error('Ingen ritad, deklarerad kabel för en rapporterad överföring.');
+      const length = path.getTotalLength();
+      if (!Number.isFinite(length) || length <= 0) {
+        throw new Error('Ogiltig kabelgeometri: kan inte spela upp överföringen.');
+      }
+      lengths.set(frame.linkId, length);
+    }
+    const marker = svgElement('circle', {r: 8, class: 'packet-marker', 'aria-hidden': 'true'});
+    this.svg.appendChild(marker);
+    const state = {marker, raf: null, onCancel: () => onCancel?.()};
+    this.playback = state;
+    const durationMs = 520;
+    let index = 0, began = null, announced = -1;
+    const tick = timestamp => {
+      if (this.playback !== state) return;
+      const frame = frames[index], path = paths.get(frame.linkId);
+      if (began === null) began = timestamp;
+      const fraction = Math.min(1, (timestamp - began) / durationMs);
+      const length = lengths.get(frame.linkId);
+      const point = path.getPointAtLength(length * (frame.reverse ? 1 - fraction : fraction));
+      marker.setAttribute('cx', String(point.x));
+      marker.setAttribute('cy', String(point.y));
+      marker.setAttribute('data-link-id', frame.linkId);
+      if (announced !== index) {
+        announced = index;
+        onFrame?.(frame, index, frames.length);
+      }
+      if (fraction >= 1) {
+        index += 1;
+        began = null;
+        if (index >= frames.length) {
+          this.stopJourney({quiet: true});
+          onDone?.();
+          return;
+        }
+      }
+      state.raf = requestAnimationFrame(tick);
+    };
+    state.raf = requestAnimationFrame(tick);
   }
 
   toWorld(clientX, clientY) {
@@ -149,6 +289,7 @@ export class TopologyCanvas {
   }
 
   render() {
+    this.stopJourney();
     const project = this.project;
     if (!project) return;
     const children = [];
@@ -175,7 +316,11 @@ export class TopologyCanvas {
         'data-to-node': link.b.node, 'data-to-port': link.b.port});
       children.push(p);
       const hit = svgElement('path', {d, class: 'edge-hit', 'data-link-hit': link.id});
-      hit.addEventListener('pointerdown', event => { event.stopPropagation(); this.callbacks.onSelect({type: 'link', id: link.id}); });
+      hit.addEventListener('pointerdown', event => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        this.callbacks.onSelect({type: 'link', id: link.id});
+      });
       children.push(hit);
     }
     for (const node of project.nodes) {
@@ -199,6 +344,7 @@ export class TopologyCanvas {
           class: `port-dot${port.enabled ? '' : ' offline'}${this.pending?.node === node.id && this.pending?.port === port.id ? ' pending' : ''}`,
           'data-port-node': node.id, 'data-port-id': port.id});
         dot.addEventListener('pointerdown', event => {
+          if (event.button !== 0) return;
           event.stopPropagation();
           this.callbacks.onPort({node: node.id, port: port.id});
         });
