@@ -1,6 +1,6 @@
 # Kontrakt för källtrogen dokumentationsläsning och import
 
-**Dokumentversion:** 3.3 – exakt boolesk mappning och koordinatsäker deterministisk layout 4A–4D  
+**Dokumentversion:** 3.4 – strikt projekttillämpning, komplett vald topologi och källtrogen 4A–4D  
 **Beslutat läge:** Ett enda normerande målkontrakt för 4A–4D, reviderat efter direkt granskning av öppna importimplementationer. 4A byggs först, och därefter genomförs 4B–4D stegvis med en aktiv PR åt gången och verifierade del-PR:er inom varje etapp. Dokumentet anger krav, inte redan uppfyllda funktioner.  
 **Kodbas:** `detta repository`, referens-`main` `17acb51c8c64c3b4b7a1026514cb8b0a2177a127`.  
 **Omfattning:** Hela den beslutade funktionen för tabellinspektion, explicit fältmappning, ofullständig nätverksdokumentation, proveniens, import, profilåteranvändning och slutacceptans. Funktionerna är målkrav, inte statuspåståenden.
@@ -12,6 +12,22 @@
 3. En etapp får bestå av flera små, sammanhängande PR:er. Genomför 4A → 4B → 4C → 4D i ordning; avsluta och verifiera varje del-PR på main före nästa. En etapp räknas färdig först när dess samlade DoD passerat på main. Endast en aktiv PR åt gången. Detta enda kontrakt styr samtliga steg; en framtida implementerare får inte kräva eller skapa ett nytt planeringsdokument för att fylla i uteblivna funktionskrav. Om den faktiska källan saknar avgörande fakta, redovisa blockerande indata i stället för att gissa.
 4. En egenskap som inte finns i kod, test eller kontrakt får inte påstås vara implementerad eller verifierad. Okänd semantik ska ge en explicit olöst uppgift eller avvisning – aldrig nätverksobjekt.
 5. Forskningsessäer, procentbedömningar, exempel på företagsmallar och föreslagna profilnamn är **inte** maskinläsbara scheman, produktstöd eller implementationsinstruktioner.
+
+**Bindande huvudregel för extern nätverksprojektimport:**
+
+> **Applikationen ska inte acceptera ett nätverksprojekt som saknar de uppgifter som krävs för att programmet ska kunna arbeta korrekt med det.**
+
+Detta innebär ett **fail-closed kontrakt för projekttillämpning**, inte för läsning av källmaterial:
+
+1. **Läsning ≠ godkänd import.** Läs- och granskningssteg får visa ofullständig dokumentation och konkreta brister utan att skapa eller ändra nätverksprojekt.
+2. **Fullständighet enligt valt projekt och avsedda funktioner.** Varje nätverksobjekt och relevant relation som ingår i den avsedda, uttryckligen valda topologin måste ha samtliga för detta objekt och användningsfall nödvändiga fält; optionaliteten för irrelevanta protokollinställningar behålls. Ett rent Layer 2-nät behöver inte ha IPv4 eller statiska routes. Projektet får inte hävda stöd för ett kommunikationsflöde vars nödvändiga data saknas.
+3. **Kabel kräver två verkliga portändpunkter.** En rad som bara beskriver nod A och nod B får inte bli en kabel eller en ersättningsvisualisering av en förmodad fysisk länk. Portar och deras nodtillhörighet måste vara uttryckligen dokumenterade eller kompletterade genom ett synligt, spårbart användarbeslut. Inga påhittade port-ID:n, kabel-ID:n, länkstift eller syntetiska kopplingar.
+4. **Ingen tyst eller automatisk partiell projektimport.** Om ett dokument innehåller relevanta, olösta eller motstridiga uppgifter för det avsedda nätverksprojektet får programmet inte skapa en till synes lyckad användbar deltopologi genom att hoppa över källrader, exkludera blockerade relationer eller endast importera de lätta delarna. Explicit avgränsning av ett självständigt och **fullständigt** annat projekt kräver ett separat, tydligt användarbeslut; den får inte användas för att dölja brister i den deklarerade topologin.
+5. **Korrigera och omvalidera.** Saknade eller motstridiga nödvändiga uppgifter anges med källrad/cell och exakt vilket fält eller beroende som blockerar. Användaren får komplettera uttryckligen med källspårbara beslut; därefter byggs och valideras **hela** kandidatprojektet på nytt av den enda kanoniska validatorn.
+6. **Atomär tillämpning.** Blockerande fel ska ge `canApply=false` (eller motsvarande blockerad import) och ingen ändring av aktuell arbetsyta, nätverksdata eller sparade projekt. Fullt giltigt projekt får ersätta arbetsytan först efter uttryckligt godkännande. Disklagring kräver därefter separat Save.
+7. **Regressionskrav.** Minst: nodpar utan portar => blockerad projektimport; okänd/utebliven port => blockering; saknad kabelrelation som inte får tappas => blockering; val av endast giltiga delmängder som döljer en känd blockerad nätverksrelation => blockering; kompletterade riktiga portändpunkter => godkänd kandidat; ett korrekt beskrivet rent L2-nät utan IP => fortsatt giltigt. Kontrollera riktig import-UI, HTTP, oförändrad arbetsyta och Save/Open.
+
+**Normativ företrädesregel:** Tidigare delar av detta dokument om partiell inventering, valbar `selectedUnitIds`, `EXCLUDED` eller rapportering av omappade källrader beskriver inspektions-/planeringsfunktioner, **inte tillstånd att tillämpa ett bristfälligt nätverksprojekt**. Där äldre avsnitt skulle tillåta detta gäller huvudregeln ovan. Nuvarande kod är inte därmed verifierat kompatibel: den måste genomgå separat beteenderevision och negativa tester före påståendet att denna regel är implementerad.
 
 ## 2. Befintliga kontrakt som ska förbli auktoritativa
 
@@ -34,7 +50,7 @@ Läsning och import ska ha fem åtskilda ansvar:
 4. **Kanonisk validering:** Det slutliga projektet valideras av `validate_project()`; ingen adapter kan kringgå dess regler.
 5. **Förhandsvisning och godkännande:** UI visar importerbara fakta, blockerande fel och alla olösta källfält före någon projektförändring. En liten projektbunden proveniensmanifest följer med när användaren sparar, men originalfilbytes lagras inte automatiskt i projektet. En separat uttrycklig källexport gör full source-retention möjlig. Save förblir separat.
 
-Källfakta, härledda presentationskoordinater och faktisk simulering är olika kategorier. En lyckad import betyder att ett avgränsat datakontrakt uppfyllts – inte att nätverket observerats, är komplett eller har verifierad reachability.
+Källfakta, härledda presentationskoordinater och faktisk simulering är olika kategorier. En lyckad **källinspektion** säger inte att ett nätverksprojekt får tillämpas. En godkänd **projekttillämpning** kräver fullständiga obligatoriska fakta för hela det uttryckligen deklarerade projektet och dess avsedda funktioner; den innebär fortfarande inte att verklig nätverksreachability har observerats.
 
 ## 4. Etapp 4A – exakt nästa kodleverans
 
@@ -168,7 +184,7 @@ Inga externa projekt har körts i denna granskning; referenserna belägger inspe
 
 Skilj mellan (a) *källans utsaga*, (b) *användarens uttryckliga tolkning eller komplettering*, (c) *härledd visuell layout*, (d) *observation från en verklig nätverksenhet* och (e) *simuleringsresultat*. Import ger enbart a–c. Den får aldrig framställa något som d–e utan annan befintlig verifieringsfunktion.
 
-Partiell inventering utan kablar är tillåten. Ett saknat kabelregister betyder **okänd kabeldragning**, inte ett bevis om ett kabelfritt verkligt nät. Från management-IP, VLAN, default gateway, portbeskrivning, LLDP-rad, zon, diagramposition eller liknande får ingen fysisk kabel skapas.
+Partiell inventering utan kablar får **läsas och granskas**, men får inte tillämpas som ett fungerande nätverksprojekt när de avsedda fysiska förbindelserna saknar obligatoriska portuppgifter. Ett saknat kabelregister betyder **okänd kabeldragning**, inte ett bevis om ett kabelfritt verkligt nät. Ett uttryckligen definierat, helt isolerat L2-projekt utan avsedda kablar är ett annat giltigt scenario och ska inte sammanblandas med en ofullständigt dokumenterad topologi. Från management-IP, VLAN, default gateway, portbeskrivning, LLDP-rad, zon, diagramposition eller liknande får ingen fysisk kabel skapas.
 
 ## 6. Källvyer, typade källpåståenden och flervärdesmappning
 
@@ -572,7 +588,7 @@ UI måste särskilja **historisk importproveniens** från användarens senare ma
 - Två oberoende syntetiska inventeringar med olika rubriker och column order ger samma kanoniska expected device efter explicit mapping; ingen rubrikheuristik.
 - **En rad, två device_inventory-vyer** från samma blad, med var sin uttryckligt angiven text-ID-kolumn, ger två separata nodclaims utan att källraden dupliceras. **Två rader, ett targetKey** ger en enda nod med två källursprung vid lika fält. En uttrycklig `rowValues[]`-identitet tillåts endast om användaren angivit den själv och den ingår i fingerprint; en motstridig radunik användardeklaration ska blockeras.
 - Två motstridiga celler på samma target field ger BLOCKED och ingen skapad enhet.
-- En nod utan ports/links är giltigt **partiellt** projekt, inte ett fullständigt observerat nät.
+- En nod utan ports/links kan vara ett giltigt objekt vid **källgranskning** eller ingå i ett uttryckligen komplett, isolerat projekt. Den gör inte en ofullständigt dokumenterad större topologi importerbar. Kända relevanta saknade kabel-/portrelationer måste blockera projekttillämpning enligt den bindande huvudregeln.
 - Felaktigt typed ID, okänd node.kind, saknad användardeklaration, plan-ID-kollision, obefintlig källcell, EXCLUDED som beroende, ändrad source hash och stale UI-respons hindrar projektbyte.
 - importEvidence återläses exakt efter Save/Open och omstart; råa källceller är inte i .yadilab. Efter omstart visas korrekt "källan ej ansluten". Import av rätt källpaket återställer förmågan att granska celler; fel SHA blockeras. **Redigera därefter en port/IP/route och spara på riktigt:** projektet ska fortfarande vara schema 1.4, proveniensmanifestet oförändrat, `CHANGED_SINCE_IMPORT` synligt och alla simulatoranrop fria från importEvidence. Återställ exakt nätverksinnehåll och verifiera BASELINE_MATCH utan falskt SOURCE_VERIFIED.
 - Bytebevis för ursprungliga filer och v1.0–1.3-filer utan Save; full DIRECT_HTTP Chromium och samtliga befintliga protokolltester.
