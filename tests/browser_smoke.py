@@ -3597,6 +3597,115 @@ def builder_validation_races(context, base, network_mode, store, errors, restart
     page.close()
 
 
+def ipv4_host_address_regression(context, base, network_mode, store, errors, restart):
+    """Builder rejects subnet endpoints; old files remain intact and cannot ping."""
+    project = icmp_lan_lab()
+    ProjectStore(store).save('ipv4-host-browser', project, None)
+    path = store / 'ipv4-host-browser.yadilab'
+    original = path.read_bytes()
+
+    def opened(slug='ipv4-host-browser'):
+        page = context.new_page()
+        page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+        assert browser_open(page, base) == network_mode
+        page.locator('#saved-projects').select_option(slug)
+        page.locator('#open-project').click()
+        return page
+
+    def select(page, node):
+        page.locator(f'[data-item-type="node"][data-item-id="{node}"]').click()
+
+    def set_ip(page, address, status):
+        page.locator('[data-port-ipv4="eth0"]').fill(address)
+        with page.expect_response('**/api/validate') as response:
+            page.locator('[data-port-ipv4="eth0"]').dispatch_event('change')
+        assert response.value.status == status
+
+    page = opened()
+    select(page, 'b')
+    for invalid in ('192.168.10.0/24', '192.168.10.255/24'):
+        set_ip(page, invalid, 422)
+        expect(page.locator('#toast')).to_contain_text('network or broadcast')
+        expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value('192.168.10.20/24')
+        expect(page.locator('#save-indicator')).to_contain_text('Sparat')
+        assert path.read_bytes() == original
+    for valid in ('192.0.2.1/31', '192.0.2.7/32'):
+        set_ip(page, valid, 200)
+        expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value(valid)
+    select(page, 'a')
+    set_ip(page, '192.168.10.30/24', 200)
+    expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value('192.168.10.30/24')
+    select(page, 'b')
+    set_ip(page, '192.168.10.10/24', 200)
+    expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value('192.168.10.10/24')
+    expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+    with page.expect_response('**/api/save') as saved: page.locator('#save-project').click()
+    assert saved.value.status == 200
+    persisted = path.read_bytes()
+    assert persisted != original
+    assert EchoExchange(json.loads(persisted)).ping('a', 'eth0', '192.168.10.10', 5, 12, 1)['status'] == 'REPLIED'
+    restart()
+    page.reload(wait_until='domcontentloaded')
+    page.locator('#saved-projects').select_option('ipv4-host-browser')
+    page.locator('#open-project').click()
+    select(page, 'b')
+    expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value('192.168.10.10/24')
+    assert path.read_bytes() == persisted
+    page.close()
+
+    # A newer rejected address and label must not let an older success restore old data.
+    page = opened()
+    select(page, 'b')
+    hold_http_reply(page, '/api/validate', first_only=True)
+    page.locator('[data-port-ipv4="eth0"]').evaluate(
+        "input => { input.value = '192.168.10.22/24'; "
+        "input.dispatchEvent(new Event('change', {bubbles: true})); }")
+    page.wait_for_function('window.__heldReply')
+    select(page, 'a')
+    page.locator('#node-label').fill('Nyare namn efter avslag')
+    page.locator('#node-label').dispatch_event('change')
+    expect(page.locator('#node-label')).to_have_value('Nyare namn efter avslag')
+    select(page, 'b')
+    set_ip(page, '192.168.10.0/24', 422)
+    expect(page.locator('#toast')).to_contain_text('network or broadcast')
+    page.evaluate("""() => {
+      window.__raceToasts = [];
+      new MutationObserver(() => window.__raceToasts.push(document.querySelector('#toast').textContent))
+        .observe(document.querySelector('#toast'), {childList: true, characterData: true, subtree: true});
+    }""")
+    release_http_reply(page)
+    page.wait_for_function("window.__raceToasts.some(text => text.includes('Valideringen avbröts'))")
+    select(page, 'a')
+    expect(page.locator('#node-label')).to_have_value('Nyare namn efter avslag')
+    select(page, 'b')
+    expect(page.locator('[data-port-ipv4="eth0"]')).to_have_value('192.168.10.10/24')
+    expect(page.locator('#save-indicator')).to_contain_text('Osparade ändringar')
+    assert path.read_bytes() == persisted
+    page.close()
+
+    # Historical schema 1.4 bytes and receipt survive an incompatible Open.
+    historical = json.loads((store / 'synthetic-only-4c7.yadilab').read_bytes())
+    next(port for node in historical['nodes'] if node['kind'] != 'switch'
+         for port in node['ports'] if port['ipv4'] is not None)['ipv4'] = '192.168.10.0/24'
+    legacy_path = store / 'ipv4-host-legacy.yadilab'
+    legacy_bytes = (json.dumps(historical, ensure_ascii=False, indent=2) + '\n').encode()
+    legacy_path.write_bytes(legacy_bytes)
+    page = context.new_page()
+    page.on('pageerror', lambda error: errors.append(getattr(error, 'stack', str(error))))
+    assert browser_open(page, base) == network_mode
+    page.locator('#saved-projects').select_option('ipv4-host-legacy')
+    with page.expect_response('**/api/projects/ipv4-host-legacy') as rejected:
+        page.locator('#open-project').click()
+    assert rejected.value.status == 422
+    expect(page.locator('#toast')).to_contain_text('saved file was not changed')
+    expect(page.locator('#empty-state')).to_be_visible()
+    assert legacy_path.read_bytes() == legacy_bytes
+    assert json.loads(legacy_path.read_bytes())['importEvidence'] == historical['importEvidence']
+    assert path.read_bytes() == persisted
+    assert not errors, errors
+    page.close()
+
+
 def mapping_profile_regression(context, base, network_mode, store, errors, restart):
     """Real profile download and reuse against a new inspected CSV source."""
     page = context.new_page()
@@ -6330,6 +6439,7 @@ def run():
             integrated_4c_regression(context, base, network_mode, store, errors, restart_for_import_review)
             schema14_builder_edit_matrix(context, base, network_mode, store, errors, restart_for_import_review)
             builder_validation_races(context, base, network_mode, store, errors, restart_for_import_review)
+            ipv4_host_address_regression(context, base, network_mode, store, errors, restart_for_import_review)
             mapping_profile_regression(context, base, network_mode, store, errors, restart_for_import_review)
             persistence_races(context, base, network_mode, store, errors)
             transfer_races(context, base, network_mode, store, errors)

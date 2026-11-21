@@ -103,6 +103,13 @@ def _vlan_config(value: Any, where: str) -> dict:
     _fail(where + ".mode", "expected access or trunk")
 
 
+def _usable_ipv4_host(address: ipaddress.IPv4Address,
+                      network: ipaddress.IPv4Network) -> bool:
+    """/31 has two endpoint addresses; /32 is one host, not a subnet pair."""
+    return network.prefixlen >= 31 or address not in (
+        network.network_address, network.broadcast_address)
+
+
 def _static_route(value: Any, where: str, ports: dict[str, dict]) -> dict:
     """Validate explicit on-link next-hop against its declared output port.
 
@@ -141,8 +148,7 @@ def _static_route(value: Any, where: str, ports: dict[str, dict]) -> dict:
         _fail(where + ".nextHop", "next-hop is not on the configured output interface's subnet")
     if gateway == iface.ip:
         _fail(where + ".nextHop", "next-hop cannot equal output interface's own IPv4")
-    if iface.network.prefixlen <= 30 and gateway in (
-            iface.network.network_address, iface.network.broadcast_address):
+    if not _usable_ipv4_host(gateway, iface.network):
         _fail(where + ".nextHop", "next-hop cannot be a subnet network or broadcast address")
     return {"id": rid, "destination": str(prefix),
             "nextHop": str(gateway), "outPort": out_port}
@@ -219,6 +225,8 @@ def validate_project(value: Any) -> dict:
                     _fail(ploc + ".ipv4", "invalid IPv4 interface/prefix")
                 if not isinstance(addr, ipaddress.IPv4Interface):
                     _fail(ploc + ".ipv4", "IPv6 is not modeled in v1")
+                if not _usable_ipv4_host(addr.ip, addr.network):
+                    _fail(ploc + ".ipv4", "interface IPv4 cannot be the subnet network or broadcast address")
                 ipv4 = str(addr)
             parsed_port = {"id": pid, "name": _name(port["name"], ploc + ".name"),
                            "enabled": _bool(port["enabled"], ploc + ".enabled"),
