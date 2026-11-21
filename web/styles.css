@@ -33,3 +33,16 @@
 #probe-status{border-top:1px solid #3b5167;padding-top:10px;overflow-wrap:anywhere}
 #topology .packet-marker{fill:#ffe093;stroke:#102c3f;stroke-width:2.4;filter:drop-shadow(0 0 6px #ffcb70cc);pointer-events:none}
 @media (prefers-reduced-motion:reduce){#topology .packet-marker{filter:none}}
+
+
+/* Desktop work area must not expand to the inspector's full document height.
+   The network SVG stays inside the visible viewport; panel content scrolls
+   independently. Keep the existing stacked layouts below 951px unchanged. */
+@media (min-width:951px){
+  .shell{height:100vh;min-height:650px}
+  .workspace{min-height:0;overflow:hidden}
+  .left-panel{min-height:0;overflow-y:auto}
+  .canvas-column{min-height:0}
+  .canvas-container{min-height:0}
+  .right-panel{min-height:0;overflow-y:auto}
+}

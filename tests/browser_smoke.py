@@ -3983,6 +3983,15 @@ def probe_canvas_regression(context, base, network_mode, store, errors):
         svg = page.locator('#topology')
         bbox = svg.bounding_box()
         assert bbox and bbox['width'] > 100 and bbox['height'] > 100
+        # A regression in desktop grid sizing previously made the SVG about
+        # 9500 px tall in a 900 px browser. Off-screen mouse input then silently
+        # missed the canvas and produced an incorrect pan failure.
+        viewport = page.viewport_size
+        assert viewport and bbox['y'] >= 0
+        assert bbox['y'] + bbox['height'] <= viewport['height'] + 1, (
+            'topology SVG is outside the visible desktop viewport', bbox, viewport)
+        assert page.locator('.right-panel').evaluate(
+            '(element) => element.scrollHeight > element.clientHeight')
         x = bbox['x'] + bbox['width'] - 45
         y = bbox['y'] + bbox['height'] - 85
 
@@ -4001,6 +4010,15 @@ def probe_canvas_regression(context, base, network_mode, store, errors):
         assert target
         x = target['x'] + min(35, target['width'] / 3)
         y = target['y'] + min(25, target['height'] / 3)
+        assert bbox['x'] <= x < bbox['x'] + bbox['width']
+        assert bbox['y'] <= y < bbox['y'] + bbox['height']
+        assert 0 <= y < viewport['height'], ('node lies off-screen', target, viewport)
+        # Verify the point can reach the SVG, not an inspector/toolbar overlay.
+        assert page.evaluate("""coords => {
+            const el = document.elementFromPoint(coords[0], coords[1]);
+            return el === document.querySelector('#topology') ||
+                document.querySelector('#topology').contains(el);
+        }""", [x, y]), ('middle drag target is obstructed', target)
         page.mouse.move(x, y)
         page.mouse.down(button='middle')
         page.mouse.move(x + 80, y + 45, steps=4)
