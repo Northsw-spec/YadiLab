@@ -1,5 +1,9 @@
 # Utvecklingskontrakt för nätverksapplikationen
 
+## Samlad kvalitetsfärdplan mot 10/10
+
+Den enda aktuella etappindelade kvalitetsfärdplanen finns i [docs/QUALITY_IMPROVEMENT_PLAN.md](docs/QUALITY_IMPROVEMENT_PLAN.md). Den omfattar QUALITY-000–011, oberoende protokollreferenser, dataintegritet, import, skalning, användbarhet, distribution och slutrevision. Kontrollera faktisk HEAD/CI och uppdatera verifieringslägen innan en etapp startas. Historiken finns separat i `docs/QUALITY_IMPROVEMENT_HISTORY.md`. Planen **kompletterar**, men ersätter aldrig detta utvecklingskontrakt, [docs/MASTERPROMPT.md](docs/MASTERPROMPT.md), [docs/IMPORT_SOURCE_CONTRACT.md](docs/IMPORT_SOURCE_CONTRACT.md) eller tekniska protokollkontrakt.
+
 ## Permanent Masterprompt
 
 **Läs [docs/MASTERPROMPT.md](docs/MASTERPROMPT.md) före varje utvecklingsetapp.** Den är projektets långsiktiga utvecklingsdirektiv fram till användarens slutgodkännande. Denna AGENTS-fil anger korta, operativa regler; den fullständiga målbilden, prioriteringen, acceptanskriterierna och rapporteringskontraktet finns i Masterprompten. Vid konflikt ska den senaste uttryckliga användarinstruktionen följas och aktuell källkod/CI kontrolleras.

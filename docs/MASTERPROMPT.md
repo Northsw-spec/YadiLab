@@ -198,6 +198,9 @@ Rapportera oavsiktligt upptäckta allvarliga problem utan att automatiskt lämna
 
 ## 15. Prioriterad färdplan
 
+**Aktuell kvalitetsordning:** [QUALITY_IMPROVEMENT_PLAN.md](QUALITY_IMPROVEMENT_PLAN.md) är den sammanhållna, statusverifierade planen QUALITY-000–011 mot högsta möjliga källkodskvalitet. Nedanstående FAS 1–7 beskriver produktens funktionella mål och tidigare ordning, inte alltid aktuellt genomförandeläge. Kontrollera faktisk kod, tester och CI, särskilt när äldre text kallar en redan integrerad etapp ”nästa”. Kvalitetsplanen ersätter inte [IMPORT_SOURCE_CONTRACT.md](IMPORT_SOURCE_CONTRACT.md) eller protokollens bindande kontrakt.
+
+
 **FAS 1 — Ren grund:** kanonisk modell, Builder, deklarerad topologi, verklig Save/Open, namnneutralitet, explicit CSV och Chromiumtestning. Grundfunktioner finns; kontrollera alltid regressioner före nya etapper.
 
 **FAS 2 — Layer 2:** Ethernet, MAC-inlärning, forwarding/flooding, ARP och därefter VLAN. Bygg motor och negativa tester innan UI-integrering.
