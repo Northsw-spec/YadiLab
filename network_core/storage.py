@@ -44,7 +44,15 @@ class ProjectStore:
             document = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise ProjectValidationError("saved project contains invalid JSON") from None
-        project = validate_project(document)
+        try:
+            project = validate_project(document)
+        except ProjectValidationError as error:
+            if "interface IPv4 cannot be the subnet network or broadcast address" not in str(error):
+                raise
+            raise ProjectValidationError(
+                f"{error}. The saved file was not changed; correct the IPv4 address "
+                "explicitly in a copy of the file, then open that copy."
+            ) from None
         return {"filename": slug, "sha256": self._hash(raw), "bytes": len(raw), "project": project}
 
     def list(self) -> list[dict]:
