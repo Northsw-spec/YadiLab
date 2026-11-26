@@ -1,0 +1,11 @@
+# PROJECT-DATA-001 — en enda källa och projektformat
+Status DESIGN_ONLY. Native format ska vara versionssatt canonical UTF-8 JSON (.yadilab som arbetshypotes), validerat innan implementation. Schema version 1 första leverans; inga gamla format behöver imiteras ogrundat.
+
+## Avsedda tydliga objekt
+ProjectRevision {id, schema_version, source_manifest, devices, ports, links, network_config, layout_view, scenarios, user_decisions}. Device har stable id, typed model/version, power och profiler. Port har stable ID, device owner, media, capacity, admin state. Link kräver TVÅ verkliga endpoint pair (device_id, port_id), cable medium, explicit source/user evidence. Network config innehåller VLAN, IP/CIDR, route, DHCP, säkerhets-/CLI-tillstånd; inga uppfunna defaults utifrån GUI. Layout innehåller x/y/ELK routing och är presentations-only. Source manifest innehåller original SHA, tab/sheet/row/column/cell och parsing/normaliseringshistorik.
+
+Validering fail-closed: ogiltiga/duplicerade JSON-nycklar, ID-konflikt, dangling link, fel portmedium, felaktig VLAN/CIDR/MAC, unknown required schema, Python pickle eller scripting eval -> reject. Ett blankt importfält är UNKNOWN, inte automatiskt en skapad routerkabel.
+
+Endast explicit Save skriver projektfil. Atomisk temp-write/fsync/rename där filsystemet medger det, optimistic conflict SHA och read-back check; failed import får aldrig ändra den öppna filen. Simuleringens mutable FDB/RIB/ARP/timerstate är inte projektdata och sparas aldrig tyst. Eventuella framtida replay snapshots är en SEPARAT typ med engineversion/seed/hash. Migrering v1->v2 har en egen acceptans-PR, golden bytes och rollback/backup.
+
+Test: lyckad explicit multi-device topology, negativa dubbel-JSON, två kablar samma upptagna port, okänd node/port, invalid CIDR, stale save SHA, osparad layout, importkontroll med förlorade source cells, schema-version conflict; och att layoutposition ändras utan att paket- eller topology-resultat ändras.

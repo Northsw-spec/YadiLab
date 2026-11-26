@@ -1,0 +1,1570 @@
+{
+  "schema_version": "1.0",
+  "as_of": "2026-11-26",
+  "title": "Initial mandatory Packet Tracer-plus scope register; not exhaustive",
+  "binary_baseline": {
+    "version_verified": false,
+    "requested_documented_family": "Packet Tracer 9.0 help",
+    "installed_binary_sha256": null,
+    "installed_binary_version": null
+  },
+  "inventory_complete": false,
+  "full_parity_verified": false,
+  "exceeds_pt_verified": false,
+  "release_status": "NOT_VERIFIED",
+  "notes": "36 required families and 108 discovery seeds only. Not full device/CLI/protocol subcase inventory. No Packet Tracer binary comparison or YadiLab runtime exists. Add every discovered subcase; do not delete when unimplemented.",
+  "exceptions": [
+    "non_linux_operating_system_ports",
+    "new_keyboard_only_accessibility_requirements"
+  ],
+  "families": [
+    {
+      "id": "PT-F01",
+      "name": "Logical workspace",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F01-001",
+          "name": "topology editor",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F01-002",
+          "name": "clusters and annotations",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F01-003",
+          "name": "network diagram export",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F02",
+      "name": "Physical workspace",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F02-001",
+          "name": "buildings and racks",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F02-002",
+          "name": "physical cable and power",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F02-003",
+          "name": "geographic placements",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F03",
+      "name": "Router and switch devices",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F03-001",
+          "name": "routers and chassis",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F03-002",
+          "name": "switches L2/L3 industrial",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F03-003",
+          "name": "device interface and profiles",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F04",
+      "name": "Hosts and services",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F04-001",
+          "name": "desktops laptops",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F04-002",
+          "name": "servers and generic devices",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F04-003",
+          "name": "application setup",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F05",
+      "name": "Port and modular hardware",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F05-001",
+          "name": "hardware module hotplug",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F05-002",
+          "name": "media transceiver compatibility",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F05-003",
+          "name": "port power/status",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F06",
+      "name": "CLI configuration",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F06-001",
+          "name": "command modes parser",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F06-002",
+          "name": "show/debug real state",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F06-003",
+          "name": "error and privilege handling",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F07",
+      "name": "Device GUI and startup",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F07-001",
+          "name": "configuration panels",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F07-002",
+          "name": "startup running config",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F07-003",
+          "name": "device boot and power",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F08",
+      "name": "Realtime mode",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F08-001",
+          "name": "start pause reset",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F08-002",
+          "name": "event speed/view",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F08-003",
+          "name": "causal timing",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F09",
+      "name": "Simulation mode",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F09-001",
+          "name": "event step/filter",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F09-002",
+          "name": "packet timeline",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F09-003",
+          "name": "state transition inspection",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F10",
+      "name": "PDU inspection",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F10-001",
+          "name": "simple PDU",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F10-002",
+          "name": "complex periodic PDU",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F10-003",
+          "name": "OSI ingress/egress headers",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F11",
+      "name": "Ethernet and VLAN",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F11-001",
+          "name": "Ethernet frames",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F11-002",
+          "name": "access trunk VLAN",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F11-003",
+          "name": "switch FDB",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F12",
+      "name": "L2 negotiation",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F12-001",
+          "name": "STP RSTP",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F12-002",
+          "name": "LACP EtherChannel",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F12-003",
+          "name": "VTP DTP PAgP",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F13",
+      "name": "IPv4 and ARP",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F13-001",
+          "name": "IPv4 CIDR forwarding",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F13-002",
+          "name": "ARP neighbors",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F13-003",
+          "name": "ICMPv4 and router errors",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F14",
+      "name": "IPv6 and ND",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F14-001",
+          "name": "IPv6 headers",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F14-002",
+          "name": "ND RA SLAAC",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F14-003",
+          "name": "ICMPv6",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F15",
+      "name": "Static and dynamic routing",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F15-001",
+          "name": "static default RIP",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F15-002",
+          "name": "OSPF single multiarea",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F15-003",
+          "name": "BGP EIGRP redistribution",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F16",
+      "name": "Transport",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F16-001",
+          "name": "UDP datagrams",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F16-002",
+          "name": "TCP FSM",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F16-003",
+          "name": "transport error/drop",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F17",
+      "name": "IP services",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F17-001",
+          "name": "DHCPv4 DHCPv6",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F17-002",
+          "name": "DNS HTTP HTTPS",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F17-003",
+          "name": "FTP TFTP mail",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F18",
+      "name": "Remote administration",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F18-001",
+          "name": "Telnet SSH",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F18-002",
+          "name": "SNMP Syslog NTP",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F18-003",
+          "name": "management CLI",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F19",
+      "name": "Security and policy",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F19-001",
+          "name": "ACLs and NAT/PAT",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F19-002",
+          "name": "zone firewall IPS",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F19-003",
+          "name": "AAA RADIUS TACACS IPsec",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F20",
+      "name": "QoS and telemetry",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F20-001",
+          "name": "queues shaping policing",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F20-002",
+          "name": "DiffServ MQC NBAR",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F20-003",
+          "name": "NetFlow and mirror",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F21",
+      "name": "WAN and broadband",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F21-001",
+          "name": "HDLC SLARP PPP",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F21-002",
+          "name": "Frame Relay",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F21-003",
+          "name": "DSL cable PPPoE",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F22",
+      "name": "Wireless and cellular",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F22-001",
+          "name": "Wi-Fi AP client",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F22-002",
+          "name": "association roaming",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F22-003",
+          "name": "radio mobile WAN",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F23",
+      "name": "Voice and collaboration",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F23-001",
+          "name": "VoIP H323",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F23-002",
+          "name": "IP phones",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F23-003",
+          "name": "voice services",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F24",
+      "name": "IoT Things",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F24-001",
+          "name": "smart sensors",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F24-002",
+          "name": "registration gateway",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F24-003",
+          "name": "smart home city power",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F25",
+      "name": "Embedded IoT programming",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F25-001",
+          "name": "MCU SBC hardware",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F25-002",
+          "name": "Python JavaScript visual program",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F25-003",
+          "name": "digital analog I/O",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F26",
+      "name": "OT devices",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/industrial_otFeatures.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F26-001",
+          "name": "PLC HMI",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F26-002",
+          "name": "industrial router switch",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F26-003",
+          "name": "data historian cyber observer",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F27",
+      "name": "OT protocols",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/industrial_otFeatures.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F27-001",
+          "name": "Modbus PROFINET CIP",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F27-002",
+          "name": "OPC UA IEC61850",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F27-003",
+          "name": "PTP PRP and alarms",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F28",
+      "name": "Activity Wizard",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F28-001",
+          "name": "activity authoring",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F28-002",
+          "name": "scoring scripting",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F28-003",
+          "name": "instructor learner workflows",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F29",
+      "name": "Assessment and pedagogy",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F29-001",
+          "name": "challenge mode",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F29-002",
+          "name": "automated grading",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F29-003",
+          "name": "proficiency feedback",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F30",
+      "name": "Multiuser",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F30-001",
+          "name": "remote network peering",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F30-002",
+          "name": "port view and connection",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F30-003",
+          "name": "remote save and security",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F31",
+      "name": "ExApps and API",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F31-001",
+          "name": "external applications",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F31-002",
+          "name": "programmable simulation",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F31-003",
+          "name": "extension permissions",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F32",
+      "name": "PT project formats",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F32-001",
+          "name": "PKT interoperability",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F32-002",
+          "name": "PKZ packages",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F32-003",
+          "name": "PKA activity format",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F33",
+      "name": "Physical and environment",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F33-001",
+          "name": "distance and fiber realism",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F33-002",
+          "name": "IoT power environment",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F33-003",
+          "name": "process automation",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F34",
+      "name": "Linux app lifecycle",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F34-001",
+          "name": "offline install/update",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F34-002",
+          "name": "save backup restore",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F34-003",
+          "name": "project export and recovery",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F35",
+      "name": "Scaling and fidelity",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F35-001",
+          "name": "large topology trials",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F35-002",
+          "name": "deterministic replay",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F35-003",
+          "name": "fault and race handling",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    },
+    {
+      "id": "PT-F36",
+      "name": "All other PT features",
+      "required": true,
+      "discovery_complete": false,
+      "source_category": "https://tutorials.ptnetacad.net/help/default/intro.htm",
+      "source_class": "PT_DOCUMENTATION_CANDIDATE",
+      "cases": [
+        {
+          "id": "PT-F36-001",
+          "name": "device inventory delta",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F36-002",
+          "name": "undocumented in plan cases",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        },
+        {
+          "id": "PT-F36-003",
+          "name": "new release delta discovery",
+          "required": true,
+          "pt_binary_result": "NOT_RUN",
+          "yadilab_result": "NOT_IMPLEMENTED",
+          "standard_oracle": "NOT_RUN",
+          "evidence_urls": [],
+          "pt_build_sha256": null,
+          "yadilab_commit_sha": null
+        }
+      ]
+    }
+  ]
+}
