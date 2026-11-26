@@ -1,5 +1,8 @@
 # YadiLab
 
+**Teknisk revisionsstatus:** [REPO-READINESS-001](docs/REPO_READINESS_AUDIT.md) visar vad som verkligen är kontrollerat och vad som inte är det. Repot innehåller ännu ingen nätverksmotor eller Linux-UI; 36 PT-kategorier/108 frökandidater och 55 Legacy-UI-fall är **ofullständiga kataloger**. GitHub-regler för main är inte verifierat aktiverade (rulesets-listan var tom 2026-11-26). Ingen full Packet Tracer-paritet eller högre kvalitet är bevisad. Läs denna revisionsstatus innan ny implementation påbörjas.
+
+
 **Varumärkesneutral kod:** [BRAND-IDENTITY-001](docs/BRAND_IDENTITY_CONTRACT.md). Enda källkodssträngen med nuvarande namn ligger i `core/identity.py::APP_DISPLAY_NAME`; `core/metadata.py` hämtar den dynamiskt. Kommande frontend och desktop-launcher ska använda samma namn utan kopior. Klass-, namespace-, projektformats- och API-namn är neutrala. Tillverkarnamn som Cisco är tillåtna. Koden/metadatahelpern finns, men ingen fungerande UI/desktop-app är byggd eller testad för full rename-paritet ännu.
 
 

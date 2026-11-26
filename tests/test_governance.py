@@ -15,6 +15,7 @@ DOCS = [
     "docs/IMPORT_CONTRACT.md", "docs/RESEARCH_WAVES.md", "docs/SECURITY_LEGAL.md",
     "docs/DECISIONS.md", "docs/VERIFICATION.md", "docs/RELEASE_GATES.md",
     "docs/LEGACY_UI_FIDELITY_CONTRACT.md",
+    "docs/REPO_READINESS_AUDIT.md",
 ]
 
 def check_scope(data):

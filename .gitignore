@@ -1,0 +1,49 @@
+# Local private development and secrets – never commit keys or real customer files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.secret
+secrets/
+private/
+local-private/
+sandbox-data/
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+coverage.xml
+htmlcov/
+# JavaScript / local web tooling
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+*.tsbuildinfo
+# Build, temporary and generated output
+build/
+dist/
+artifacts/
+reports/
+*.log
+*.tmp
+*.swp
+.DS_Store
+.idea/
+.vscode/
+# Local Cisco binaries, comparison data and unlicensed external archives
+local-reference/
+reference-binaries/
+*.pkt.local
+*.pka.local
+*.pkz.local

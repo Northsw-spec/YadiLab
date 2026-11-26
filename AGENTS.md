@@ -1,5 +1,8 @@
 # AGENTS — utvecklings- och sanningspolicy
 
+**Revisionsgrind:** [REPO-READINESS-001](docs/REPO_READINESS_AUDIT.md) är evidens- och blockerstatus, inte en extra roadmap. Före varje R1/R2/R3-kort: kontrollera att nästa P0 i revisionen antingen är verifierat löst eller uttryckligen hanteras som blockerare. Github rulesets var tomma vid revisionen; behandla Required CI som en överenskommen arbetsregel, inte som ett verifierat automatiskt branchskydd. Godkänn aldrig en falsk "main protected"-etikett. Säkerställ att offentliga filer inte innehåller hemligheter, licensierade Cisco-binärer eller verkliga kundnätverksdokument.
+
+
 **BRAND-IDENTITY-001:** Källkod får innehålla det aktuella appnamnet endast i `core/identity.py::APP_DISPLAY_NAME`. Ingen hårdkodad varumärkessträng eller tvåbokstavsprefix i moduler, namnrymder, klasser, funktioner, JS/CSS/HTML, tester, JSON/API-scheman, filformat, loggers, script eller native launcher. `core/metadata.py::public_metadata()` hämtar värdet; framtida frontend läser `/api/meta`. Endast värdeändring ska ändra allt **användarsynligt** produktnamn. Samtliga maskinidentifierare förblir stabila/brandneutrala. **Tillverkaridentifierare (Cisco, Juniper, Arista m.fl.) får och ska användas i profilspecifik kod/GUI/CLI.** Läs [BRAND-IDENTITY-001](docs/BRAND_IDENTITY_CONTRACT.md) samt [maskinläsbar policy](docs/requirements/branding_policy.json).
 
 

@@ -1,5 +1,8 @@
 # MASTERPROMPT — YadiLab Linux, ny app från grunden
 
+**OBLIGATORISK FAKTISK FÖRSTARTSKONTROLL:** Läs [REPO-READINESS-001](docs/REPO_READINESS_AUDIT.md). En ren ny GitHub-repo och vackra styrdokument garanterar aldrig att alla Cisco-funktioner kan implementeras eller att externa patent/licenser blir tillgängliga. Det är förbjudet att kalla R0/R1 för COMPLETE när den lagligt installerade PT-binären, run-orakel eller verkliga Linux-/Legacy-UI-tester saknas. **Första ägaradministrativa blockeraren:** inga repository rulesets listades 2026-11-26 och branch protection status kunde inte hämtas via connectorn; CODEX ska tydligt rapportera avsaknad av bekräftade Required rules innan PR-merge, inte påstå att grön CI = skyddad main. Varje ny feature och protokollfamilj måste ha en ny faktisk användar-/standard-/PT-funktionsinventering som inte bara återanvänder initiala 108 seeds.
+
+
 **BINDANDE VARUMÄRKESREGEL (BRAND-IDENTITY-001):** Produktens enda källkodsdeklaration är `core/identity.py::APP_DISPLAY_NAME`. Ingen annan källkod, JS/TS, HTML, CSS, Python, GitHub-skript, klass, funktion, package, namespace, API/JSON-fält eller filnamn får hårdkoda `YadiLab`, förkortningen `YL` eller bygga tekniska identiteter av varumärket. Allt användarsynligt namn ska härledas från en enda deklaration via neutral metadata (`core/metadata.py` och senare `GET /api/meta`). Läs [BRAND-IDENTITY-001](docs/BRAND_IDENTITY_CONTRACT.md) och [policy](docs/requirements/branding_policy.json). **Tillverkarnamn som Cisco, Juniper och andra är uttryckligen tillåtna och obligatoriska där de korrekt beskriver enhet, modell, protokoll, CLI eller UI.** Behåll Legacy-layouten, men rendera varumärkestexten dynamiskt.
 
 

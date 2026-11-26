@@ -1,5 +1,8 @@
 # DECISIONS — normativ arkitekturlogg
 
+D008 AUDIT_2026-11-26: [REPO-READINESS-001](REPO_READINESS_AUDIT.md) fastställer att **main-skydd ej verifierats** (inga rulesets listade; branch protection API 403), publik repo saknar beslutad/LICENSE-fil, och den faktiska Packet Tracer-/Legacy Chromium-/motor-/import-/Linux-release-evidensen saknas. R0 äger dessa blockerare; ingen scope-reduktion eller falsk readiness/COMPLETE. Första motor-POC kan utvecklas isolerat enligt R1 och riktade standardtester.
+
+
 D007 ACCEPTED: Ett enda deklarerat appvisningsnamn i `core/identity.py::APP_DISPLAY_NAME`; neutral paketering, moduler, funktions-/klass-/namespace-ID, JSON/API och projektfiländelse. [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md) styr. Tillverkarnamn som Cisco är korrekt domändata och får uttryckligen förekomma i adapters, klasser, profilspecifikationer och UI. Nytt projektextensionsförslag `.netlab`, gammalt `.yadilab` endast legacy-import efter strikt schema.
 
 
