@@ -12,13 +12,13 @@
 **Uppdaterat användarbeslut:** Den tidigare YadiLab-UI:n är NU versionslåst till [Northsw-spec/YadiLab_legacy @ aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80). [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md) kräver samma utseende och samma användarflöden; exakt visuell matchning är fortfarande NOT_VERIFIED tills verkliga screenshots finns. R0-UI-baslinjens källupptäckt är gjord men dess kör-/bildgrind är **inte** slutförd. Detta ersätter tidigare 'invän­ta ZIP'-krav. R3 är ett obligatoriskt same-UI-resultat, inte fri redesign.
 
 
-Version 1.0 / 2026-11-26 / alla faser NOT_STARTED. Denna fil är enda exekveringskö. Scope ligger i PRODUCT_SCOPE.md och requirements/pt_scope.json; dessa är INTE separata roadmaps.
+Version 1.0 / 2026-11-26. Denna fil är enda exekveringskö. Scope ligger i PRODUCT_SCOPE.md och requirements/pt_scope.json; dessa är INTE separata roadmaps.
 
 ## Fasordning och verkliga beroenden
 | Fas | Status | Resultat | Grind |
 |---|---|---|---|
 | R0 Baslinjer | NOT_STARTED | Inventera Cisco publicerad PT-help/release notes, officiell device-/CLI-/protokoll-/UI-/IoT-/OT-bredd och exakta källrevisioner; **ingen PT-binär ska installeras eller köras som krav**. Legacy UI-källan låst till aac82926ced3dbf4cac09242530762ac3da1fe80; samla faktisk Linux/Chromium-screenshot-/DOM-/interaktions-golden; Linux launcher-/dependency/security/CI-spikes | [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md) och [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md); oberoende runtime-test fortsätter parallellt med R1 |
-| R1 Foundation/POC0 | NOT_STARTED | Immutable ConfigSnapshot, DeviceProfile/PortProfile/LinkProfile, CommandAST/CLIError och en enda ScenarioRuntime; deterministisk virtual-time scheduler | 2 processers identiska hash, tie/cancel/overflow/livelock/eventbudget negativa fall |
+| R1 Foundation/POC0 | IMPLEMENTED (domän och DES) | Immutable ConfigSnapshot, DeviceProfile/PortProfile/LinkProfile, CommandAST/CLIError och en enda ScenarioRuntime; deterministisk virtual-time scheduler | 2 processers identiska hash, tie/cancel/overflow/livelock/eventbudget negativa fall |
 | R1 POC1 | NOT_STARTED | Verkliga host-switch-host TX/RX och ARP request/reply, explicit link timing, portdown, VLAN isolation | inga gamla motorimports, inget topologi-ping-fusk |
 | R2 Projekt & import | NOT_STARTED | v1 project JSON/schema, safe Save/Open/SHA, CSV/TSV/XLS/XLSX/XLSM/XLSB/ODS och source evidence → mappning → commit | golden source cell/row/sheet, no inferred cable, round-trip, fail-closed |
 | R3 Linux UI/ELK | NOT_STARTED | **Verklig same-UI-paritet med låst Legacy:** identiskt mörkt tema, topbar, fullbreddscanvas ovanför två nedre utfällbara panelkolumner, SVG/portgeometri, Builder/inspector, originaldialoger, dokument-/simuleringsvyer, lokal auth och alla 55 UI-case seeds; därefter tilläggsytor för PT | verklig Chromium/Playwright-skärmbild/DOM/E2E vid 1366x768 och 1920x1080, [UI-matris](requirements/legacy_ui_manifest.json), [fidelity kontrakt](LEGACY_UI_FIDELITY_CONTRACT.md); ingen ny gammal motor |
@@ -35,7 +35,7 @@ Version 1.0 / 2026-11-26 / alla faser NOT_STARTED. Denna fil är enda exekvering
 | R14 Release superiority | NOT_STARTED | Förregistrerade och oberoende jämförda mått för teknisk kvalitet/diagnostik/nytta/stabilitet | G6; annars endast PARTIAL och NOT_VERIFIED |
 
 ## Första PR-serien
-R0-1 = ursprungligt styrpaket; R0-UI = låst Legacy-referens + källbaserad UI-matris + browser screenshots/DOM-basline; R1-1 = typing+config/device/port/link/CLI-kontrakt; R1-2 = scheduler och oberoende determinismforskning; R1-3 = host-switch-host reala events+ARP; R2-1 = source-preserving projektformat/import; R3-1 = en första enkel lokal canvas och versionerade referensbilder.
+R0-1 = ursprungligt styrpaket; R0-UI = låst Legacy-referens + källbaserad UI-matris + browser screenshots/DOM-basline; [R1-1](ENGINE_FOUNDATION.md) = domän/CLI, scheduler och determinismtest enligt uppdragsbeslut; nästa R1-kort (POC1) = verkliga host-switch-host-händelser och ARP; R2-1 = source-preserving projektformat/import; R3-1 = en första enkel lokal canvas och versionerade referensbilder.
 
 **Ingen slutförd PT-inventering krävs innan isolerad POC0**, men det betyder inte att full paritet kan deklareras. R0 måste fortsätta inventering och juridisk granskning, parallellt med den tekniska basmotorn.
 
