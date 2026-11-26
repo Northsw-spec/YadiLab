@@ -31,33 +31,33 @@
           "name": "topology editor",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F01-002",
           "name": "clusters and annotations",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F01-003",
           "name": "network diagram export",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -74,33 +74,33 @@
           "name": "buildings and racks",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F02-002",
           "name": "physical cable and power",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F02-003",
           "name": "geographic placements",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -117,33 +117,33 @@
           "name": "routers and chassis",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F03-002",
           "name": "switches L2/L3 industrial",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F03-003",
           "name": "device interface and profiles",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -160,33 +160,33 @@
           "name": "desktops laptops",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F04-002",
           "name": "servers and generic devices",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F04-003",
           "name": "application setup",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -203,33 +203,33 @@
           "name": "hardware module hotplug",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F05-002",
           "name": "media transceiver compatibility",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F05-003",
           "name": "port power/status",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -246,33 +246,33 @@
           "name": "command modes parser",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F06-002",
           "name": "show/debug real state",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F06-003",
           "name": "error and privilege handling",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -289,33 +289,33 @@
           "name": "configuration panels",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F07-002",
           "name": "startup running config",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F07-003",
           "name": "device boot and power",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -332,33 +332,33 @@
           "name": "start pause reset",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F08-002",
           "name": "event speed/view",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F08-003",
           "name": "causal timing",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -375,33 +375,33 @@
           "name": "event step/filter",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F09-002",
           "name": "packet timeline",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F09-003",
           "name": "state transition inspection",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -418,33 +418,33 @@
           "name": "simple PDU",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F10-002",
           "name": "complex periodic PDU",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F10-003",
           "name": "OSI ingress/egress headers",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -461,33 +461,33 @@
           "name": "Ethernet frames",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F11-002",
           "name": "access trunk VLAN",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F11-003",
           "name": "switch FDB",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -504,33 +504,33 @@
           "name": "STP RSTP",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F12-002",
           "name": "LACP EtherChannel",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F12-003",
           "name": "VTP DTP PAgP",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -547,33 +547,33 @@
           "name": "IPv4 CIDR forwarding",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F13-002",
           "name": "ARP neighbors",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F13-003",
           "name": "ICMPv4 and router errors",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -590,33 +590,33 @@
           "name": "IPv6 headers",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F14-002",
           "name": "ND RA SLAAC",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F14-003",
           "name": "ICMPv6",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -633,33 +633,33 @@
           "name": "static default RIP",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F15-002",
           "name": "OSPF single multiarea",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F15-003",
           "name": "BGP EIGRP redistribution",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -676,33 +676,33 @@
           "name": "UDP datagrams",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F16-002",
           "name": "TCP FSM",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F16-003",
           "name": "transport error/drop",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -719,33 +719,33 @@
           "name": "DHCPv4 DHCPv6",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F17-002",
           "name": "DNS HTTP HTTPS",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F17-003",
           "name": "FTP TFTP mail",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -762,33 +762,33 @@
           "name": "Telnet SSH",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F18-002",
           "name": "SNMP Syslog NTP",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F18-003",
           "name": "management CLI",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -805,33 +805,33 @@
           "name": "ACLs and NAT/PAT",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F19-002",
           "name": "zone firewall IPS",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F19-003",
           "name": "AAA RADIUS TACACS IPsec",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -848,33 +848,33 @@
           "name": "queues shaping policing",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F20-002",
           "name": "DiffServ MQC NBAR",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F20-003",
           "name": "NetFlow and mirror",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -891,33 +891,33 @@
           "name": "HDLC SLARP PPP",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F21-002",
           "name": "Frame Relay",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F21-003",
           "name": "DSL cable PPPoE",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -934,33 +934,33 @@
           "name": "Wi-Fi AP client",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F22-002",
           "name": "association roaming",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F22-003",
           "name": "radio mobile WAN",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -977,33 +977,33 @@
           "name": "VoIP H323",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F23-002",
           "name": "IP phones",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F23-003",
           "name": "voice services",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1020,33 +1020,33 @@
           "name": "smart sensors",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F24-002",
           "name": "registration gateway",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F24-003",
           "name": "smart home city power",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1063,33 +1063,33 @@
           "name": "MCU SBC hardware",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F25-002",
           "name": "Python JavaScript visual program",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F25-003",
           "name": "digital analog I/O",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1106,33 +1106,33 @@
           "name": "PLC HMI",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F26-002",
           "name": "industrial router switch",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F26-003",
           "name": "data historian cyber observer",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1149,33 +1149,33 @@
           "name": "Modbus PROFINET CIP",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F27-002",
           "name": "OPC UA IEC61850",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F27-003",
           "name": "PTP PRP and alarms",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1192,33 +1192,33 @@
           "name": "activity authoring",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F28-002",
           "name": "scoring scripting",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F28-003",
           "name": "instructor learner workflows",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1235,33 +1235,33 @@
           "name": "challenge mode",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F29-002",
           "name": "automated grading",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F29-003",
           "name": "proficiency feedback",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1278,33 +1278,33 @@
           "name": "remote network peering",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F30-002",
           "name": "port view and connection",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F30-003",
           "name": "remote save and security",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1321,33 +1321,33 @@
           "name": "external applications",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F31-002",
           "name": "programmable simulation",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F31-003",
           "name": "extension permissions",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1364,33 +1364,33 @@
           "name": "PKT interoperability",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F32-002",
           "name": "PKZ packages",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F32-003",
           "name": "PKA activity format",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1407,33 +1407,33 @@
           "name": "distance and fiber realism",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F33-002",
           "name": "IoT power environment",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F33-003",
           "name": "process automation",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1450,33 +1450,33 @@
           "name": "offline install/update",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F34-002",
           "name": "save backup restore",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F34-003",
           "name": "project export and recovery",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1493,33 +1493,33 @@
           "name": "large topology trials",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F35-002",
           "name": "deterministic replay",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F35-003",
           "name": "fault and race handling",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     },
@@ -1536,33 +1536,33 @@
           "name": "device inventory delta",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F36-002",
           "name": "undocumented in plan cases",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         },
         {
           "id": "PT-F36-003",
           "name": "new release delta discovery",
           "required": true,
           "pt_binary_result": "NOT_RUN",
-          "yadilab_result": "NOT_IMPLEMENTED",
           "standard_oracle": "NOT_RUN",
           "evidence_urls": [],
           "pt_build_sha256": null,
-          "yadilab_commit_sha": null
+          "implementation_status": "NOT_IMPLEMENTED",
+          "implementation_commit_sha": null
         }
       ]
     }

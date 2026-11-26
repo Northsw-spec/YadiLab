@@ -1,5 +1,8 @@
 # UI-ELK-001 — tidigare YadiLab-upplevelse, ny kod
 
+**Brandneutral Legacy UI-fidelitet:** Originalets utseende, färger, paneler, knappar, importdialoger och funktionsflöden är bindande. **Brandingen i originalets topbar och fönstertitel ska vara DYNAMISK** från `core/identity.py::APP_DISPLAY_NAME` via framtida `/api/meta`. Det får inte finnas en andra konstant i JS, HTML, CSS, desktopfiler eller tests. Inga nya CSS-klasser, DOM-ID, JS-funktioner eller namespaces får bygga på appnamnet. Se [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md). Tillverkarnamn som Cisco i UI/profiler förbjuds inte.
+
+
 **Aktuell referens för samtliga UI-fakta:** [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md) + [55 UI-case seeds](requirements/legacy_ui_manifest.json). Låt inte generic dashboard-förslag eller felaktig gammal trekolumnsregel styra: aktuell Legacy CSS vid >=951px visar en full-width topologiruta ovanför två verktygskolumner med collapse/expand. Kodfilen `web/features/layout/elk.js` har `elk.aspectRatio: '3'` medan äldre legacy-layoutdocs nämner 1.6; exakt låst kod och browserobservation har företräde.
 
 Status DESIGN_ONLY, **UI_REFERENCE_SOURCE_AVAILABLE** på [låst YadiLab_legacy commit aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80). [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md) är bindande för exakt känt utseende, same-flow, färgtema, fullbreddscanvas ovanför utfällbara nedre panelsamlingar och korrekta ELK-/importflöden. Renderad screenshot-baslinje är fortfarande **NOT_CAPTURED**; ingen implementerad ny UI eller PIXEL_PARITY hävdas. Gammal nätverksruntime är förbjuden som implementationsgrund.

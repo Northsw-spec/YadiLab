@@ -1,5 +1,8 @@
 # AGENTS — utvecklings- och sanningspolicy
 
+**BRAND-IDENTITY-001:** Källkod får innehålla det aktuella appnamnet endast i `core/identity.py::APP_DISPLAY_NAME`. Ingen hårdkodad varumärkessträng eller tvåbokstavsprefix i moduler, namnrymder, klasser, funktioner, JS/CSS/HTML, tester, JSON/API-scheman, filformat, loggers, script eller native launcher. `core/metadata.py::public_metadata()` hämtar värdet; framtida frontend läser `/api/meta`. Endast värdeändring ska ändra allt **användarsynligt** produktnamn. Samtliga maskinidentifierare förblir stabila/brandneutrala. **Tillverkaridentifierare (Cisco, Juniper, Arista m.fl.) får och ska användas i profilspecifik kod/GUI/CLI.** Läs [BRAND-IDENTITY-001](docs/BRAND_IDENTITY_CONTRACT.md) samt [maskinläsbar policy](docs/requirements/branding_policy.json).
+
+
 2026-11-26. Detta repo är nytt. Alla funktionspåståenden är NOT_IMPLEMENTED tills faktisk kod och oberoende test finns.
 
 1. Normativa dokument: MASTERPROMPT.md (mandat), docs/ROADMAP.md (enda aktiva utvecklingsplan), docs/PRODUCT_SCOPE.md (full funktionell PT-paritet), docs/PROTOCOL_CATALOG.md (protokollinventering), docs/ARCHITECTURE.md (motor), docs/PROJECT_DATA_CONTRACT.md, docs/UI_ELK_CONTRACT.md, docs/LEGACY_UI_FIDELITY_CONTRACT.md, docs/IMPORT_CONTRACT.md, docs/VERIFICATION.md, docs/RELEASE_GATES.md och docs/SECURITY_LEGAL.md.

@@ -1,5 +1,8 @@
 # MASTERPROMPT — YadiLab Linux, ny app från grunden
 
+**BINDANDE VARUMÄRKESREGEL (BRAND-IDENTITY-001):** Produktens enda källkodsdeklaration är `core/identity.py::APP_DISPLAY_NAME`. Ingen annan källkod, JS/TS, HTML, CSS, Python, GitHub-skript, klass, funktion, package, namespace, API/JSON-fält eller filnamn får hårdkoda `YadiLab`, förkortningen `YL` eller bygga tekniska identiteter av varumärket. Allt användarsynligt namn ska härledas från en enda deklaration via neutral metadata (`core/metadata.py` och senare `GET /api/meta`). Läs [BRAND-IDENTITY-001](docs/BRAND_IDENTITY_CONTRACT.md) och [policy](docs/requirements/branding_policy.json). **Tillverkarnamn som Cisco, Juniper och andra är uttryckligen tillåtna och obligatoriska där de korrekt beskriver enhet, modell, protokoll, CLI eller UI.** Behåll Legacy-layouten, men rendera varumärkestexten dynamiskt.
+
+
 **NYTT BINDANDE UI-BESLUT:** [LEGACY-UI-FIDELITY-001](docs/LEGACY_UI_FIDELITY_CONTRACT.md) med [55 obligatoriska baselinefall](docs/requirements/legacy_ui_manifest.json) är samma nivå som de andra produktkontrakten. Desktop-UI måste behålla legacy-styling, mörkt färgtema, **fullbreddscanvas ovanför två nedre grupper med utfällbara verktyg**, samma topbar, inventering, projekt, ELK-arbetsflöden, importens fyra steg, inspector, simulering och diagnostik. Källa: [YadiLab_legacy på låst SHA](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80). **Kopiera aldrig gammal protokollmotor eller runtime.** Att reprodu­cera externt UI-beteende är ett bindande krav; att ny motor levererar korrektare data är ett annat. Ny Packet Tracer-bredd får utöka UI:t utan att radera befintligt legacy-flöde.
 
 Datum: 2026-11-26. Status: BINDANDE MÅL, INTE IMPLEMENTERAT.
@@ -32,4 +35,4 @@ EN aktiv backlog: docs/ROADMAP.md. EN PR åt gången. Börja med nödvändiga ko
 
 Varje PR: exakt branch/HEAD och case-ID; källor; implementerad stateägare; konkreta positiva, negativa och motsägande tester; fail-closed data-/sessionsbeteenden; gränser; regression; CI och rollback. Testa först riktat, sedan Required checks på exakt HEAD. Ingen forcemerge, bypass, testsänkning, uppfunnet SUCCESS eller passiv polling. Dokument- och governance-PASS betyder inte fungerande simulering.
 
-Läs alltid AGENTS.md, docs/ROADMAP.md, docs/ARCHITECTURE.md, docs/PRODUCT_SCOPE.md, docs/IMPORT_CONTRACT.md, docs/UI_ELK_CONTRACT.md, docs/LEGACY_UI_FIDELITY_CONTRACT.md och docs/VERIFICATION.md före en relevant ändring. Ändra endast genom spårbara små PR:er och uppdatera status efter faktisk verifiering.
+Läs alltid AGENTS.md, docs/ROADMAP.md, docs/ARCHITECTURE.md, docs/PRODUCT_SCOPE.md, docs/IMPORT_CONTRACT.md, docs/UI_ELK_CONTRACT.md, docs/LEGACY_UI_FIDELITY_CONTRACT.md, docs/BRAND_IDENTITY_CONTRACT.md och docs/VERIFICATION.md före en relevant ändring. Ändra endast genom spårbara små PR:er och uppdatera status efter faktisk verifiering.

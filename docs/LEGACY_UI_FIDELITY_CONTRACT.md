@@ -1,5 +1,8 @@
 # LEGACY-UI-FIDELITY-001 — obligatorisk visuell och funktionell paritet med YadiLab_legacy
 
+**Nyare namnregel som har företräde framför exakt textmatchning:** [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md). Alla originalkontrollers **utseende och beteende** består, men tidigare Legacy-produktnamn/markeringar i topbar, `<title>`, launcher och exporter är **inte en bokstavstrogen obligatorisk textsträng**. Där ska alltid aktuellt `APP_DISPLAY_NAME` presenteras från en enda källa. En rebranding får inte kräva sök/ersätt i HTML/CSS/JS eller applikationskod. Tillverkar-/modellnamn som Cisco får vara bokstavstrogna när det är fackligt korrekt.
+
+
 **Normativt användarbeslut 2026-11-26:** Nya Linux-YadiLab **SKA SE UT OCH FUNGERA SOM** [YadiLab_legacy](https://github.com/Northsw-spec/YadiLab_legacy). Det är inte längre en lös "inspirationsreferens". **Auktoritativ version låst till [legacy commit aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80).** Källkoden/HTML/CSS/ELK/UI-funktionerna har lästs och registrerats; den körda visuella browser-baslinjen och screenshots har **inte** samlats in ännu. UI_REFERENCE_SOURCE_AVAILABLE, RENDERED_GOLDENS_NOT_CAPTURED, UI_PARITY_NOT_VERIFIED. Inga påståenden om pixelperfekt jämförelse före Chromium baseline.
 
 **Desktopregel:** Nya YadiLab använder en fullbreddscanvas överst med utfällbara inventerings- och diagnostikpaneler i två kolumner nedanför, inte en fast trekolumns-dashboard.

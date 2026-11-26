@@ -37,10 +37,10 @@ def check_scope(data):
             cases_seen.add(case_id)
             if case.get("required") is not True:
                 errors.append("REQUIRED_CASE_REMOVED")
-            if case.get("yadilab_result") == "VERIFIED_NATIVE":
+            if case.get("implementation_status") == "VERIFIED_NATIVE":
                 if (case.get("standard_oracle") != "PASS"
                         or not case.get("evidence_urls")
-                        or not case.get("yadilab_commit_sha")):
+                        or not case.get("implementation_commit_sha")):
                     errors.append("FAKE_NATIVE_VERIFICATION")
             if case.get("pt_binary_result") == "PT_RUN_PASS":
                 if (not data.get("binary_baseline", {}).get("version_verified")
@@ -62,7 +62,7 @@ def check_scope(data):
         if (data.get("inventory_complete") is not True
                 or not all(has_gate("G"+str(i)) for i in range(6))
                 or any(c.get("pt_binary_result") != "PT_RUN_PASS"
-                       or c.get("yadilab_result") != "VERIFIED_NATIVE"
+                       or c.get("implementation_status") != "VERIFIED_NATIVE"
                        or c.get("standard_oracle") != "PASS"
                        for f in families for c in f.get("cases", []))):
             errors.append("FAKE_FULL_PARITY")
@@ -101,7 +101,7 @@ class GovernanceTests(unittest.TestCase):
             (lambda d: d.update(inventory_complete=True), "FAKE_COMPLETE_INVENTORY"),
             (lambda d: d.update(full_parity_verified=True), "FAKE_FULL_PARITY"),
             (lambda d: d.update(exceeds_pt_verified=True), "FAKE_SUPERIORITY"),
-            (lambda d: d["families"][0]["cases"][0].update(yadilab_result="VERIFIED_NATIVE"), "FAKE_NATIVE_VERIFICATION"),
+            (lambda d: d["families"][0]["cases"][0].update(implementation_status="VERIFIED_NATIVE"), "FAKE_NATIVE_VERIFICATION"),
             (lambda d: d["families"][0]["cases"][0].update(pt_binary_result="PT_RUN_PASS"), "FAKE_PT_COMPARISON"),
             (lambda d: d["exceptions"].append("multiuser"), "INVALID_SCOPE_EXCEPTION"),
         ]
@@ -135,7 +135,8 @@ class GovernanceTests(unittest.TestCase):
     def test_legacy_ui_baseline_is_pinned_and_required(self):
         ui = json.loads((ROOT / "docs/requirements/legacy_ui_manifest.json").read_text(encoding="utf-8"))
         baseline = "aac82926ced3dbf4cac09242530762ac3da1fe80"
-        self.assertEqual(ui["reference_repository"], "Northsw-spec/YadiLab_legacy")
+        self.assertEqual(ui["reference_url"].split("/tree/")[0],
+                         "https://github.com/" + ui["reference_repository"])
         self.assertEqual(ui["reference_commit_sha"], baseline)
         self.assertIn(ui["reference_status"], (
             "SOURCE_INSPECTED_RUNTIME_SCREENSHOTS_NOT_CAPTURED",

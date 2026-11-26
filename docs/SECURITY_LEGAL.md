@@ -1,5 +1,8 @@
 # SECURITY-LEGAL-001 — testbar säkerhet och ärliga rättighetsgränser
 
+**Namngräns, inte tillverkarförbud:** [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md) förbjuder hårdkodad applikationsbranding i källkoden men **tillåter och kräver tillverkarnamn** (Cisco, Juniper, MikroTik m.fl.) när enhetsprofiler, CLI, network semantics eller UI behöver dem. Varumärkes-/licensvillkor för specifika tillverkarimplementeringar måste fortfarande respekteras.
+
+
 Status: normativt designkrav; implementation NOT_STARTED.
 
 - Linux offline-first: backend lyssnar normalt bara på loopback eller OS-local IPC, CSRF/auth protections, kortlivade sessions, hårda resursgränser, immutable frontend origin, ingen generell offentlig port. Multiuser måste kunna fungera över autentiserad, explicit användaraktiverad peer-federering, krypterad och identitetskontrollerad, utan att läsa godtyckliga lokala filer eller scanna riktiga nät.
