@@ -26,7 +26,7 @@ class RepositoryHygieneTests(unittest.TestCase):
 
     def test_readiness_audit_has_truthful_blockers(self):
         audit = (ROOT / "docs/REPO_READINESS_AUDIT.md").read_text(encoding="utf-8")
-        for required in ("NOT_IMPLEMENTED", "rulesets", "R1-POC", "BLOCKED",
+        for required in ("NOT_IMPLEMENTED", "ruleset", "R1-POC", "BLOCKED",
                          "Packet Tracer", "Legacy", "LICENSE", "G0", "G6"):
             with self.subTest(required=required):
                 self.assertIn(required, audit)
@@ -40,7 +40,9 @@ class RepositoryHygieneTests(unittest.TestCase):
         self.assertIn("python -m unittest discover", workflow)
         audit = (ROOT / "docs/REPO_READINESS_AUDIT.md").read_text(encoding="utf-8")
         self.assertIn("GOVERNANCE ONLY", audit)
-        self.assertIn("branch protection", audit.lower())
+        self.assertIn("enforcement", audit.lower())
+        self.assertIn("disabled", audit.lower())
+        self.assertIn("governance-contracts", audit)
 
 
 if __name__ == "__main__":
