@@ -6,7 +6,7 @@
 **Obligatorisk produktpresentation:** Nya YadiLab ska **se ut och fungera som** [YadiLab_legacy @ aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80) enligt [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md). Same-UI-paritet är obligatorisk utöver hela Packet Tracer-omfånget; designen får utökas för PT men inte tyst ersätta legacy-layout eller dess användarresor. Verkliga screenshot-goldens och nya funktioner är ännu inte verifierade.
 
 
-Status: REQUIREMENTS, NOT_IMPLEMENTED. Baslinje: Cisco Packet Tracer 9.0 HELP är dokumenterad. Den faktiska licensierade PT-builden, dess SHA och eventuell 9.0.1-funktionsdelta är NOT_VERIFIED. Produktmålet gäller ALLA funktioner hos den version av PT som slutligen jämförs, inte enbart listan här.
+Status: REQUIREMENTS, NOT_IMPLEMENTED. **Ingen Packet Tracer-binär krävs.** Dokumentationsbaslinje är Ciscos offentliga PT-hjälp och publicerade funktions-/versionsuppgifter enligt [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md). Ingen empirisk matchning av en okörd binär får hävdas. Produktmålet gäller **hela dokumenterade PT-funktionsbredden och varje upptäckt relevant underfall**, inte endast denna lista.
 
 Obligatoriska familjer (utökas med individuella underfall i requirements/pt_scope.json):
 1. Logical Workspace: topology, cluster, annotations, diagrams, palette, manipulering.
@@ -30,9 +30,9 @@ Obligatoriska familjer (utökas med individuella underfall i requirements/pt_sco
 19. Extensions/ExApps/IPC/API och scripts med lagliga, säkra motsvarigheter.
 20. PKT/PKZ/PKA och andra tillämpliga projektformat samt all relevant dokument-/övningsmigration.
 21. Linux packaging, offline use, autosafe/manual save, backup/recovery/export och fungerande hel arbetsresa.
-22. ALLT annat som upptäcks i en laglig licensierad PT-installation eller aktuell Cisco-dokumentation.
+22. ALLT annat som upptäcks i aktuell offentlig Cisco-dokumentation, officiella release notes eller lagligt tillgängliga och verifierbara fackkällor. PT-installation är frivillig.
 
-ALLA PT-varianter är REQUIRED: ingen tyst delmängd, fake CLI, simulation animation eller protokollkod som bara returnerar "success". Ovanstående är en översikt, inte en fullständig PT-inventering. En familj blir inte done förrän alla identifierade subfeatures testats med exakt versionssatt PT-binary samt oberoende standardspecifikation där tillämpligt.
+ALLA dokumenterade PT-varianter är REQUIRED: ingen tyst delmängd, fake CLI, simulation animation eller protokollkod som bara returnerar "success". Ovanstående är en översikt, inte en fullständig Cisco-funktionsinventering. En familj blir inte done förrän alla identifierade underfall har verklig källhänvisning, korrekt design, körda YadiLab-integrationstester samt oberoende standardorakel där tillämpligt. PT-binärtest är frivilligt, inte releasekrav.
 
 YadiLab ska dessutom ge dokumentimport med provenance, systematisk nätverksfelsökning och kausal time-trace, mer exakta standard-/tidsmodeller än PT där test faktiskt påvisar det, samt ytterligare moderna protokoll enligt docs/PROTOCOL_CATALOG.md. Detta är mätbara produktambitioner, inte implementerade features.
 

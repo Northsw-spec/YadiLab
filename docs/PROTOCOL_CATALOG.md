@@ -1,5 +1,5 @@
 # PROTOCOL-CATALOG — Cisco Packet Tracer och utökade protokoll
-Status: SCOPE_ONLY; all implementations NOT_STARTED. Faktisk PT-binär och dess kompletta featurelista är NOT_VERIFIED. Officiell källa: https://tutorials.ptnetacad.net/help/default/intro.htm ; OT: https://tutorials.ptnetacad.net/help/default/industrial_otFeatures.htm .
+Status: SCOPE_ONLY; alla implementationer NOT_STARTED. Baslinje är Ciscos officiella publika PT-dokumentation. Exakt installerad PT-binär är varken nödvändig eller blockerande. Se [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md). Källor: https://tutorials.ptnetacad.net/help/default/intro.htm ; OT: https://tutorials.ptnetacad.net/help/default/industrial_otFeatures.htm .
 
 ## Cisco PT-funktioner – alla varianter och praktiska CLI-/GUI-underfall REQUIRED
 - Ethernet 802.3, CSMA/CD (i PT:s modell), IEEE 802.1Q VLAN/trunk, STP/RSTP, VTP/DTP/PAgP, EtherChannel/LACP, multilayer switching, IP CEF, ARP.
@@ -25,4 +25,4 @@ BGP4 RFC4271 https://www.rfc-editor.org/info/rfc4271/
 DHCPv4 RFC2131 https://www.rfc-editor.org/info/rfc2131/
 IEEE/IEC/ODVA-texter versions- och rättighetskontrolleras per implementation.
 
-Krav per nytt protokoll: standardversion/errata, device/profile, parser/serializer, bytevektorer, state machine, timers/race, felexceptions, positiva/negativa/motsägande scenarier, metrik/budget, CLI state, exact commit SHA/CI och verifierad PT-run där paritet påstås. Dokumentation skapar aldrig VERIFIED_NATIVE.
+Krav per nytt protokoll: standardversion/errata, device/profile, parser/serializer, bytevektorer, state machine, timers/race, felexceptions, positiva/negativa/motsägande scenarier, metrik/budget, CLI state, exact commit SHA/CI och verifierad Cisco-dokumentationsreferens för respektive funktionskrav; verklig PT-run är frivillig och endast nödvändig om någon särskilt påstår direkt uppmätt jämförelse med den binären. Dokumentation skapar aldrig VERIFIED_NATIVE.
