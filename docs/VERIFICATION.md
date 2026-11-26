@@ -1,5 +1,8 @@
 # VERIFICATION-001 — oberoende evidens i stället för demo
 
+**OBLIGATORISK PT-REFERENSMETOD:** [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md) ersätter alla tidigare PT_RUN_PASS-/PT-binär-/checksum-grindar med dokumenterad Cisco funktions-/versionskälla + oberoende RFC/IEEE/IEC-/YadiLab-tester. För oklara PT-särfall gäller SOURCE_UNCERTAIN och en ärlig begränsning, inte fiktiva resultat.
+
+
 **APP-BRAND-RENAMING-001:** Ett enda kodställe för människoläsbart namn. Governance kräver att samtliga source/test/scripts/filnamn saknar produktbrand/akronym utom `core/identity.py`, och att read-only `public_metadata()` följer en simulerad variabeländring. Vid R3: starta två rena Linux/browser builds där endast den deklarativa strängen är ändrad; verifiera topbar, title, dialogs, notifications, reports, desktop launchers och att API/schema/filformat/projektdata har identiskt neutralt ID. **Manufacturers like Cisco are explicitly not prohibited.** Se [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md).
 
 
@@ -9,7 +12,7 @@
 Datum 2026-11-26. Status: normative DESIGN, inga nya motor- eller PT-tester körda.
 
 ## Sanningsnivåer
-DOC_VERIFIED = faktisk källdokumentation; PLANNED = design; IMPLEMENTED_UNVERIFIED = kod utan fullt orakel; VERIFIED_NATIVE = implementerad packet/state/timer med oberoende standardtest, negativa och motsägande scenarier, exakta CI-bevis; PT_RUN_VERIFIED = samma labb faktiskt kört i lagligt installerad PT med exakt build; BLOCKED_LEGAL_OR_SPEC = saknad laglig väg. PT_HELP ≠ PT_RUN_VERIFIED.
+DOC_VERIFIED = konkret Cisco-/standardkällhänvisning med dokumentversion och verifierat funktionskontrakt; PLANNED = design; IMPLEMENTED_UNVERIFIED = kod utan fullständigt orakel; VERIFIED_NATIVE = implementerad packet/state/timer med oberoende standardtest, negativa och motsägande scenarier och exakt CI-bevis; DOCUMENTED_PT_SCOPE_VERIFIED = källgranskad Cisco-dokumenterad underfallsinventering och YadiLabs verkliga verifierade funktioner; BLOCKED_LEGAL_OR_SPEC = saknad laglig väg. Installerad PT och PT_RUN_VERIFIED krävs **INTE**. Se [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md).
 
 ## Konkreta acceptanstester för varje nätverksfunktion
 1. Raw bytes: parser, serializer, checksum, MTU, fragment, malformed, unknown protocols, wrong lengths, förvaliderade golden vectors. Orakel får inte vara implementationens egna returvärden.
@@ -23,7 +26,7 @@ DOC_VERIFIED = faktisk källdokumentation; PLANNED = design; IMPLEMENTED_UNVERIF
 9. Secure sandbox: importmakro och IoT-script får inte exekvera host commands; säker peer Multiuser, inga reala PLC eller nätverkskortseffekter.
 10. Scale: förregistrerade topologier 5/50/500 och 1e5 events som utgångspunkt för R1-performance-spike; ingen påstådd kapacitet före mätning.
 
-Krav för dokumentation: case ID, PT-build+SHA, YadiLab SHA, källstandard/errata, scenario bytes, seed, predicted output och observed output, event/state traces, negativa motbevis och CI/artifacts. Vid olika PT-vs-standardskorrekta resultat: dokumentera båda; PT-output är konkurrensbaseline, inte oberoende orakel.
+Krav för dokumentation: case ID, Cisco-dokumentations-URL/revision och exakta funktionspåståenden, YadiLab SHA, källstandard/errata, scenario bytes, seed, expected/observed output, state/event trace, negativa motbevis och CI/artifacts. Direkt PT-binärtest är **frivilligt**, och dess frånvaro blockerar inte YadiLabs verifiering. Påstå inte jämförbar PT-runtime, absolut prestanda eller odokumenterad PT-paritet utan faktisk evidens.
 
 Fuzz/property/metamorphic och mutationstester ska verifiera att farliga fel upptäcks: försvunnen kabel, omkastad port, VLAN mismatch, stale revision, invalid IPv6, ICMP error suppression, brutna sessions och flera samtidiga timers. Resultat PASS/FAIL/NOT_RUN/BLOCKED med relevant nämnare.
 

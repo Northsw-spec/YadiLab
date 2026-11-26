@@ -1,6 +1,9 @@
 # YadiLab
 
-**Teknisk revisionsstatus:** [REPO-READINESS-001](docs/REPO_READINESS_AUDIT.md) visar vad som verkligen är kontrollerat och vad som inte är det. Repot innehåller ännu ingen nätverksmotor eller Linux-UI; 36 PT-kategorier/108 frökandidater och 55 Legacy-UI-fall är **ofullständiga kataloger**. GitHub-regler för main är inte verifierat aktiverade (rulesets-listan var tom 2026-11-26). Ingen full Packet Tracer-paritet eller högre kvalitet är bevisad. Läs denna revisionsstatus innan ny implementation påbörjas.
+**PT-referensmetod, ändrad efter användarbeslut:** [PT-DOC-BASELINE-001](docs/PT_DOCUMENTATION_BASELINE_POLICY.md). **En riktig Cisco Packet Tracer-binär krävs inte.** Officiell Cisco-dokumentation och egna oberoende RFC-/IEEE-/IEC-/runtime-tester är obligatoriska; direkta binärjämförelser är frivilliga. Det är inte ett bevis för okända/odokumenterade PT-beteenden eller universell överlägsenhet.
+
+
+**Teknisk revisionsstatus:** [REPO-READINESS-001](docs/REPO_READINESS_AUDIT.md) visar vad som verkligen är kontrollerat och vad som inte är det. Repot innehåller ännu ingen nätverksmotor eller Linux-UI; 36 PT-kategorier/108 frökandidater och 55 Legacy-UI-fall är **ofullständiga kataloger**. GitHub-regler för main är INTE aktiverade: ruleset `main` (28193830) finns men `enforcement=disabled` vid senaste kontrollen 2026-11-26. Ingen full Packet Tracer-paritet eller högre kvalitet är bevisad. Läs denna revisionsstatus innan ny implementation påbörjas.
 
 
 **Varumärkesneutral kod:** [BRAND-IDENTITY-001](docs/BRAND_IDENTITY_CONTRACT.md). Enda källkodssträngen med nuvarande namn ligger i `core/identity.py::APP_DISPLAY_NAME`; `core/metadata.py` hämtar den dynamiskt. Kommande frontend och desktop-launcher ska använda samma namn utan kopior. Klass-, namespace-, projektformats- och API-namn är neutrala. Tillverkarnamn som Cisco är tillåtna. Koden/metadatahelpern finns, men ingen fungerande UI/desktop-app är byggd eller testad för full rename-paritet ännu.
@@ -8,7 +11,7 @@
 
 **Status: ny, tom Linux-applikation under arkitekturplanering. Ingen nätverksmotor eller färdig simulator är implementerad.**
 
-YadiLab är ett nytt, självständigt projekt med målet att uppnå **full funktionell paritet med Cisco Packet Tracer på Linux**, inklusive alla dokumenterat och i en lagligen installerad baslinje faktiskt verifierade funktioner, enheter, protokoll, arbetsytor, CLI/GUI, Simulation Mode, PDU, IoT/OT, samarbete, lärarverktyg och projektformat. Därefter ska det med oberoende mätningar ge **verifierbart bättre korrekthet, diagnostik, precision och funktioner**. Projektet får inte kalla sig komplett innan bevisen finns.
+YadiLab är ett nytt, självständigt projekt med målet att uppnå **full funktionell paritet med Cisco Packet Tracer på Linux**, inklusive alla officiellt dokumenterade och med oberoende test verifierade funktioner, enheter, protokoll, arbetsytor, CLI/GUI, Simulation Mode, PDU, IoT/OT, samarbete, lärarverktyg och projektformat. Därefter ska det med oberoende mätningar ge **verifierbart bättre korrekthet, diagnostik, precision och funktioner**. Projektet får inte kalla sig komplett innan bevisen finns.
 
 **Två produktundantag:** ingen Windows-/macOS-utveckling och ingen ny särskild tillgänglighets- eller tangentbordsstyrningsfunktion som paritetskrav. Grundläggande säkerhet och användbarhet undantas inte.
 

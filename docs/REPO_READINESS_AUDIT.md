@@ -1,5 +1,8 @@
 # REPO-READINESS-001 — revisionskontroll av nya simulatorprojektet
 
+**Nyare användarbeslut och faktisk GitHub-status (2026-11-26):** [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md) upphäver behovet av installerad Cisco Packet Tracer-binär, obligatorisk PT_RUN eller build-checksum. Cisco officiella versionerade publikationer + fristående standard-/native-tester ersätter jämförelsekravet. **GitHub ruleset `main` (28193830) finns och har `governance-contracts` angiven som required check men `enforcement = disabled`**, alltså är den fortfarande inte tvingande. `.gitignore` finns nu; äldre revisionsobservationer nedan gäller ursprunglig snapshot, inte nya ändringar.
+
+
 **Revisionsdatum:** 2026-11-26. **Granskad main:** `5c55be0a5c33f73106353db9f895db07c98b5c68`. **Typ:** dokumenterad arkitektur-/repository-audit, INTE implementationstest och INTE en andra roadmap.
 
 ## Beslut
@@ -14,22 +17,22 @@
 | Mastermandat | **PASS på kravformulering** | `MASTERPROMPT.md`, `AGENTS.md`, `docs/PRODUCT_SCOPE.md`: alla PT-funktioner, Linux-only; ingen ny keyboard-only/accessibility-paritet |
 | Enda plan och mål | **PASS på struktur** | `docs/ROADMAP.md` R0–R14, `docs/DECISIONS.md`, `docs/ARCHITECTURE.md` |
 | Nya engine | **NOT_IMPLEMENTED** | Ingen EventKernel, packet data path, link actor, CLI, port/state machine existerar än |
-| Packet Tracer-målbredd | **INITIAL INVENTORY ONLY** | 36 REQUIRED-familjer / 108 initiala fall i `docs/requirements/pt_scope.json`; `inventory_complete=false`, exakta Cisco-build och full enhets-/CLI-delta okända |
+| Packet Tracer-målbredd | **INITIAL INVENTORY ONLY** | 36 REQUIRED-familjer / 108 initiala fall i `docs/requirements/pt_scope.json`; `inventory_complete=false`, full källgranskad Cisco-enhets-/CLI-dokumentation och underfallsinventering återstår; ingen Packet Tracer-binär behövs |
 | Legacy-UI | **SOURCE_VERIFIED, RUNTIME_NOT_RUN** | Låst `Northsw-spec/YadiLab_legacy` @ `aac82926ced3dbf4cac09242530762ac3da1fe80`; 55 UI-case seeds, inga goldens på ny UI |
 | Importformat | **REQUIREMENT_ONLY** | `docs/IMPORT_CONTRACT.md`; inga verkliga XLS/XLSB/ODS/CSV-parsertester här |
 | Namnbyte | **PARTIAL_CODE_TESTED** | Endast `core/identity.py::APP_DISPLAY_NAME` och `core/metadata.py` fungerar; ännu ingen UI/launcher/installer att end-to-end-verifiera |
 | Standard-/CI-verifiering | **GOVERNANCE ONLY** | En GitHub Actions-jobb `governance-contracts`; senast passerade main, men testar inte motor, CLI, webbläsare, Excel, packager, fuzz eller Packet Tracer |
-| GitHub regler | **OWNER ACTION REQUIRED** | GET /rulesets returnerade `[]`; branch protection API gav HTTP 403 via ansluten integration; required status checks/PR-regler kan **inte** hävdas som konfigurerade |
-| Repo-säkerhet | **PARTIAL** | Publikt repo, ingen `LICENSE`-fil eller `.gitignore` på granskad main; aldrig lägga hemligheter/proprietär binär/kunddata i repository |
+| GitHub regler | **OWNER ACTION REQUIRED** | Ett `main`-ruleset (28193830) finns nu och har `governance-contracts` som vald required status check, **men enforcement är `disabled` och kraven tillämpas inte**. Branch-protection API gav tidigare HTTP 403 via ansluten integration |
+| Repo-säkerhet | **PARTIAL** | Publikt repo, `.gitignore` och hygiene-tests finns efter PR #4, men ingen `LICENSE`-fil eller uttryckligt licensbeslut; aldrig lägga hemligheter/proprietär binär/kunddata i repository |
 | Juridisk kompatibilitet | **OPEN/BLOCKED** | PKT/PKA/PKZ och vissa Cisco-specifika förlopp kräver faktiska lagliga specifikationer/interop-evidens |
 
 ## Högsta återstående risker, prioriterat
 
-**P0 — skydda main.** Repository owner: Settings → Rules → Rulesets → New branch ruleset, target default branch `main`. Kräv PR före merge, Required check `governance-contracts` som status, blockera force pushes och branch deletion, enforce linear history; säkerställ att eventuella bypass-aktörer och administratörsregler är avsiktliga. Verifiera därefter en avvisad direktpush och en avvisad PR med röd check med faktisk GitHub-evidens. En YAML-workflow ersätter INTE ruleset; GitHub-connectorn här saknar nödvändig branch-policy-läs-/skrivrätt. När R1-runtime-jobb tillkommer ska dessa också krävas.
+**P0 — aktivera main-ruleset.** Repository owner: Settings → Rules → Rulesets → öppna redan existerande ruleset `main` (28193830), target default branch `main`, och växla enforcement från `disabled` till `active`. Kräv PR före merge, Required check `governance-contracts` som status, blockera force pushes och branch deletion, enforce linear history; säkerställ att eventuella bypass-aktörer och administratörsregler är avsiktliga. Verifiera därefter en avvisad direktpush och en avvisad PR med röd check med faktisk GitHub-evidens. En YAML-workflow ersätter INTE ruleset; GitHub-connectorn här saknar nödvändig branch-policy-läs-/skrivrätt. När R1-runtime-jobb tillkommer ska dessa också krävas.
 
 **P0 — verkligt testbart motorgrundkontrakt.** R1-1 och R1-2 måste implementera Device/Port/Link/Config/CLI och kernel med tid, eventkedja, determinism samt negativa gränser. Integrera inte ett nytt protokoll för att "få demo" innan detta passerat oberoende oracle/2 processstarter. Ingen gammal nätverksmotor eller parallell "temporary" network path.
 
-**P0 — komplett konkurrensbaslinje före paritetsanspråk.** Skaffa laglig Packet Tracer-build, lås version+SHA och full device/module/CLI/protocol/UI/OT/IoT/service/file list. De 108 startfallen är **inte** "alla features". Upptäckta nya fall måste öka nämnaren i registret. Cisco-approximationer separeras från standardkorrekthet och juridiska hinder får inte hemligt exkluderas.
+**P0 — komplett konkurrensbaslinje före paritetsanspråk.** Inventera aktuell **officiell Cisco-dokumentation och versionssatta källor** för alla device/module/CLI/protocol/UI/OT/IoT/service/file-varianter; en installerad eller hashad PT-binär är **inte ett krav** enligt [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md). De 108 startfallen är **inte** "alla features". Upptäckta nya fall måste öka nämnaren i registret. Cisco-approximationer separeras från standardkorrekthet och juridiska hinder får inte hemligt exkluderas.
 
 **P1 — fotografera/kör Legacy-UI.** Kör versionslåst Legacy i verklig Chromium-miljö och spara jämförbara fixture/screenshots + DOM/portgeometri före R3 påstår "samma UI". Bevara 55 seedflöden inklusive importer/ELK/Builder/sessions; inga gamla sessionsmotorer som nätverksimplementering.
 
@@ -39,7 +42,7 @@
 
 **P1 — licens-/öppenkodsbeslut.** Repon är publik och saknar LICENSE. Det innebär inte automatiskt att andra har öppenkodslicens att återanvända koden. Projektägaren bör uttryckligen välja licens eller dokumentera att koden tills vidare är all-rights-reserved; inga tredjeparts- eller Cisco-/kundfiler ska committas utan kontrollerade rättigheter. Licensen får inte hittas på av kodagenten.
 
-**P1 — minimal repo-hygien.** Lägg till `.gitignore` för miljöer, privata experiment, skräpfiler, dependency caches, bygg-/testartefakter och hemligheter. Ingen generell ignore av testfixturer eller alla CSV/Excel-dokument: sådana måste vara syntetiska/saniterade och ägas av framtida testflöden.
+**P1 — fortsatt repo-hygien.** `.gitignore` och negativa hygienkontroller finns redan. För framtida testfixturer gäller syntetiska/saniterade filer, strikta rättigheter och ingen incheckning av kunddata eller Cisco-binärer; utöka ignore-regler först med faktiskt behov.
 
 ## Vad som faktiskt skyddas redan nu
 
@@ -50,9 +53,9 @@
 
 ## Definition av "repo klart för kodstart" och "redo att kalla komplett"
 
-- **Klar för R1-POC:** syfte och interfaces tydliga, en enda plan, ägare och kö för nästa kort, grundläggande governance/tester gröna, dokumenterad avsaknad av ruleset och ändring bara via PR tills skyddet finns.
+- **Klar för R1-POC:** syfte och interfaces tydliga, en enda plan, ägare och kö för nästa kort, grundläggande governance/tester gröna, dokumenterat inaktiverat ruleset (28193830) och ändring bara via PR tills enforcement faktiskt är aktivt.
 - **Klar för produktionsutveckling i större skala:** P0 main ruleset aktiverad/verifierad, real packet tests i Required CI, versionslåsta beroenden, känd data- och säkerhetsmodell, UI-fixturer och schema-conformance.
-- **Klar att hävda "allt Packet Tracer":** G0–G5 i `docs/RELEASE_GATES.md` med faktiska labb på båda appar och full inventerad denominator, inga okända/blockerade fall (utom uttryckliga scopeundantag).
-- **Klar att hävda "bättre än Packet Tracer":** dessutom G6 med i förväg låsta, oberoende mätningar. Ett generiskt Packet Tracer-liknande GUI eller statisk ping är inte sådan evidens.
+- **Klar att hävda "allt Packet Tracer":** G0–G5 i `docs/RELEASE_GATES.md` med full källgranskad Cisco-dokumentationsnämnare, egen verklig native-test-evidens och standardorakel (riktig PT-binär frivillig), inga okända/blockerade fall (utom uttryckliga scopeundantag).
+- **Klar att hävda "bättre än Packet Tracer":** dessutom G6 med i förväg låsta oberoende mätningar. En universell direktjämförelse kräver dock ett jämförbart referensresultat; kan inte påstås på enbart Cisco-help. Ett generiskt Packet Tracer-liknande GUI eller statisk ping är inte sådan evidens.
 
 **Ingen utvecklingsplan, AI-modell eller Github-README kan garantera från början att en programvara senare kan utföra varje proprietär Cisco-funktion.** Rapportera blockerare tidigt; ändra aldrig målets omfattning utan användarbeslut.

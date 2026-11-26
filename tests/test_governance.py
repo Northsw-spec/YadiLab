@@ -1,4 +1,4 @@
-"""Governance tests for a PLANNED product. Not protocol implementation tests."""
+"""Governance tests for a PLANNED product. NOT protocol implementation tests."""
 import json
 import re
 import unittest
@@ -14,67 +14,95 @@ DOCS = [
     "docs/PROJECT_DATA_CONTRACT.md", "docs/UI_ELK_CONTRACT.md",
     "docs/IMPORT_CONTRACT.md", "docs/RESEARCH_WAVES.md", "docs/SECURITY_LEGAL.md",
     "docs/DECISIONS.md", "docs/VERIFICATION.md", "docs/RELEASE_GATES.md",
-    "docs/LEGACY_UI_FIDELITY_CONTRACT.md",
-    "docs/REPO_READINESS_AUDIT.md",
+    "docs/LEGACY_UI_FIDELITY_CONTRACT.md", "docs/REPO_READINESS_AUDIT.md",
+    "docs/PT_DOCUMENTATION_BASELINE_POLICY.md",
 ]
+
+# These fields are obsolete as mandatory release predicates. Voluntary direct
+# comparison evidence may be recorded outside the required source catalog.
+OBSOLETE_BINARY_FIELDS = {"binary_baseline", "pt_binary_result", "pt_build_sha256"}
+
 
 def check_scope(data):
     errors = []
+    if OBSOLETE_BINARY_FIELDS.intersection(data):
+        errors.append("LEGACY_BINARY_GATE")
+    documentation = data.get("documentation_baseline", {})
+    if not isinstance(documentation, dict):
+        documentation = {}
+        errors.append("MISSING_DOCUMENTATION_BASELINE")
+    if not str(documentation.get("documentation_entry", "")).startswith("https://"):
+        errors.append("MISSING_DOCUMENTATION_ENTRY")
+    if data.get("exceptions") != EXCEPTIONS:
+        errors.append("INVALID_SCOPE_EXCEPTION")
     families = data.get("families", [])
     ids = [f.get("id") for f in families]
     if not MIN_IDS.issubset(set(ids)) or len(ids) != len(set(ids)):
         errors.append("FAMILY_LOSS_OR_DUPLICATE")
-    if data.get("exceptions") != EXCEPTIONS:
-        errors.append("INVALID_SCOPE_EXCEPTION")
-    cases_seen = set()
+    case_ids = set()
     for family in families:
         if family.get("required") is not True or not family.get("cases"):
             errors.append("MISSING_REQUIRED_FAMILY")
+        if not str(family.get("source_category", "")).startswith("https://"):
+            errors.append("MISSING_FAMILY_SOURCE")
         for case in family.get("cases", []):
-            case_id = case.get("id", "")
-            if (not re.fullmatch(re.escape(family.get("id", "")) + r"-\d{3}", case_id)
-                    or case_id in cases_seen):
+            if OBSOLETE_BINARY_FIELDS.intersection(case):
+                errors.append("LEGACY_BINARY_GATE")
+            cid = case.get("id", "")
+            if not isinstance(cid, str) or not re.fullmatch(
+                    re.escape(family.get("id", "")) + r"-\d{3}", cid
+            ) or cid in case_ids:
                 errors.append("DUPLICATE_OR_INVALID_CASE_ID")
-            cases_seen.add(case_id)
+            case_ids.add(cid)
             if case.get("required") is not True:
                 errors.append("REQUIRED_CASE_REMOVED")
+            status = case.get("source_status")
+            if status not in {"DOC_CANDIDATE", "DOC_VERIFIED", "SOURCE_UNCERTAIN"}:
+                errors.append("MISSING_SOURCE_STATUS")
+            if status == "DOC_VERIFIED" and (
+                not case.get("source_evidence")
+                or not case.get("source_revision")
+                or case.get("source_revision") == "UNVERIFIED"
+            ):
+                errors.append("FAKE_DOCUMENTATION_VERIFICATION")
             if case.get("implementation_status") == "VERIFIED_NATIVE":
                 if (case.get("standard_oracle") != "PASS"
                         or not case.get("evidence_urls")
                         or not case.get("implementation_commit_sha")):
                     errors.append("FAKE_NATIVE_VERIFICATION")
-            if case.get("pt_binary_result") == "PT_RUN_PASS":
-                if (not data.get("binary_baseline", {}).get("version_verified")
-                        or not data.get("binary_baseline", {}).get("installed_binary_sha256")
-                        or not case.get("pt_build_sha256")
-                        or not case.get("evidence_urls")):
-                    errors.append("FAKE_PT_COMPARISON")
     if data.get("inventory_complete") is True:
-        if (not data.get("binary_baseline", {}).get("version_verified")
-                or not data.get("binary_baseline", {}).get("installed_binary_sha256")
-                or any(f.get("discovery_complete") is not True for f in families)):
+        if (documentation.get("inventory_audit_status") != "COMPLETE"
+                or not documentation.get("inventory_audit_evidence_urls")
+                or any(f.get("discovery_complete") is not True for f in families)
+                or any(c.get("source_status") != "DOC_VERIFIED"
+                       for f in families for c in f.get("cases", []))):
             errors.append("FAKE_COMPLETE_INVENTORY")
     gates = data.get("gate_evidence", {})
-    def has_gate(name):
+    def passed(name):
         record = gates.get(name, {})
         return (isinstance(record, dict) and record.get("status") == "PASS"
                 and bool(record.get("evidence_urls")))
-    if data.get("full_parity_verified") is True:
+    if data.get("documented_scope_verified") is True:
         if (data.get("inventory_complete") is not True
-                or not all(has_gate("G"+str(i)) for i in range(6))
-                or any(c.get("pt_binary_result") != "PT_RUN_PASS"
+                or not all(passed("G" + str(i)) for i in range(6))
+                or any(c.get("source_status") != "DOC_VERIFIED"
                        or c.get("implementation_status") != "VERIFIED_NATIVE"
                        or c.get("standard_oracle") != "PASS"
                        for f in families for c in f.get("cases", []))):
-            errors.append("FAKE_FULL_PARITY")
-    if data.get("exceeds_pt_verified") is True:
-        if data.get("full_parity_verified") is not True or not has_gate("G6"):
+            errors.append("FAKE_DOCUMENTED_SCOPE_VERIFICATION")
+    if data.get("exceeds_documented_scope_verified") is True:
+        if data.get("documented_scope_verified") is not True or not passed("G6"):
             errors.append("FAKE_SUPERIORITY")
-    if data.get("release_status") == "FULL_PARITY_VERIFIED" and not data.get("full_parity_verified"):
-        errors.append("FAKE_RELEASE")
-    if data.get("release_status") == "EXCEEDS_PT_VERIFIED" and not data.get("exceeds_pt_verified"):
-        errors.append("FAKE_RELEASE")
+    if data.get("release_status") == "DOCUMENTED_PT_SCOPE_VERIFIED":
+        if data.get("documented_scope_verified") is not True:
+            errors.append("FAKE_RELEASE")
+    if data.get("release_status") == "EXCEEDS_DOCUMENTED_PT_SCOPE":
+        if data.get("exceeds_documented_scope_verified") is not True:
+            errors.append("FAKE_RELEASE")
+    if data.get("release_status") in ("FULL_PARITY_VERIFIED", "EXCEEDS_PT_VERIFIED"):
+        errors.append("AMBIGUOUS_BINARY_PARITY_CLAIM")
     return errors
+
 
 class GovernanceTests(unittest.TestCase):
     def test_required_documents(self):
@@ -82,15 +110,20 @@ class GovernanceTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue((ROOT / path).is_file())
 
-    def test_manifest_all_required_unverified(self):
+    def test_manifest_has_source_not_binary_evidence(self):
         data = json.loads(MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(check_scope(data), [])
         self.assertGreaterEqual(len(data["families"]), 36)
         self.assertGreaterEqual(sum(len(f["cases"]) for f in data["families"]), 108)
-        self.assertEqual(data["release_status"], "NOT_VERIFIED")
-        self.assertFalse(data["inventory_complete"])
-        self.assertFalse(data["full_parity_verified"])
-        self.assertFalse(data["exceeds_pt_verified"])
+        self.assertNotIn("binary_baseline", data)
+        self.assertIn("documentation_baseline", data)
+        self.assertTrue(data["documentation_baseline"]["documentation_entry"].startswith("https://"))
+        for family in data["families"]:
+            for case in family["cases"]:
+                self.assertIn("source_status", case)
+                self.assertIn("source_evidence", case)
+                self.assertIn("source_revision", case)
+                self.assertFalse(OBSOLETE_BINARY_FIELDS.intersection(case))
 
     def test_mutation_probes_block_fake_claims(self):
         import copy
@@ -100,17 +133,32 @@ class GovernanceTests(unittest.TestCase):
             (lambda d: d["families"][0].update(required=False), "MISSING_REQUIRED_FAMILY"),
             (lambda d: d["families"][0]["cases"][0].update(required=False), "REQUIRED_CASE_REMOVED"),
             (lambda d: d.update(inventory_complete=True), "FAKE_COMPLETE_INVENTORY"),
-            (lambda d: d.update(full_parity_verified=True), "FAKE_FULL_PARITY"),
-            (lambda d: d.update(exceeds_pt_verified=True), "FAKE_SUPERIORITY"),
+            (lambda d: d.update(documented_scope_verified=True), "FAKE_DOCUMENTED_SCOPE_VERIFICATION"),
+            (lambda d: d.update(exceeds_documented_scope_verified=True), "FAKE_SUPERIORITY"),
             (lambda d: d["families"][0]["cases"][0].update(implementation_status="VERIFIED_NATIVE"), "FAKE_NATIVE_VERIFICATION"),
-            (lambda d: d["families"][0]["cases"][0].update(pt_binary_result="PT_RUN_PASS"), "FAKE_PT_COMPARISON"),
+            (lambda d: d["families"][0]["cases"][0].update(source_status="DOC_VERIFIED"), "FAKE_DOCUMENTATION_VERIFICATION"),
+            (lambda d: d["families"][0]["cases"][0].update(pt_binary_result="PT_RUN_PASS"), "LEGACY_BINARY_GATE"),
+            (lambda d: d.update(binary_baseline={"version_verified": True}), "LEGACY_BINARY_GATE"),
             (lambda d: d["exceptions"].append("multiuser"), "INVALID_SCOPE_EXCEPTION"),
+            (lambda d: d.update(release_status="FULL_PARITY_VERIFIED"), "AMBIGUOUS_BINARY_PARITY_CLAIM"),
         ]
-        for mutate, error in edits:
+        for mutate, expected in edits:
             data = copy.deepcopy(original)
             mutate(data)
-            with self.subTest(error=error):
-                self.assertIn(error, check_scope(data))
+            with self.subTest(expected=expected):
+                self.assertIn(expected, check_scope(data))
+
+    def test_documentation_policy_is_not_an_installed_binary_requirement(self):
+        document = (ROOT / "docs/PT_DOCUMENTATION_BASELINE_POLICY.md").read_text(encoding="utf-8")
+        self.assertIn("INTE NÖDVÄNDIGT", document)
+        self.assertIn("DOC_VERIFIED", document)
+        self.assertIn("VERIFIED_NATIVE", document)
+        release = (ROOT / "docs/RELEASE_GATES.md").read_text(encoding="utf-8")
+        self.assertIn("FRIVILLIG", release)
+        self.assertIn("DOCUMENTED_PT_SCOPE_VERIFIED", release)
+        self.assertIn("EXCEEDS_DOCUMENTED_PT_SCOPE", release)
+        self.assertIn("PT_DOCUMENTATION_BASELINE_POLICY.md",
+                      (ROOT / "MASTERPROMPT.md").read_text(encoding="utf-8"))
 
     def test_markdown_links_resolve(self):
         for name in DOCS:
