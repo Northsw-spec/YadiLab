@@ -12,7 +12,7 @@ G3: funktionell PT-paritet i samtliga inventerade underfall: deviceprofiler, CLI
 
 G4: säkerhet, produktjuridik och format; scripts sandboxed, no live PLC/NIC, opt-in multiuser auth, ingen olovlig Cisco-kod eller kringgående av proprietary rights, safe import, genuine Save/Open/SHA, rollback.
 
-G5: installerbar Linux-release, verkliga Chromium/ELK/UI/Import/DES/säkerhetsregressioner, Required CI SUCCESS på exakt HEAD, oberoende code/protocol/security audit, noll blockerande P0/P1, data migration/recovery och återspelbar build.
+G5: installerbar Linux-release med **obligatorisk sann Same-UI-paritet mot Legacy commit aac82926ced3dbf4cac09242530762ac3da1fe80 enligt [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md) och [UI-registret](requirements/legacy_ui_manifest.json)**. Kräver låsta och jämförda Chromium/DOM/screenshot/E2E-fall för alla UI-case (visuell identitet och interaktionsflöde, tillåtna standardiserade renderingstoleranser). Plus verkliga ELK/UI/import/DES/säkerhetsregressioner, Required CI SUCCESS på exakt HEAD, oberoende code/protocol/security audit, noll blockerande P0/P1, data migration/recovery och återspelbar build.
 
 G6: i förväg registrerad oberoende Cisco-jämförelse med samma/topologiska labb och hårdvara, upprepade trials, faktisk standardskorrekthet, kausal precision, diagnostiskt felutfall, latency/resource/scale/stability, feature breadth och pedagogisk uppgiftsförmåga. För påstående om bättre inlärning behövs frivillig kontrollerad mänsklig studie. Enbart PT-modelling limitations bevisar inte YadiLabs bättre beteende utan korrekta egenprov.
 

@@ -1,4 +1,7 @@
 # IMPORT-001 — import av alla viktiga nätverksdokument
+
+**Same-UI-importkrav:** [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md) kräver att nya appens importdialog och arbetsresa motsvarar [YadiLab_legacy @ aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80): originalfiler/preview -> MappingViews/profiler/radbeslut -> granskningsplan/kandidat -> explicit tillämpning och historisk proveniens med bundle export/reattach. Nya XLS/XLSB/YAML/XML-format utökar detsamma, men får inte ersätta eller dölja originalflödet. Importens arbetsyta triggar automatiskt första ELK efter accepterat projekt, men aldrig implicit Save. Faktisk ny implementation och Chromium-verifiering NOT_RUN.
+
 Status DESIGN_ONLY; inga nya filadaptrar har testats i detta tomma repo.
 
 ## Obligatoriska och framtida format

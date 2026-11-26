@@ -14,6 +14,7 @@ DOCS = [
     "docs/PROJECT_DATA_CONTRACT.md", "docs/UI_ELK_CONTRACT.md",
     "docs/IMPORT_CONTRACT.md", "docs/RESEARCH_WAVES.md", "docs/SECURITY_LEGAL.md",
     "docs/DECISIONS.md", "docs/VERIFICATION.md", "docs/RELEASE_GATES.md",
+    "docs/LEGACY_UI_FIDELITY_CONTRACT.md",
 ]
 
 def check_scope(data):
@@ -126,9 +127,76 @@ class GovernanceTests(unittest.TestCase):
     def test_master_truth_labels_not_runtime_claims(self):
         s = (ROOT / "MASTERPROMPT.md").read_text(encoding="utf-8")
         for term in ("NOT_IMPLEMENTED", "BLOCKED_LEGAL_OR_SPEC",
-                     "UI_REFERENCE_MISSING", "AGENTS.md", "docs/ROADMAP.md"):
+                     "UI_REFERENCE_SOURCE_AVAILABLE", "AGENTS.md", "docs/ROADMAP.md"):
             self.assertIn(term, s)
         self.assertIn("NOT_STARTED", (ROOT / "docs/ROADMAP.md").read_text(encoding="utf-8"))
+
+
+    def test_legacy_ui_baseline_is_pinned_and_required(self):
+        ui = json.loads((ROOT / "docs/requirements/legacy_ui_manifest.json").read_text(encoding="utf-8"))
+        baseline = "aac82926ced3dbf4cac09242530762ac3da1fe80"
+        self.assertEqual(ui["reference_repository"], "Northsw-spec/YadiLab_legacy")
+        self.assertEqual(ui["reference_commit_sha"], baseline)
+        self.assertEqual(ui["reference_status"], "SOURCE_INSPECTED_RUNTIME_SCREENSHOTS_NOT_CAPTURED")
+        self.assertFalse(ui["visual_parity_verified"])
+        self.assertFalse(ui["interaction_parity_verified"])
+        self.assertFalse(ui["full_legacy_ui_parity_verified"])
+        self.assertFalse(ui["inventory_complete"])
+        self.assertGreaterEqual(len(ui["cases"]), 55)
+        ids = [x["id"] for x in ui["cases"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        for required in (f"UI-{i:03d}" for i in range(1, 56)):
+            self.assertIn(required, ids)
+        for item in ui["cases"]:
+            self.assertTrue(item["required"])
+            self.assertEqual(item["reference_sha"], baseline)
+            self.assertTrue(item["source_inspected"])
+            self.assertEqual(item["new_implementation_status"], "NOT_IMPLEMENTED")
+            self.assertEqual(item["rendered_golden_status"], "NOT_CAPTURED")
+            self.assertEqual(item["review_status"], "NOT_VERIFIED")
+            self.assertTrue(item["source_path"].startswith(("web/", "docs/", "tests/")))
+        contract = (ROOT / "docs/LEGACY_UI_FIDELITY_CONTRACT.md").read_text(encoding="utf-8")
+        self.assertIn(baseline, contract)
+        self.assertIn("fullbreddscanvas", contract.lower())
+        self.assertIn("UI_PARITY_NOT_VERIFIED", contract)
+        self.assertIn("docs/LEGACY_UI_FIDELITY_CONTRACT.md", (ROOT / "MASTERPROMPT.md").read_text(encoding="utf-8"))
+
+    def test_legacy_ui_negative_false_parity_mutations(self):
+        import copy
+        ui = json.loads((ROOT / "docs/requirements/legacy_ui_manifest.json").read_text(encoding="utf-8"))
+        def errors(payload):
+            problems = []
+            if payload["reference_commit_sha"] != "aac82926ced3dbf4cac09242530762ac3da1fe80":
+                problems.append("PINNED_SOURCE_SHA_CHANGED")
+            cases = payload.get("cases", [])
+            if any(x.get("required") is not True for x in cases):
+                problems.append("UI_SCOPE_DEMOTED")
+            if not {f"UI-{i:03d}" for i in range(1, 56)}.issubset({x.get("id") for x in cases}):
+                problems.append("UI_SEED_REMOVED")
+            if payload.get("full_legacy_ui_parity_verified") is True:
+                if (not payload.get("visual_parity_verified")
+                        or not payload.get("interaction_parity_verified")
+                        or not payload.get("inventory_complete")
+                        or any(x.get("review_status") != "UI_PARITY_VERIFIED"
+                               or not x.get("behavioral_evidence")
+                               or not x.get("visual_evidence")
+                               for x in cases)):
+                    problems.append("FALSE_UI_PARITY")
+            return problems
+        self.assertEqual(errors(ui), [])
+        bad = copy.deepcopy(ui)
+        bad["reference_commit_sha"] = "main"
+        self.assertIn("PINNED_SOURCE_SHA_CHANGED", errors(bad))
+        bad = copy.deepcopy(ui)
+        bad["cases"][0]["required"] = False
+        self.assertIn("UI_SCOPE_DEMOTED", errors(bad))
+        bad = copy.deepcopy(ui)
+        bad["cases"].pop()
+        self.assertIn("UI_SEED_REMOVED", errors(bad))
+        bad = copy.deepcopy(ui)
+        bad["full_legacy_ui_parity_verified"] = True
+        self.assertIn("FALSE_UI_PARITY", errors(bad))
+
 
 if __name__ == "__main__":
     unittest.main()

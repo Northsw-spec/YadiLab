@@ -1,4 +1,7 @@
 # FORSKNING I VÅGOR — bakgrund före nya YadiLab
+
+**Tillagd våg 6 — direkt källkodskontroll av föregående YadiLab.** Legacy commit `aac82926ced3dbf4cac09242530762ac3da1fe80` granskad via GitHub: HTML har 284 unika element-ID:n; CSS definierar mörka färgvariabler och från 951px en fullbreddscanvas överst samt nedre två utfällbara panelkolumner; import-review.js hanterar originalceller, MappingViews, profiler, radbeslut och explicit apply; elk.js validerar tvåpass Worker-/portgeometri och runtime timeout; verkliga browser_elk_layout/elk_import browser tester finns som referens. [Fidelity kontrakt](LEGACY_UI_FIDELITY_CONTRACT.md) och [case manifest](requirements/legacy_ui_manifest.json) låser källorna. **Detta är källgranskning, ingen körd screenshot parity eller migration av gamla motorn.**
+
 Datum: 2026-11-26. Detta är en dokumenterad första källvåg, INTE ett påstående om fullt genomgången installerad Cisco PT-binär, genomförda prestandamätningar eller implementerad programvara. Evidence-klass: DOC_VERIFIED eller IMPLEMENTATION_NOT_VERIFIED.
 
 ## Våg 1 — faktiska Cisco-funktioner och begränsningar
@@ -24,7 +27,7 @@ Qt for Python https://doc.qt.io/qtforpython-6/ och Qt WebEngine licensing https:
 
 ## Kända kunskapsluckor och nästa faktiska forskning
 - Saknar verifierad licensierad Cisco Packet Tracer-build och fullständig lista över ALLA enhets- och kommandovarianter: G0 kan inte passera.
-- Saknar original-ZIP/skärmbilder av äldre YadiLab: inget exakt visuell same-UI-betyg kan ges.
+- **Uppdaterad källverifikation:** Äldre UI finns i [YadiLab_legacy på aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80), inklusive web/index.html, web/styles.css, web/canvas.js, web/features/layout/elk.js, UI- och importtester. Därmed finns faktisk design/interaction-källa utan ZIP. Däremot saknas fortfarande exekverbara screenshot-/DOM-/golden-benchmarks i två olika Chromium-processer, så pixelidentitet kan inte ännu betygsättas.
 - Saknar verklig benchmark Python vs Rust, desktop package/Wayland/X11, stora topologier: prestanda och val av shell ej låst.
 - Saknar verkliga godkända importfiler från användaren: XLSB/XLS/ODS-formatstöd för YadiLab ej verifierat även om biblioteken annonserar läsning.
 - PKT/PKZ/PKA-interoperabilitet och Cisco-specifikt CLI/firmware-behavior är BLOCKED_LEGAL_OR_SPEC till respektive legal/spec path är verifierad.

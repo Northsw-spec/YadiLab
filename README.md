@@ -6,7 +6,7 @@ YadiLab är ett nytt, självständigt projekt med målet att uppnå **full funkt
 
 **Två produktundantag:** ingen Windows-/macOS-utveckling och ingen ny särskild tillgänglighets- eller tangentbordsstyrningsfunktion som paritetskrav. Grundläggande säkerhet och användbarhet undantas inte.
 
-En ny, oberoende och deterministisk diskret händelsemotor ska byggas från grunden. Ingen gammal YadiLab-nätverksmotor kopieras. Den tidigare YadiLab-användarupplevelsen och ELK-/dokumentimportfunktionerna är önskad referens, men **visuell och beteendemässig likhet är ännu ej verifierad** eftersom ZIP/skärmdumpar med versionslåst referens saknas.
+En ny, oberoende och deterministisk diskret händelsemotor ska byggas från grunden. Ingen gammal YadiLab-nätverksmotor kopieras. **UI:t ska däremot se ut och fungera som [YadiLab_legacy](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80) på exakt commit aac82926ced3dbf4cac09242530762ac3da1fe80.** De faktiska Legacy-källorna för HTML/CSS, layout, ELK, import, Builder och diagnostik är nu tillgängliga. [Bindande same-UI kontrakt](docs/LEGACY_UI_FIDELITY_CONTRACT.md) och [55 källmappade UI-fall](docs/requirements/legacy_ui_manifest.json). Källan är verifierad, men inga runtime-skärmbilder eller nya UI-interaktioner är ännu godkända.
 
 **Startpunkter när styrpaketet finns:** `MASTERPROMPT.md` (agentmandat), `AGENTS.md` (utvecklingsregler), `docs/ROADMAP.md` (enda utvecklingsplan), `docs/PRODUCT_SCOPE.md` (funktionsmål), `docs/ARCHITECTURE.md` (motor), `docs/VERIFICATION.md` (bevis).
 

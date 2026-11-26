@@ -1,5 +1,8 @@
 # VERIFICATION-001 — oberoende evidens i stället för demo
 
+**UI-paritet är ett separat obligatoriskt releasekrav:** [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md) och [55 baseline UI-fall](requirements/legacy_ui_manifest.json) mot låst [YadiLab_legacy @ aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80). Verifiera faktisk dark-theme/fullwidth-canvas/panelordning, importer 4 steg, ELK tvåpass Worker, Save/Open, diagnostik och stale requests i två körda Chromium-fönster med samma viewport/DPR/fixturer. Source-code-inspection = SOURCE_VERIFIED, inte VISUAL_VERIFIED eller SAME_UI_VERIFIED. Gammal motor förbjuden som facit för korrekt framtida nätverk.
+
+
 Datum 2026-11-26. Status: normative DESIGN, inga nya motor- eller PT-tester körda.
 
 ## Sanningsnivåer
