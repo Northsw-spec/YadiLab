@@ -2,6 +2,8 @@
 
 **Normativt användarbeslut 2026-11-26:** Nya Linux-YadiLab **SKA SE UT OCH FUNGERA SOM** [YadiLab_legacy](https://github.com/Northsw-spec/YadiLab_legacy). Det är inte längre en lös "inspirationsreferens". **Auktoritativ version låst till [legacy commit aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80).** Källkoden/HTML/CSS/ELK/UI-funktionerna har lästs och registrerats; den körda visuella browser-baslinjen och screenshots har **inte** samlats in ännu. UI_REFERENCE_SOURCE_AVAILABLE, RENDERED_GOLDENS_NOT_CAPTURED, UI_PARITY_NOT_VERIFIED. Inga påståenden om pixelperfekt jämförelse före Chromium baseline.
 
+**Desktopregel:** Nya YadiLab använder en fullbreddscanvas överst med utfällbara inventerings- och diagnostikpaneler i två kolumner nedanför, inte en fast trekolumns-dashboard.
+
 ## 1. Det faktiska Legacy-utseendet, inte ett påhittat GUI
 
 Referens: `web/index.html`, `web/styles.css`, `web/ui/workspace-panels.js`, `web/canvas.js`.
