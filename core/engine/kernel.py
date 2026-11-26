@@ -11,10 +11,10 @@ from .events import (
     KernelError, RunResult, ScenarioRef, StopReason, TraceAction, TraceEntry,
 )
 from .runtime import (
-    DeviceRuntime, LinkRuntime, PortRuntime, RuntimeSnapshot, ScenarioRuntime,
+    DeviceRuntime, LinkRuntime, PortRuntime, RuntimeSnapshot, RuntimeView, ScenarioRuntime,
 )
 
-RANDOM_VERSION = "scenario-event-sha256-v1"
+RANDOM_VERSION = "scenario-event-sha256-v2"
 
 
 def _count(value: int) -> bool:
@@ -66,12 +66,12 @@ class EventContext:
     """A handler can replace its target's state and stage causally linked events."""
 
     def __init__(
-        self, config: ConfigSnapshot, runtime: ScenarioRuntime, state: bytes,
+        self, config: ConfigSnapshot, runtime_view: RuntimeView, state: bytes,
         random_key: bytes, value_bytes: int,
         stage: Callable[[EventType, EventTarget, int, bytes], None],
     ) -> None:
         self._config = config
-        self._runtime = runtime
+        self._runtime_view = runtime_view
         self._state = state
         self._random_key = random_key
         self._draw = 0
@@ -88,13 +88,16 @@ class EventContext:
         return self._config
 
     def device(self, device_id: str) -> DeviceRuntime:
-        return self._runtime.device(device_id)
+        self._require_active()
+        return self._runtime_view.devices[device_id]
 
     def port(self, endpoint: Endpoint) -> PortRuntime:
-        return self._runtime.port(endpoint)
+        self._require_active()
+        return self._runtime_view.ports[endpoint]
 
     def link(self, link_id: str) -> LinkRuntime:
-        return self._runtime.link(link_id)
+        self._require_active()
+        return self._runtime_view.links[link_id]
 
     def _require_active(self) -> None:
         if not self._active:
@@ -154,6 +157,7 @@ class EventKernel:
         self._pending: dict[int, Event] = {}
         self._trace: list[TraceEntry] = []
         self._next_event_id = 1
+        self._generation_first_event_id = self._next_event_id
         self._now_ns = 0
         self._at_timestamp = 0
         self._paused = False
@@ -268,6 +272,7 @@ class EventKernel:
         if self.scenario.generation == MAX_TIME_NS:
             raise KernelError(ErrorCode.ID_EXHAUSTED, "Scenario generation exhausted")
         self._runtime = self._runtime._next_generation(self.config)
+        self._generation_first_event_id = self._next_event_id
         self._heap.clear()
         self._pending.clear()
         self._trace.clear()
@@ -285,12 +290,13 @@ class EventKernel:
             heappop(self._heap)
         return None
 
-    def _dispatch(self, event: Event) -> tuple[bool, ErrorCode | None]:
+    def _dispatch(self, event: Event) -> bool:
         if event.time_ns != self.now_ns:
             self._now_ns = event.time_ns
             self._at_timestamp = 0
         if self._at_timestamp >= self._limits.events_per_timestamp:
-            return False, ErrorCode.LIVELOCK
+            self._fault = ErrorCode.LIVELOCK, event.ref
+            return False
         self._at_timestamp += 1
         heappop(self._heap)
         del self._pending[event.ref.event_id]
@@ -301,9 +307,11 @@ class EventKernel:
                 event_type, target, self.now_ns + _time(delay_ns), payload, len(followups),
             ))
 
+        # Committed enqueue IDs are contiguous within a generation, even after cancellation.
+        sequence = event.ref.event_id - self._generation_first_event_id + 1
         context = EventContext(
-            self.config, self._runtime, self._runtime.actor_state(event.target),
-            self._random_prefix + event.ref.event_id.to_bytes(8, "big"),
+            self.config, self._runtime.view, self._runtime.actor_state(event.target),
+            self._random_prefix + sequence.to_bytes(8, "big"),
             self._limits.value_bytes,
             stage,
         )
@@ -312,11 +320,14 @@ class EventKernel:
             result = self._actors[event.target][event.event_type](event, context)
             if result is not None:
                 raise TypeError("Event handlers must stage effects and return None")
-        except Exception:
+        except BaseException as exc:
+            self._fault = ErrorCode.HANDLER_FAILED, event.ref
             self._trace.append(TraceEntry(
                 event, self.now_ns, TraceAction.FAILED, ErrorCode.HANDLER_FAILED,
             ))
-            return True, ErrorCode.HANDLER_FAILED
+            if not isinstance(exc, Exception):
+                raise
+            return True
         finally:
             context._active = False
             self._dispatching = False
@@ -325,7 +336,7 @@ class EventKernel:
         for item in followups:
             self._enqueue(item, event.ref.event_id)
         self._trace.append(TraceEntry(event, self.now_ns, TraceAction.EXECUTED))
-        return True, None
+        return True
 
     def _process(self, budget: RunBudget | None) -> RunResult:
         self._guard()
@@ -346,11 +357,8 @@ class EventKernel:
                 return RunResult(StopReason.TIME_BUDGET, processed, self.now_ns)
             if len(self._trace) >= self._limits.trace_entries:
                 return RunResult(StopReason.TRACE_BUDGET, processed, self.now_ns)
-            consumed, error = self._dispatch(event)
-            processed += int(consumed)
-            if error is not None:
-                self._fault = error, event.ref
-            elif budget is None:
+            processed += int(self._dispatch(event))
+            if self._fault is None and budget is None:
                 return RunResult(StopReason.STEPPED, processed, self.now_ns, event=event.ref)
 
     def step(self) -> RunResult:

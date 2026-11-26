@@ -1,7 +1,9 @@
 """Scenario-owned operational state and immutable inspection records."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from types import MappingProxyType
 
 from .config import (
     AdminState, ConfigError, ConfigSnapshot, Endpoint, PowerState, require_id, require_type,
@@ -56,6 +58,15 @@ class LinkRuntime:
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimeView:
+    """Read-only access to installed operational records during a dispatch."""
+
+    devices: Mapping[str, DeviceRuntime]
+    ports: Mapping[Endpoint, PortRuntime]
+    links: Mapping[str, LinkRuntime]
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeSnapshot:
     ref: ScenarioRef
     devices: tuple[DeviceRuntime, ...]
@@ -89,6 +100,15 @@ class ScenarioRuntime:
             link.link_id: LinkRuntime(link.link_id, OperState.UNKNOWN) for link in config.links
         }
         self._actor_states: dict[EventTarget, bytes] = {}
+        self._view = RuntimeView(
+            MappingProxyType(self._devices),
+            MappingProxyType(self._ports),
+            MappingProxyType(self._links),
+        )
+
+    @property
+    def view(self) -> RuntimeView:
+        return self._view
 
     @property
     def ref(self) -> ScenarioRef:
