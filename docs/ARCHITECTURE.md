@@ -3,7 +3,7 @@
 **APP-ID-001, normativ namnseparation:** [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md) kräver ett enda `APP_DISPLAY_NAME` i `core/identity.py`, dynamisk läsning via `core/metadata.py`, framöver `/api/meta`, och brandneutrala klass-/funktions-/namespace-/schema-/package-ID. UI/desktop visar bara det hämtade namnet; native Linux launchern genererar användarsynligt `Name` från samma deklaration vid byggtid. **Cisco och andra korrekta tillverkarnamn får finnas i device-/CLI-specifika adaptrar och användargränssnitt.**
 
 
-Status 2026-11-26: DESIGN_DECISION; NOT_IMPLEMENTED. Ingen tidigare YadiLab-motor kopieras.
+Status 2026-11-26: domänkontrakt och händelsekärna IMPLEMENTED i R1-1. Pakettransport och protokoll är NOT_IMPLEMENTED. Se [R1-1](ENGINE_FOUNDATION.md).
 
 ## Tre skilda sanningsdomäner
 1. SOURCE/PROJECT: original dokumentbytes, stable provenance, immutable ProjectRevision med explicita device/port/link/config facts och ett atomic explicit Save.
@@ -12,18 +12,18 @@ Status 2026-11-26: DESIGN_DECISION; NOT_IMPLEMENTED. Ingen tidigare YadiLab-moto
 
 Endast validated project configuration används som startinput till simulation. Canvasposition, ELK-rutt, rubrik och dokument-tabell är inte kablar.
 
-## Normativa framtida interfaces (ännu EJ kod)
+## Normativa gränssnitt och planerade integrationer
 | Contract | Input | Output, ägare |
 |---|---|---|
-| ConfigSnapshot.validate | raw source/schema/version/provenance | immutable explicit project or errors |
+| ConfigSnapshot | typed device/port/link facts and revision ID | validated immutable project or errors |
 | DeviceProfile | versioned model, ports, modules, power and CLI capabilities | immutable hardware/features; no anonymous defaults |
-| ScenarioRuntime.create | validated config, revision, seed | sole actor registry, Kernel, time=0, scenario generation |
-| EventKernel.schedule | actor, typed event, time_ns or checked delay, parent_id | stable unique event_id or reject; no backwards time |
-| EventKernel.step/pause/cancel/reset | bounded event/time quotas, cancel tokens | monotonic deterministic trace; no callback leak |
+| EventKernel + ScenarioRuntime | validated config, matching revision, seed, registered actors | one virtual clock, queue and runtime per scenario |
+| EventKernel.schedule / schedule_after | scenario reference, typed event, target and absolute time or delay | validated event reference; handler follow-ups derive parent ID |
+| EventKernel.step / run / pause / resume / cancel / reset | run budgets and cancellation references | typed outcomes and deterministic trace |
 | LinkRuntime.transmit | port, frame bytes, link state, queue config | TX_START/TX_END/PROPAGATE/RX or explicit drop |
 | DeviceRuntime.receive | parsed real bytes, ingress port, causal parent | protocol state mutation, RX/DROP or scheduled TX |
 | ProtocolRegistry.dispatch | typed input, device capabilities, owned state view | checked effects and timers, no cross-state mutation |
-| CLI.execute | command AST, mode, privilege, expected project revision | typed mutation/error and accurate show/debug |
+| CLI.submit | command input, context, immutable configuration and runtime view | typed error, configuration proposal or adapter output |
 | Inspector.snapshot | scenario, revision, event range | immutable byte/state/queue/RIB/FIB/timer/drop explanation |
 | ScenarioGateway | authenticated action, expected revision, generation | one runtime owner and explicit stale/unknown error |
 
