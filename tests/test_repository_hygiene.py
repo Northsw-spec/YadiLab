@@ -41,7 +41,7 @@ class RepositoryHygieneTests(unittest.TestCase):
         audit = (ROOT / "docs/REPO_READINESS_AUDIT.md").read_text(encoding="utf-8")
         self.assertIn("GOVERNANCE ONLY", audit)
         self.assertIn("enforcement", audit.lower())
-        self.assertIn("disabled", audit.lower())
+        self.assertIn("active", audit.lower())
         self.assertIn("governance-contracts", audit)
 
 
