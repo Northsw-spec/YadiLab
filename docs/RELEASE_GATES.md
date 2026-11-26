@@ -1,5 +1,8 @@
 # RELEASE-GATES — full paritet, därefter verifierat bättre
 
+**Repo readiness före G0–G5:** [REPO-READINESS-001](REPO_READINESS_AUDIT.md) dokumenterar aktuell oskyddad/ej verifierad main-policy, ofullständiga PT-/Legacy-referensbaslinjer och avsaknad av simulator- och Linux-kod. Releasegrinden kräver **faktisk** GitHub ruleset/required-check-enforcement, oberoende protocol runtime CI, originalkällor och lagliga formatbehörigheter, inte enbart grönt governance-jobb. Regel- och licensfrågor är externa blockerare som inte får märkas PASS av dokumentuppdateringar.
+
+
 **Ytterligare villkor i G5:** [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md) är obligatoriskt: appens display name får ändras genom *en enda deklarationsändring*, utan refaktorisering, ändring av scheman/kodidentifierare eller projektmigration. Verifiera faktisk frontend + installerad desktop + export före release, inte enbart att `core/metadata.py` returnerar ett nytt värde. Tillverkaridentifierare som Cisco är legitima och ska inte filtreras bort.
 
 

@@ -1,5 +1,8 @@
 # ENDA AKTIVA ROADMAP — YadiLab Greenfield
 
+**Omedelbar riskgrind innan fler PR:er:** [REPO-READINESS-001](REPO_READINESS_AUDIT.md) sammanfattar verklig repo-status, saknade owner-inställningar och nödvändiga externa referenslabb. R0 måste även omfatta (a) verifiera/aktivera branch protection + required governance- och senare engine-jobb, (b) explicit licensbeslut för publik repo, (c) `gitignore`/secret-hygien, (d) versionslåst verklig Cisco PT-installation och full underfallsinventering och (e) riktig Legacy Chromium-baslinje. **R1-POC0 får fortfarande börja parallellt**, men större featureparitetsanspråk och release är BLOCKED till dessa underlag finns. De initiala 108 PT-fallen är inte full PT-paritet.
+
+
 **Obligatoriskt första infrastrukturkort R0-BRAND:** [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md) är ett tvärgående, prioriterat kod- och releasekrav, inte en extra utvecklingskö. `core/identity.py::APP_DISPLAY_NAME` är enda produktnamnsliteral; `core/metadata.py` är neutralt metadataadapter. Runtimeklass-, modulsökvägar, persistent JSON/schema/filändelse, loggers, env-variabler, API routes och CSS-ID:n är brandneutrala. R3 UI och Linux-shell ska hämta namn från en källa och E2E-prova byte av *endast deklarationsvärdet* (UI, fönstertitel, desktopfält, projektstabilitet). Varumärket är aldrig ett protokoll- eller enhetstillverkarnamn; Cisco/Juniper/Arista m.fl. tillåts där tekniskt korrekt. De nya core-filerna och governance-testerna är inte ett bevis på fungerande launcher/UI.
 
 
