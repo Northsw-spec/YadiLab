@@ -137,11 +137,21 @@ class GovernanceTests(unittest.TestCase):
         baseline = "aac82926ced3dbf4cac09242530762ac3da1fe80"
         self.assertEqual(ui["reference_repository"], "Northsw-spec/YadiLab_legacy")
         self.assertEqual(ui["reference_commit_sha"], baseline)
-        self.assertEqual(ui["reference_status"], "SOURCE_INSPECTED_RUNTIME_SCREENSHOTS_NOT_CAPTURED")
-        self.assertFalse(ui["visual_parity_verified"])
-        self.assertFalse(ui["interaction_parity_verified"])
-        self.assertFalse(ui["full_legacy_ui_parity_verified"])
-        self.assertFalse(ui["inventory_complete"])
+        self.assertIn(ui["reference_status"], (
+            "SOURCE_INSPECTED_RUNTIME_SCREENSHOTS_NOT_CAPTURED",
+            "SOURCE_AND_RENDERED_BASELINE_VERIFIED",
+        ))
+        # These flags may become True in future code PRs, but only with evidence.
+        if ui["visual_parity_verified"]:
+            self.assertTrue(ui.get("legacy_golden_evidence"))
+            self.assertTrue(all(c.get("visual_evidence") for c in ui["cases"]))
+        if ui["interaction_parity_verified"]:
+            self.assertTrue(all(c.get("behavioral_evidence") for c in ui["cases"]))
+        if ui["full_legacy_ui_parity_verified"]:
+            self.assertTrue(ui["visual_parity_verified"])
+            self.assertTrue(ui["interaction_parity_verified"])
+            self.assertTrue(ui["inventory_complete"])
+            self.assertTrue(all(c.get("review_status") == "UI_PARITY_VERIFIED" for c in ui["cases"]))
         self.assertGreaterEqual(len(ui["cases"]), 55)
         ids = [x["id"] for x in ui["cases"]]
         self.assertEqual(len(ids), len(set(ids)))
@@ -151,9 +161,14 @@ class GovernanceTests(unittest.TestCase):
             self.assertTrue(item["required"])
             self.assertEqual(item["reference_sha"], baseline)
             self.assertTrue(item["source_inspected"])
-            self.assertEqual(item["new_implementation_status"], "NOT_IMPLEMENTED")
-            self.assertEqual(item["rendered_golden_status"], "NOT_CAPTURED")
-            self.assertEqual(item["review_status"], "NOT_VERIFIED")
+            self.assertIsInstance(item["new_implementation_status"], str)
+            self.assertIsInstance(item["rendered_golden_status"], str)
+            self.assertIsInstance(item["review_status"], str)
+            if item["review_status"] == "UI_PARITY_VERIFIED":
+                self.assertTrue(item.get("behavioral_evidence"))
+                self.assertTrue(item.get("visual_evidence"))
+                self.assertNotEqual(item["new_implementation_status"], "NOT_IMPLEMENTED")
+                self.assertNotEqual(item["rendered_golden_status"], "NOT_CAPTURED")
             self.assertTrue(item["source_path"].startswith(("web/", "docs/", "tests/")))
         contract = (ROOT / "docs/LEGACY_UI_FIDELITY_CONTRACT.md").read_text(encoding="utf-8")
         self.assertIn(baseline, contract)
@@ -173,6 +188,13 @@ class GovernanceTests(unittest.TestCase):
                 problems.append("UI_SCOPE_DEMOTED")
             if not {f"UI-{i:03d}" for i in range(1, 56)}.issubset({x.get("id") for x in cases}):
                 problems.append("UI_SEED_REMOVED")
+            if payload.get("visual_parity_verified") is True:
+                if (not payload.get("legacy_golden_evidence")
+                        or any(not x.get("visual_evidence") for x in cases)):
+                    problems.append("FALSE_VISUAL_PARITY")
+            if payload.get("interaction_parity_verified") is True:
+                if any(not x.get("behavioral_evidence") for x in cases):
+                    problems.append("FALSE_INTERACTION_PARITY")
             if payload.get("full_legacy_ui_parity_verified") is True:
                 if (not payload.get("visual_parity_verified")
                         or not payload.get("interaction_parity_verified")
@@ -196,6 +218,12 @@ class GovernanceTests(unittest.TestCase):
         bad = copy.deepcopy(ui)
         bad["full_legacy_ui_parity_verified"] = True
         self.assertIn("FALSE_UI_PARITY", errors(bad))
+        bad = copy.deepcopy(ui)
+        bad["visual_parity_verified"] = True
+        self.assertIn("FALSE_VISUAL_PARITY", errors(bad))
+        bad = copy.deepcopy(ui)
+        bad["interaction_parity_verified"] = True
+        self.assertIn("FALSE_INTERACTION_PARITY", errors(bad))
 
 
 if __name__ == "__main__":
