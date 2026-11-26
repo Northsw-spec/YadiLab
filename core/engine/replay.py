@@ -7,7 +7,7 @@ from hashlib import sha256
 from .events import TraceEntry
 from .runtime import RuntimeSnapshot
 
-REPLAY_VERSION = 1
+REPLAY_VERSION = 2
 
 
 def _encode_bytes(value: object) -> dict[str, str]:

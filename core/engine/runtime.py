@@ -8,7 +8,7 @@ from types import MappingProxyType
 from .config import (
     AdminState, ConfigError, ConfigSnapshot, Endpoint, PowerState, require_id, require_type,
 )
-from .events import EventTarget, ScenarioRef, TargetKind
+from .events import EventTarget, EventValue, ScenarioRef, TargetKind
 
 
 class OperState(StrEnum):
@@ -25,6 +25,7 @@ class OperState(StrEnum):
 class DeviceRuntime:
     device_id: str
     power: PowerState
+    epoch: int = 0
 
     def __post_init__(self) -> None:
         require_id(self.device_id, "runtime device ID")
@@ -36,6 +37,7 @@ class PortRuntime:
     endpoint: Endpoint
     admin_state: AdminState
     oper_state: OperState
+    epoch: int = 0
 
     def __post_init__(self) -> None:
         require_type(self.endpoint, Endpoint, "runtime endpoint")
@@ -51,6 +53,7 @@ class PortRuntime:
 class LinkRuntime:
     link_id: str
     oper_state: OperState
+    epoch: int = 0
 
     def __post_init__(self) -> None:
         require_id(self.link_id, "runtime link ID")
@@ -72,7 +75,7 @@ class RuntimeSnapshot:
     devices: tuple[DeviceRuntime, ...]
     ports: tuple[PortRuntime, ...]
     links: tuple[LinkRuntime, ...]
-    actor_states: tuple[tuple[EventTarget, bytes], ...]
+    actor_states: tuple[tuple[EventTarget, EventValue], ...]
 
 
 class ScenarioRuntime:
@@ -99,7 +102,7 @@ class ScenarioRuntime:
         self._links = {
             link.link_id: LinkRuntime(link.link_id, OperState.UNKNOWN) for link in config.links
         }
-        self._actor_states: dict[EventTarget, bytes] = {}
+        self._actor_states: dict[EventTarget, EventValue] = {}
         self._view = RuntimeView(
             MappingProxyType(self._devices),
             MappingProxyType(self._ports),
@@ -134,7 +137,7 @@ class ScenarioRuntime:
     def link(self, link_id: str) -> LinkRuntime:
         return self._links[link_id]
 
-    def actor_state(self, target: EventTarget) -> bytes:
+    def actor_state(self, target: EventTarget) -> EventValue:
         if not self.has_target(target):
             raise KeyError(target)
         return self._actor_states.get(target, b"")
@@ -148,11 +151,19 @@ class ScenarioRuntime:
             tuple(sorted(self._actor_states.items(), key=lambda item: item[0].sort_key())),
         )
 
-    def _set_actor_state(self, target: EventTarget, value: bytes) -> None:
-        if value:
+    def _set_actor_state(self, target: EventTarget, value: EventValue) -> None:
+        if value != b"":
             self._actor_states[target] = value
         else:
             self._actor_states.pop(target, None)
+
+    def _commit_operational(self, record: DeviceRuntime | PortRuntime | LinkRuntime) -> None:
+        if isinstance(record, DeviceRuntime):
+            self._devices[record.device_id] = record
+        elif isinstance(record, PortRuntime):
+            self._ports[record.endpoint] = record
+        else:
+            self._links[record.link_id] = record
 
     def _next_generation(self, config: ConfigSnapshot) -> "ScenarioRuntime":
         return ScenarioRuntime(config, replace(self.ref, generation=self.ref.generation + 1))

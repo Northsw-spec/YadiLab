@@ -8,6 +8,34 @@ from .config import ConfigError, require_id, require_type
 MAX_TIME_NS = (1 << 63) - 1
 MAX_SEED = (1 << 64) - 1
 
+type EventValue = bytes | int | str | bool | None | tuple[EventValue, ...]
+
+
+def bounded_value(value: EventValue, remaining: int, depth: int = 0) -> int:
+    """Return the unused value budget, or -1 for unsupported or oversized values."""
+    if type(value) is tuple or (isinstance(value, tuple)
+                                and getattr(type(value), "__slots__", None) == ()):
+        # Bound nesting for canonical trace encoding as well as total item count.
+        if depth >= 16:
+            return -1
+        remaining -= 1
+        for item in value:
+            if remaining < 0:
+                break
+            remaining = bounded_value(item, remaining, depth + 1)
+        return remaining
+    if type(value) is bytes:
+        return remaining - max(1, len(value))
+    if type(value) is str or isinstance(value, StrEnum):
+        if len(value) > remaining:
+            return -1
+        return remaining - max(1, len(value.encode("utf-8", errors="surrogatepass")))
+    if type(value) in (bool, int) or value is None:
+        if type(value) is int and not -MAX_SEED <= value <= MAX_SEED:
+            return -1
+        return remaining - 1
+    return -1
+
 
 class ErrorCode(StrEnum):
     INVALID_TIME = "invalid-time"
@@ -99,7 +127,7 @@ class Event:
     time_ns: int
     event_type: EventType
     target: EventTarget
-    payload: bytes
+    payload: EventValue
     parent_id: int | None
 
 
@@ -115,6 +143,7 @@ class TraceEntry:
     at_ns: int
     action: TraceAction
     error: ErrorCode | None = None
+    cause_id: int | None = None
 
 
 class StopReason(StrEnum):
