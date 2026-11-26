@@ -2,7 +2,7 @@
 
 **Bindande metod:** [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md). En installerad Cisco Packet Tracer-binär, binär-hash eller head-to-head-körning är **FRIVILLIG**, aldrig R0–R14- eller G0–G6-blockerare. Alla G0–G6 är NOT_RUN per 2026-11-26. **Funktionsmålet sänks inte.**
 
-**Repo readiness:** [REPO-READINESS-001](REPO_READINESS_AUDIT.md): GitHub ruleset `main` har required check men `enforcement=disabled` vid faktisk kontroll. Aktivt verifierat branchskydd, riktig runtime-/UI-/import-CI, laglig fildokumentation och säker release är egna R0/G5-blockerare. Dokument- och governance-SUCCESS räcker inte.
+**Repo readiness:** [REPO-READINESS-001](REPO_READINESS_AUDIT.md): GitHub ruleset `main` har `enforcement=active` och `governance-contracts` required vid senare faktisk kontroll 2026-11-26. Negativt enforcementtest mot direktpush/röd PR är ännu NOT_RUN. Riktig runtime-/UI-/import-CI och verifierat branchskydd, riktig runtime-/UI-/import-CI, laglig fildokumentation och säker release är egna R0/G5-blockerare. Dokument- och governance-SUCCESS räcker inte.
 
 **Varumärkesregel:** [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md) – ett enda deklarerat visningsnamn; alla framtida UI/desktop/exportnamn visas från denna källa. Tillverkarnamn såsom Cisco är tillåtna och behövs för korrekt utrustning/CLI.
 

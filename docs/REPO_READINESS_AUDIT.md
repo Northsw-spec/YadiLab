@@ -1,6 +1,6 @@
 # REPO-READINESS-001 — revisionskontroll av nya simulatorprojektet
 
-**Nyare användarbeslut och faktisk GitHub-status (2026-11-26):** [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md) upphäver behovet av installerad Cisco Packet Tracer-binär, obligatorisk PT_RUN eller build-checksum. Cisco officiella versionerade publikationer + fristående standard-/native-tester ersätter jämförelsekravet. **GitHub ruleset `main` (28193830) finns och har `governance-contracts` angiven som required check men `enforcement = disabled`**, alltså är den fortfarande inte tvingande. `.gitignore` finns nu; äldre revisionsobservationer nedan gäller ursprunglig snapshot, inte nya ändringar.
+**Nyare användarbeslut och faktisk GitHub-status (2026-11-26):** [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md) upphäver behovet av installerad Cisco Packet Tracer-binär, obligatorisk PT_RUN eller build-checksum. Cisco officiella versionerade publikationer + fristående standard-/native-tester är obligatoriska. **GitHub ruleset `main` (28193830) är nu `enforcement=active`, med `governance-contracts` som required check.** Detta har verifierats via aktuellt GitHub API. Negativa avvisningsprov för direktpush och röd PR har ännu inte rapporterats. `.gitignore` finns.
 
 
 **Revisionsdatum:** 2026-11-26. **Granskad main:** `5c55be0a5c33f73106353db9f895db07c98b5c68`. **Typ:** dokumenterad arkitektur-/repository-audit, INTE implementationstest och INTE en andra roadmap.
@@ -22,13 +22,13 @@
 | Importformat | **REQUIREMENT_ONLY** | `docs/IMPORT_CONTRACT.md`; inga verkliga XLS/XLSB/ODS/CSV-parsertester här |
 | Namnbyte | **PARTIAL_CODE_TESTED** | Endast `core/identity.py::APP_DISPLAY_NAME` och `core/metadata.py` fungerar; ännu ingen UI/launcher/installer att end-to-end-verifiera |
 | Standard-/CI-verifiering | **GOVERNANCE ONLY** | En GitHub Actions-jobb `governance-contracts`; senast passerade main, men testar inte motor, CLI, webbläsare, Excel, packager, fuzz eller Packet Tracer |
-| GitHub regler | **OWNER ACTION REQUIRED** | Ett `main`-ruleset (28193830) finns nu och har `governance-contracts` som vald required status check, **men enforcement är `disabled` och kraven tillämpas inte**. Branch-protection API gav tidigare HTTP 403 via ansluten integration |
+| GitHub regler | **RULESET ACTIVE; NEGATIVE ENFORCEMENT TEST NOT_RUN** | `main`-ruleset 28193830 har `enforcement=active` med `governance-contracts` som required check, PR-regel och non-fast-forward/deletion-skydd. Bekräftat mot GitHub API 2026-11-26. Riktade avvisningsprov ej dokumenterade. |
 | Repo-säkerhet | **PARTIAL** | Publikt repo, `.gitignore` och hygiene-tests finns efter PR #4, men ingen `LICENSE`-fil eller uttryckligt licensbeslut; aldrig lägga hemligheter/proprietär binär/kunddata i repository |
 | Juridisk kompatibilitet | **OPEN/BLOCKED** | PKT/PKA/PKZ och vissa Cisco-specifika förlopp kräver faktiska lagliga specifikationer/interop-evidens |
 
 ## Högsta återstående risker, prioriterat
 
-**P0 — aktivera main-ruleset.** Repository owner: Settings → Rules → Rulesets → öppna redan existerande ruleset `main` (28193830), target default branch `main`, och växla enforcement från `disabled` till `active`. Kräv PR före merge, Required check `governance-contracts` som status, blockera force pushes och branch deletion, enforce linear history; säkerställ att eventuella bypass-aktörer och administratörsregler är avsiktliga. Verifiera därefter en avvisad direktpush och en avvisad PR med röd check med faktisk GitHub-evidens. En YAML-workflow ersätter INTE ruleset; GitHub-connectorn här saknar nödvändig branch-policy-läs-/skrivrätt. När R1-runtime-jobb tillkommer ska dessa också krävas.
+**P0 — kontrollera faktisk enforcement mot negativa fall.** Ruleset `main` (28193830) har nu `enforcement=active` och required `governance-contracts`. Vid avsedd säker testmetod, verifiera att direktpush och en PR med underkänd Required check stoppas; gör inte en riskabel test på produktionsprojekt utan kontrollerad metod. Allt arbete ska redan nu ske på PR, aldrig med bypass/force-push. När R1-motorjobb tillkommer måste de läggas till som Required. Detta är ingen längre blockerare för ett isolerat R1-POC men policytesterna är inte färdigutvärderade.
 
 **P0 — verkligt testbart motorgrundkontrakt.** R1-1 och R1-2 måste implementera Device/Port/Link/Config/CLI och kernel med tid, eventkedja, determinism samt negativa gränser. Integrera inte ett nytt protokoll för att "få demo" innan detta passerat oberoende oracle/2 processstarter. Ingen gammal nätverksmotor eller parallell "temporary" network path.
 
@@ -53,7 +53,7 @@
 
 ## Definition av "repo klart för kodstart" och "redo att kalla komplett"
 
-- **Klar för R1-POC:** syfte och interfaces tydliga, en enda plan, ägare och kö för nästa kort, grundläggande governance/tester gröna, dokumenterat inaktiverat ruleset (28193830) och ändring bara via PR tills enforcement faktiskt är aktivt.
+- **Klar för R1-POC:** syfte och interfaces tydliga, en enda plan, ägare och kö för nästa kort, grundläggande governance/tester gröna, dokumenterat aktivt ruleset (28193830) och fortsatt ändring endast via PR, med framtida negativt enforcementtest.
 - **Klar för produktionsutveckling i större skala:** P0 main ruleset aktiverad/verifierad, real packet tests i Required CI, versionslåsta beroenden, känd data- och säkerhetsmodell, UI-fixturer och schema-conformance.
 - **Klar att hävda "allt Packet Tracer":** G0–G5 i `docs/RELEASE_GATES.md` med full källgranskad Cisco-dokumentationsnämnare, egen verklig native-test-evidens och standardorakel (riktig PT-binär frivillig), inga okända/blockerade fall (utom uttryckliga scopeundantag).
 - **Klar att hävda "bättre än Packet Tracer":** dessutom G6 med i förväg låsta oberoende mätningar. En universell direktjämförelse kräver dock ett jämförbart referensresultat; kan inte påstås på enbart Cisco-help. Ett generiskt Packet Tracer-liknande GUI eller statisk ping är inte sådan evidens.
