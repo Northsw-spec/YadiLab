@@ -9,7 +9,7 @@
 **UI-paritet är ett separat obligatoriskt releasekrav:** [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md) och [55 baseline UI-fall](requirements/legacy_ui_manifest.json) mot låst [YadiLab_legacy @ aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80). Verifiera faktisk dark-theme/fullwidth-canvas/panelordning, importer 4 steg, ELK tvåpass Worker, Save/Open, diagnostik och stale requests i två körda Chromium-fönster med samma viewport/DPR/fixturer. Source-code-inspection = SOURCE_VERIFIED, inte VISUAL_VERIFIED eller SAME_UI_VERIFIED. Gammal motor förbjuden som facit för korrekt framtida nätverk.
 
 
-Datum 2026-11-26. Status: normative DESIGN, inga nya motor- eller PT-tester körda.
+Datum 2026-11-26. Status: normativ verifieringsplan med avgränsad native-evidens för R1-2.
 
 ## Sanningsnivåer
 DOC_VERIFIED = konkret Cisco-/standardkällhänvisning med dokumentversion och verifierat funktionskontrakt; PLANNED = design; IMPLEMENTED_UNVERIFIED = kod utan fullständigt orakel; VERIFIED_NATIVE = implementerad packet/state/timer med oberoende standardtest, negativa och motsägande scenarier och exakt CI-bevis; DOCUMENTED_PT_SCOPE_VERIFIED = källgranskad Cisco-dokumenterad underfallsinventering och YadiLabs verkliga verifierade funktioner; BLOCKED_LEGAL_OR_SPEC = saknad laglig väg. Installerad PT och PT_RUN_VERIFIED krävs **INTE**. Se [PT-DOC-BASELINE-001](PT_DOCUMENTATION_BASELINE_POLICY.md).
@@ -31,3 +31,18 @@ Krav för dokumentation: case ID, Cisco-dokumentations-URL/revision och exakta f
 Fuzz/property/metamorphic och mutationstester ska verifiera att farliga fel upptäcks: försvunnen kabel, omkastad port, VLAN mismatch, stale revision, invalid IPv6, ICMP error suppression, brutna sessions och flera samtidiga timers. Resultat PASS/FAIL/NOT_RUN/BLOCKED med relevant nämnare.
 
 Governance-CI får enbart påstå att planen är sammanhängande, inte att en app eller protokoll fungerar. Se RELEASE_GATES.md.
+
+
+## R1-2 / POC1
+
+Detta är native-verifiering för de angivna delsnitten. Det bredare Packet Tracer-registret behåller sina befintliga käll- och paritetsstatusar.
+
+| Fall | Oberoende facit och negativ kontroll |
+|---|---|
+| POC1-ETH-01 | Otaggad Ethernet II-ram inklusive CRC. Request-FCS `f341ec0e` och Reply-FCS `16c3bc33` beräknades med separat bitvis CRC-orakel. Testerna jämför hela 64-bytesramar och avvisar fel storlek, FCS och kapsling. |
+| POC1-ARP-01 | RFC 826-vektorer och båda kabelhoppen i båda riktningar. Verifierar 28-byte-meddelanden, att cache förblir tom före svaret, att svaret avbokar timeouten och att ogiltiga svar avvisas. |
+| POC1-SW-01 | Lärande på två ingressportar, VLAN-separat FDB, gruppavgränsning, flooding för okänd unicast och känd unicast med en tredje möjlig egressport. Testar isolerad VLAN-broadcast och känd men fysiskt otillgänglig egress. |
+| POC1-LINK-01 | 5 760 ns serialisering och 6 720 ns slot vid 100 Mbit/s. Två olika propagationstider ger 5 860 och 11 820 ns för requestens mottagningar och 23 640 ns för slutförd upplösning. Ytterligare fall använder andra ramstorlekar, 200 Mbit/s, samtidiga full-duplex-riktningar och avbrott före start, under serialisering och under propagation. |
+| POC1-REPLAY-01 | Två Python-processer med olika `PYTHONHASHSEED`, vardera med en start och två Reset. Loggen normaliserar generation och externa event-, föräldra- och orsak-ID:n. Modellerat tillstånd normaliserar generationen. Testet jämför hela loggen och ARP/FDB-resultat. Separata fall verifierar köfull, rollback efter hanterarfel och vägran av föråldrade referenser. |
+
+Kör native-sviten med `python -m unittest discover -s tests/engine -v`. Se [protokollgränser, tidsmodell och resursbudgetar](ETHERNET_POC1.md).

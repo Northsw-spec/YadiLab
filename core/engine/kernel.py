@@ -1,17 +1,18 @@
 """A single virtual clock, event queue and dispatch boundary per scenario."""
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from heapq import heapify, heappop, heappush
 
-from .config import ConfigError, ConfigSnapshot, Endpoint, require_type
+from .config import ConfigError, ConfigSnapshot, Endpoint, PowerState, require_type
 from .events import (
     MAX_SEED, MAX_TIME_NS, ErrorCode, Event, EventRef, EventTarget, EventType,
-    KernelError, RunResult, ScenarioRef, StopReason, TraceAction, TraceEntry,
+    EventValue, KernelError, RunResult, ScenarioRef, StopReason, TargetKind, TraceAction, TraceEntry,
+    bounded_value,
 )
 from .runtime import (
-    DeviceRuntime, LinkRuntime, PortRuntime, RuntimeSnapshot, RuntimeView, ScenarioRuntime,
+    DeviceRuntime, LinkRuntime, OperState, PortRuntime, RuntimeSnapshot, RuntimeView, ScenarioRuntime,
 )
 
 RANDOM_VERSION = "scenario-event-sha256-v2"
@@ -59,20 +60,25 @@ class _ScheduledEvent:
     time_ns: int
     event_type: EventType
     target: EventTarget
-    payload: bytes
+    payload: EventValue
 
 
 class EventContext:
     """A handler can replace its target's state and stage causally linked events."""
 
     def __init__(
-        self, config: ConfigSnapshot, runtime_view: RuntimeView, state: bytes,
-        random_key: bytes, value_bytes: int,
-        stage: Callable[[EventType, EventTarget, int, bytes], None],
+        self, config: ConfigSnapshot, runtime_view: RuntimeView, state: EventValue,
+        event: Event, sequence: int, random_key: bytes, value_bytes: int,
+        stage: Callable[[EventType, EventTarget, int, EventValue], int],
+        cancel: Callable[[int], None],
     ) -> None:
         self._config = config
         self._runtime_view = runtime_view
         self._state = state
+        self._event = event
+        self._sequence = sequence
+        self._operational: DeviceRuntime | PortRuntime | LinkRuntime | None = None
+        self._cancel = cancel
         self._random_key = random_key
         self._draw = 0
         self._value_bytes = value_bytes
@@ -80,7 +86,7 @@ class EventContext:
         self._active = True
 
     @property
-    def state(self) -> bytes:
+    def state(self) -> EventValue:
         return self._state
 
     @property
@@ -103,17 +109,54 @@ class EventContext:
         if not self._active:
             raise KernelError(ErrorCode.INVALID_STATE, "Event context has expired")
 
-    def replace_state(self, state: bytes) -> None:
+    @property
+    def event_sequence(self) -> int:
+        return self._sequence
+
+    def replace_state(self, state: EventValue) -> None:
         self._require_active()
-        if type(state) is not bytes or len(state) > self._value_bytes:
+        if bounded_value(state, self._value_bytes) < 0:
             raise KernelError(ErrorCode.INVALID_STATE)
         self._state = state
 
-    def schedule_after(
-        self, event_type: EventType, target: EventTarget, delay_ns: int, payload: bytes = b"",
-    ) -> None:
+    def set_oper_state(self, state: OperState) -> None:
         self._require_active()
-        self._stage(event_type, target, delay_ns, payload)
+        target = self._event.target
+        if type(state) is not OperState:
+            raise KernelError(ErrorCode.INVALID_STATE)
+        if target.kind is TargetKind.PORT and target.port_id is not None:
+            record = self._operational or self.port(Endpoint(target.object_id, target.port_id))
+            if state is OperState.UP and self.device(target.object_id).power is not PowerState.ON:
+                raise KernelError(ErrorCode.INVALID_STATE, "Port owner is powered off")
+        elif target.kind is TargetKind.LINK:
+            record = self._operational or self.link(target.object_id)
+        else:
+            raise KernelError(ErrorCode.INVALID_TARGET, "Port or link owner required")
+        if record.oper_state is not state:
+            self._operational = replace(record, oper_state=state, epoch=self._sequence)
+
+    def set_power(self, power: PowerState) -> None:
+        self._require_active()
+        target = self._event.target
+        if target.kind is not TargetKind.DEVICE:
+            raise KernelError(ErrorCode.INVALID_TARGET, "Device owner required")
+        if type(power) is not PowerState:
+            raise KernelError(ErrorCode.INVALID_STATE)
+        record = self._operational or self.device(target.object_id)
+        if record.power is not power:
+            self._operational = replace(record, power=power, epoch=self._sequence)
+
+    def schedule_after(
+        self, event_type: EventType, target: EventTarget, delay_ns: int, payload: EventValue = b"",
+    ) -> int:
+        """Stage a follow-up and return its generation-local enqueue position."""
+        self._require_active()
+        return self._stage(event_type, target, delay_ns, payload)
+
+    def cancel_timer(self, sequence: int) -> None:
+        """Stage cancellation of a previously committed event addressed to this actor."""
+        self._require_active()
+        self._cancel(sequence)
 
     def random_u64(self) -> int:
         self._require_active()
@@ -196,8 +239,8 @@ class EventKernel:
             raise KernelError(ErrorCode.STALE_SCENARIO)
 
     def _validate_event(
-        self, event_type: EventType, target: EventTarget, time_ns: int, payload: bytes,
-        extra_pending: int = 0,
+        self, event_type: EventType, target: EventTarget, time_ns: int, payload: EventValue,
+        extra_pending: int = 0, cancelled_pending: int = 0,
     ) -> _ScheduledEvent:
         _time(time_ns)
         if time_ns < self.now_ns:
@@ -207,9 +250,9 @@ class EventKernel:
         handlers = self._actors.get(target)
         if type(event_type) is not EventType or handlers is None or event_type not in handlers:
             raise KernelError(ErrorCode.INVALID_EVENT_TYPE)
-        if type(payload) is not bytes or len(payload) > self._limits.value_bytes:
+        if bounded_value(payload, self._limits.value_bytes) < 0:
             raise KernelError(ErrorCode.INVALID_PAYLOAD)
-        if len(self._pending) + extra_pending >= self._limits.pending_events:
+        if len(self._pending) + extra_pending - cancelled_pending >= self._limits.pending_events:
             raise KernelError(ErrorCode.QUEUE_LIMIT)
         if self._next_event_id + extra_pending > MAX_TIME_NS:
             raise KernelError(ErrorCode.ID_EXHAUSTED)
@@ -226,7 +269,7 @@ class EventKernel:
 
     def schedule(
         self, scenario: ScenarioRef, event_type: EventType, target: EventTarget, *,
-        time_ns: int, payload: bytes = b"",
+        time_ns: int, payload: EventValue = b"",
     ) -> EventRef:
         self._guard()
         self._check_scenario(scenario)
@@ -236,7 +279,7 @@ class EventKernel:
 
     def schedule_after(
         self, scenario: ScenarioRef, event_type: EventType, target: EventTarget, *,
-        delay_ns: int, payload: bytes = b"",
+        delay_ns: int, payload: EventValue = b"",
     ) -> EventRef:
         return self.schedule(
             scenario, event_type, target, time_ns=self.now_ns + _time(delay_ns), payload=payload,
@@ -251,8 +294,11 @@ class EventKernel:
             raise KernelError(ErrorCode.UNKNOWN_EVENT)
         if len(self._trace) >= self._limits.trace_entries:
             raise KernelError(ErrorCode.TRACE_LIMIT)
-        del self._pending[ref.event_id]
-        self._trace.append(TraceEntry(event, self.now_ns, TraceAction.CANCELLED))
+        self._cancel_pending(event)
+
+    def _cancel_pending(self, event: Event, *, cause_id: int | None = None) -> None:
+        del self._pending[event.ref.event_id]
+        self._trace.append(TraceEntry(event, self.now_ns, TraceAction.CANCELLED, cause_id=cause_id))
         # Bound tombstones even if a far-future event is repeatedly replaced.
         if len(self._heap) - len(self._pending) >= self._limits.pending_events:
             self._heap = [(event.time_ns, key) for key, event in self._pending.items()]
@@ -301,19 +347,35 @@ class EventKernel:
         heappop(self._heap)
         del self._pending[event.ref.event_id]
         followups: list[_ScheduledEvent] = []
+        cancellations: dict[int, Event] = {}
 
-        def stage(event_type: EventType, target: EventTarget, delay_ns: int, payload: bytes) -> None:
+        def stage(event_type: EventType, target: EventTarget, delay_ns: int, payload: EventValue) -> int:
+            # Use committed cancellations to free pending capacity while retaining
+            # enqueue order and independent IDs for the staged batch.
             followups.append(self._validate_event(
-                event_type, target, self.now_ns + _time(delay_ns), payload, len(followups),
+                event_type, target, self.now_ns + _time(delay_ns), payload,
+                len(followups), len(cancellations),
             ))
+            return self._next_event_id - self._generation_first_event_id + len(followups)
 
-        # Committed enqueue IDs are contiguous within a generation, even after cancellation.
+        def cancel(sequence: int) -> None:
+            if not _count(sequence):
+                raise KernelError(ErrorCode.UNKNOWN_EVENT)
+            event_id = self._generation_first_event_id + sequence - 1
+            pending = self._pending.get(event_id)
+            if pending is None or event_id in cancellations:
+                raise KernelError(ErrorCode.UNKNOWN_EVENT)
+            if pending.target != event.target:
+                raise KernelError(ErrorCode.INVALID_TARGET, "Timer target owner required")
+            if len(self._trace) + len(cancellations) + 1 >= self._limits.trace_entries:
+                raise KernelError(ErrorCode.TRACE_LIMIT)
+            cancellations[event_id] = pending
+
         sequence = event.ref.event_id - self._generation_first_event_id + 1
         context = EventContext(
             self.config, self._runtime.view, self._runtime.actor_state(event.target),
-            self._random_prefix + sequence.to_bytes(8, "big"),
-            self._limits.value_bytes,
-            stage,
+            event, sequence, self._random_prefix + sequence.to_bytes(8, "big"),
+            self._limits.value_bytes, stage, cancel,
         )
         self._dispatching = True
         try:
@@ -333,9 +395,13 @@ class EventKernel:
             self._dispatching = False
 
         self._runtime._set_actor_state(event.target, context.state)
+        if context._operational is not None:
+            self._runtime._commit_operational(context._operational)
+        self._trace.append(TraceEntry(event, self.now_ns, TraceAction.EXECUTED))
+        for pending in cancellations.values():
+            self._cancel_pending(pending, cause_id=event.ref.event_id)
         for item in followups:
             self._enqueue(item, event.ref.event_id)
-        self._trace.append(TraceEntry(event, self.now_ns, TraceAction.EXECUTED))
         return True
 
     def _process(self, budget: RunBudget | None) -> RunResult:
