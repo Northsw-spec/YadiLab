@@ -1,5 +1,8 @@
 # PT-FULL-001 — absolut funktionsscope för Linux-YadiLab
 
+**Cross-cutting BRAND-IDENTITY-001:** [Ett enda källkodsnamn](BRAND_IDENTITY_CONTRACT.md) – ingen branded package/klass/filformat, alla användarsynliga produktnamn hämtas dynamiskt. Fullt PT-device scope omfattar explicita tillverkarnamn i UI och implementation. Detta namnkrav får inte användas för att förbjuda Cisco/Juniper eller andra korrekta vendor-specifika skillnader.
+
+
 **Obligatorisk produktpresentation:** Nya YadiLab ska **se ut och fungera som** [YadiLab_legacy @ aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80) enligt [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md). Same-UI-paritet är obligatorisk utöver hela Packet Tracer-omfånget; designen får utökas för PT men inte tyst ersätta legacy-layout eller dess användarresor. Verkliga screenshot-goldens och nya funktioner är ännu inte verifierade.
 
 

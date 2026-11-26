@@ -1,5 +1,8 @@
 # RELEASE-GATES — full paritet, därefter verifierat bättre
 
+**Ytterligare villkor i G5:** [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md) är obligatoriskt: appens display name får ändras genom *en enda deklarationsändring*, utan refaktorisering, ändring av scheman/kodidentifierare eller projektmigration. Verifiera faktisk frontend + installerad desktop + export före release, inte enbart att `core/metadata.py` returnerar ett nytt värde. Tillverkaridentifierare som Cisco är legitima och ska inte filtreras bort.
+
+
 Alla gates NOT_RUN per 2026-11-26.
 
 G0: lagligt installerad exakt PT-binär med build/version/checksum, samtliga enheter/moduler/medier/CLI/UI/protokoll/IoT/OT/Multiuser/ExApps/format och underfall inventerade, oberoende granskning av fullständighet. Machine scope-registry inventory_complete=true endast med bevis.

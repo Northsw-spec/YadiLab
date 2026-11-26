@@ -1,5 +1,8 @@
 # YadiLab
 
+**Varumärkesneutral kod:** [BRAND-IDENTITY-001](docs/BRAND_IDENTITY_CONTRACT.md). Enda källkodssträngen med nuvarande namn ligger i `core/identity.py::APP_DISPLAY_NAME`; `core/metadata.py` hämtar den dynamiskt. Kommande frontend och desktop-launcher ska använda samma namn utan kopior. Klass-, namespace-, projektformats- och API-namn är neutrala. Tillverkarnamn som Cisco är tillåtna. Koden/metadatahelpern finns, men ingen fungerande UI/desktop-app är byggd eller testad för full rename-paritet ännu.
+
+
 **Status: ny, tom Linux-applikation under arkitekturplanering. Ingen nätverksmotor eller färdig simulator är implementerad.**
 
 YadiLab är ett nytt, självständigt projekt med målet att uppnå **full funktionell paritet med Cisco Packet Tracer på Linux**, inklusive alla dokumenterat och i en lagligen installerad baslinje faktiskt verifierade funktioner, enheter, protokoll, arbetsytor, CLI/GUI, Simulation Mode, PDU, IoT/OT, samarbete, lärarverktyg och projektformat. Därefter ska det med oberoende mätningar ge **verifierbart bättre korrekthet, diagnostik, precision och funktioner**. Projektet får inte kalla sig komplett innan bevisen finns.

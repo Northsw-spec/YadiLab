@@ -1,5 +1,8 @@
 # ENDA AKTIVA ROADMAP — YadiLab Greenfield
 
+**Obligatoriskt första infrastrukturkort R0-BRAND:** [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md) är ett tvärgående, prioriterat kod- och releasekrav, inte en extra utvecklingskö. `core/identity.py::APP_DISPLAY_NAME` är enda produktnamnsliteral; `core/metadata.py` är neutralt metadataadapter. Runtimeklass-, modulsökvägar, persistent JSON/schema/filändelse, loggers, env-variabler, API routes och CSS-ID:n är brandneutrala. R3 UI och Linux-shell ska hämta namn från en källa och E2E-prova byte av *endast deklarationsvärdet* (UI, fönstertitel, desktopfält, projektstabilitet). Varumärket är aldrig ett protokoll- eller enhetstillverkarnamn; Cisco/Juniper/Arista m.fl. tillåts där tekniskt korrekt. De nya core-filerna och governance-testerna är inte ett bevis på fungerande launcher/UI.
+
+
 **Uppdaterat användarbeslut:** Den tidigare YadiLab-UI:n är NU versionslåst till [Northsw-spec/YadiLab_legacy @ aac82926ced3dbf4cac09242530762ac3da1fe80](https://github.com/Northsw-spec/YadiLab_legacy/tree/aac82926ced3dbf4cac09242530762ac3da1fe80). [LEGACY-UI-FIDELITY-001](LEGACY_UI_FIDELITY_CONTRACT.md) kräver samma utseende och samma användarflöden; exakt visuell matchning är fortfarande NOT_VERIFIED tills verkliga screenshots finns. R0-UI-baslinjens källupptäckt är gjord men dess kör-/bildgrind är **inte** slutförd. Detta ersätter tidigare 'invän­ta ZIP'-krav. R3 är ett obligatoriskt same-UI-resultat, inte fri redesign.
 
 

@@ -1,5 +1,8 @@
 # ARCH-001 — en ny sammanhängande simuleringsarkitektur
 
+**APP-ID-001, normativ namnseparation:** [BRAND-IDENTITY-001](BRAND_IDENTITY_CONTRACT.md) kräver ett enda `APP_DISPLAY_NAME` i `core/identity.py`, dynamisk läsning via `core/metadata.py`, framöver `/api/meta`, och brandneutrala klass-/funktions-/namespace-/schema-/package-ID. UI/desktop visar bara det hämtade namnet; native Linux launchern genererar användarsynligt `Name` från samma deklaration vid byggtid. **Cisco och andra korrekta tillverkarnamn får finnas i device-/CLI-specifika adaptrar och användargränssnitt.**
+
+
 Status 2026-11-26: DESIGN_DECISION; NOT_IMPLEMENTED. Ingen tidigare YadiLab-motor kopieras.
 
 ## Tre skilda sanningsdomäner
